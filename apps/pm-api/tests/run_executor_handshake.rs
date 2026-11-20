@@ -101,7 +101,7 @@ async fn seed_claimed_run(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+        "INSERT INTO ai.project_agent_member (tenant_id, project_id, principal_id, role_kind) \
          VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, 'developer')",
     )
     .bind(boot.project_id)

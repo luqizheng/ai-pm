@@ -88,8 +88,10 @@ async fn call(
 struct World {
     app: Router,
     tenant_id: Uuid,
-    /// 租户 owner（= first admin），同时是项目 owner。
+    /// 租户 owner（= first admin 建团后的 Team Owner），同时是项目 owner。
     owner_id: Uuid,
+    /// Team 锚（P4-ORG Phase 2：成员管理路由挂 core.team.id）。
+    team_id: Uuid,
     /// 租户普通成员（已激活），项目成员的授予目标。
     member_id: Uuid,
     /// 另一个租户普通成员（已激活）。
@@ -103,11 +105,23 @@ async fn world(pool: &PgPool) -> World {
     let (_, owner) = call(&app, "GET", "/v1/pm/me", &token("usr-owner"), None).await;
     let tenant_id = Uuid::parse_str(owner["tenant_id"].as_str().unwrap()).unwrap();
     let owner_id = Uuid::parse_str(owner["principal_id"].as_str().unwrap()).unwrap();
+    // P4-ORG Phase 2：first_admin 只落预登记行——先认领建团成为 Team Owner。
+    let (team_st, team_body) = call(
+        &app,
+        "POST",
+        "/v1/pm/teams",
+        &token("usr-owner"),
+        Some(json!({ "name": "PM Team" })),
+    )
+    .await;
+    assert_eq!(team_st, StatusCode::CREATED, "{team_body}");
+    let (_, owner) = call(&app, "GET", "/v1/pm/me", &token("usr-owner"), None).await;
     assert_eq!(
         owner["is_admin"],
         json!(true),
-        "first admin must be tenant owner"
+        "first admin must be team owner"
     );
+    let team_id = Uuid::parse_str(owner["memberships"][0]["team_id"].as_str().unwrap()).unwrap();
 
     // 两个普通成员：首次访问会被 provision 成未激活的租户成员，需 owner 激活。
     let mut ids = Vec::new();
@@ -126,6 +140,20 @@ async fn world(pool: &PgPool) -> World {
             status,
             StatusCode::OK,
             "owner must be able to activate {sub}"
+        );
+        // P4-ORG：成员名册 = core.team_member——激活后须入团。
+        let (add_st, add_body) = call(
+            &app,
+            "POST",
+            &format!("/v1/pm/teams/{team_id}/members"),
+            &token("usr-owner"),
+            Some(json!({ "principal_id": id, "role": "member" })),
+        )
+        .await;
+        assert_eq!(
+            add_st,
+            StatusCode::OK,
+            "owner must be able to add {sub}: {add_body}"
         );
         ids.push(id);
     }
@@ -147,6 +175,7 @@ async fn world(pool: &PgPool) -> World {
     World {
         app,
         tenant_id,
+        team_id,
         owner_id,
         member_id,
         other_id,
@@ -584,7 +613,7 @@ async fn tenant_removal_cascades_project_memberships(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "DELETE",
-        &format!("/v1/pm/tenants/{}/members/{}", w.tenant_id, w.member_id),
+        &format!("/v1/pm/teams/{}/members/{}", w.team_id, w.member_id),
         &token("usr-owner"),
         None,
     )
@@ -605,7 +634,7 @@ async fn tenant_removal_cascades_project_memberships(pool: PgPool) {
     // 租户审计行带级联计数。
     let after: Option<Value> = sqlx::query_scalar(
         "SELECT after_data FROM governance.tenant_audit_log \
-          WHERE tenant_id = $1 AND action = 'tenant_member.removed' AND target_principal_id = $2",
+          WHERE tenant_id = $1 AND action = 'team_member.removed' AND target_principal_id = $2",
     )
     .bind(w.tenant_id)
     .bind(w.member_id)
@@ -643,7 +672,7 @@ async fn tenant_removal_blocked_by_project_ownership(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "DELETE",
-        &format!("/v1/pm/tenants/{}/members/{}", w.tenant_id, w.other_id),
+        &format!("/v1/pm/teams/{}/members/{}", w.team_id, w.other_id),
         &token("usr-owner"),
         None,
     )
@@ -731,7 +760,7 @@ async fn tenant_removal_racing_grant_has_single_final_state(pool: PgPool) {
             call(
                 &w.app,
                 "DELETE",
-                &format!("/v1/pm/tenants/{}/members/{}", w.tenant_id, w.member_id),
+                &format!("/v1/pm/teams/{}/members/{}", w.team_id, w.member_id),
                 &token("usr-owner"),
                 None,
             )
@@ -742,7 +771,7 @@ async fn tenant_removal_racing_grant_has_single_final_state(pool: PgPool) {
     // 无论谁先谁后：成员关系**要么**不存在，**要么**存在且该人仍是租户成员。
     let rows = member_row_count(&pool, w.project_id, w.member_id).await;
     let tenant_rows: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
     )
     .bind(w.tenant_id)
     .bind(w.member_id)

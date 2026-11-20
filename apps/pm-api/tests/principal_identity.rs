@@ -242,7 +242,30 @@ async fn c35_admin_activates_then_the_same_token_can_write_with_real_actor(pool:
     )
     .await;
     assert_eq!(me["is_active"], json!(true));
-    assert_eq!(me["is_admin"], json!(true));
+    // P4-ORG Phase 2：first_admin 只落预登记行，is_admin 事实源 = team_member
+    // ——认领建团后即为 Team Owner。
+    assert_eq!(me["is_admin"], json!(false));
+    let team_resp = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/v1/pm/teams",
+            &admin_token,
+            Some(json!({ "name": "Identity Team" })),
+        ))
+        .await
+        .unwrap();
+    let team_status = team_resp.status();
+    let team_body = body_json(team_resp).await;
+    assert_eq!(team_status, StatusCode::CREATED, "{team_body}");
+    let me2 = body_json(
+        app.clone()
+            .oneshot(request("GET", "/v1/pm/me", &admin_token, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(me2["is_admin"], json!(true));
 
     // 激活 bob。
     let bob_token = browser_token("usr-bob", json!([]));

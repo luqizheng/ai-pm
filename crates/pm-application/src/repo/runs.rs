@@ -116,7 +116,7 @@ pub struct RunEventSummary {
 pub struct RunAuthorizationCtx {
     pub project_id: Uuid,
     /// 调用者在 run 租户内的角色（owner/admin/member；无行 = None）。
-    pub tenant_role: Option<&'static str>,
+    pub team_role: Option<&'static str>,
 }
 
 /// 分页参数（size/offset）。

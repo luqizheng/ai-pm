@@ -13,5 +13,7 @@ async fn core_schema_ready(pool: sqlx::PgPool) {
     // + approver_grant（0040，S02-I6-A · O-6 裁决）
     // + tenant_invitation / tenant_invitation_link /
     //   tenant_invitation_link_redemption（0044，Team Onboarding）
-    assert_eq!(n, 13);
+    // + product / product_project_link / team / team_member（0038，P4-ORG 组织模型）
+    // + product_member（0040，Product 域成员）
+    assert_eq!(n, 18);
 }

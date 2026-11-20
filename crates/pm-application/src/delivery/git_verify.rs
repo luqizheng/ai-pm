@@ -10,7 +10,7 @@
 //! 2. `merge-base --is-ancestor <base_commit> <commit_sha>` —— 是基线后代；
 //! 3. `rev-parse HEAD` —— **必须等于工作区实际 HEAD**（提交别的 Run 已有的后代
 //!    Commit 同样要拒）；
-//! 4. `diff --name-status <base>..<commit>` —— 现算变更文件数（Q-D4-3）。
+//! 4. `diff --name-status <base> <commit>` —— 现算变更文件数（Q-D4-3）。
 //!
 //! 约束（§3.4）：明确超时、禁网络、限制规模；异常与超时统一走 Rejected 路径。
 
@@ -133,16 +133,24 @@ pub async fn verify_repository_head(
     }
 
     // ④ 变更文件数现算（Q-D4-3：Git 现算为准）。
+    //
+    // 两点式 `<base>..<commit>` 会先被 git 当**候选 pathspec** stat（cwd + 83 字符
+    // range 在 Windows 超 MAX_PATH → `failed to stat ...: Filename too long`，退出
+    // 码 128、stdout 空——失败曾被静默计成 0 并以 `commit_not_descendant` 驳回）。
+    // 拆成两个 rev 参数语义等价（`A..B` ≡ `diff A B`，基线后代已由 ② 保证），单参
+    // ≤40 字符不再触发该 stat；diff 退出码显式检查，失败走 `git_verification_failed`。
     let diff = git_run(
         &root,
-        &[
-            "diff",
-            "--name-status",
-            &format!("{base_commit}..{commit_sha}"),
-        ],
+        &["diff", "--name-status", base_commit, commit_sha],
         timeout,
     )
     .await?;
+    if !diff.ok() {
+        return Err(GitVerificationError::Git(format!(
+            "git diff --name-status failed: {}",
+            diff.stderr
+        )));
+    }
     let changed_files = diff
         .stdout
         .split(|byte| *byte == b'\n')

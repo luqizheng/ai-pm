@@ -1,9 +1,11 @@
-//! 租户成员角色（ADR-0001 D5 + T-021b 用户补充要求 §3）。
+//! Team 成员角色（P4-ORG 基线 V0.1 §3；DR-ORG-02，2026-11-19）。
 //!
-//! `core.tenant_member.role` 是租户角色的**唯一事实源**：`is_tenant_admin`
-//! 每请求查库得出，token 里的 `roles` 只作签发时的提示，不参与授权。
-//! 租户角色与项目角色分离——项目工作角色（developer / tester / reviewer /
-//! ai_pm）只在 `core.project_member.role` 出现，不得混入本枚举。
+//! `core.team_member.role` 是 Team 角色的**唯一事实源**：`is_admin`（管理面
+//! 通行证）每请求查库得出，token 里的 `roles` 只作签发时的提示，不参与授权。
+//! Team 角色只有 Owner / Member 两值（多 Owner 并存；最后 Owner 不可退出/
+//! 降级/移除）。Tenant Admin 不参与 Team 面（D-1）；项目工作角色（developer /
+//! tester / ai_pm 等 Agent 职能）只在 Agent Registry / core.project_member
+//! 历史列出现，不得混入本枚举。
 
 use std::fmt;
 
@@ -16,17 +18,15 @@ pub const SYSTEM_TENANT: Uuid = Uuid::from_u128(0x10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum TenantRole {
+pub enum TeamRole {
     Owner,
-    Admin,
     Member,
 }
 
-impl TenantRole {
+impl TeamRole {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Owner => "owner",
-            Self::Admin => "admin",
             Self::Member => "member",
         }
     }
@@ -34,30 +34,25 @@ impl TenantRole {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "owner" => Some(Self::Owner),
-            "admin" => Some(Self::Admin),
             "member" => Some(Self::Member),
             _ => None,
         }
     }
 
-    /// `owner` / `admin` 可进入租户管理面（成员列表、成员增删改）。
-    pub fn is_tenant_admin(self) -> bool {
-        matches!(self, Self::Owner | Self::Admin)
-    }
-
-    /// 只有 `owner` 能转让所有权；`admin` 即使能管理成员也不行。
-    pub fn can_transfer_ownership(self) -> bool {
+    /// `owner` 可进入 Team 管理面（成员增删改、邀请管理、团队档案）；
+    /// Member 只有名册读权限。admin 角色已随 P4-ORG DR-ORG-02 取消。
+    pub fn is_owner(self) -> bool {
         matches!(self, Self::Owner)
     }
 
     /// 最小权限兜底：库里没有成员行（或角色值无法识别）时按 `Member` 处理，
-    /// 使「token 声称 tenant_admin 但库内无行」自然落到 403（验收 RV-10）。
+    /// 使「token 声称管理角色但库内无行」自然落到 403（验收 RV-10）。
     pub fn min_privilege() -> Self {
         Self::Member
     }
 }
 
-impl fmt::Display for TenantRole {
+impl fmt::Display for TeamRole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }

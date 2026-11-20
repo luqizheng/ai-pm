@@ -414,7 +414,7 @@ mod tests {
             display_name: "tester".into(),
             is_active: true,
             tenant_id: uuid::Uuid::nil(),
-            tenant_role: pm_domain::TenantRole::Member,
+            team_role: pm_domain::TeamRole::Member,
             is_admin: false,
             auth_mode: "test".into(),
             provider: "test".into(),

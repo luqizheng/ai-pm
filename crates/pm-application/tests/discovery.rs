@@ -957,8 +957,8 @@ async fn i2_c_only_humans_can_decide(pool: PgPool) {
 
     // dev_agent 不能决定。
     let agent_id: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-          WHERE project_id = $1 AND role = 'developer' LIMIT 1",
+        "SELECT principal_id FROM ai.project_agent_member \
+          WHERE project_id = $1 AND role_kind = 'developer' LIMIT 1",
     )
     .bind(fx.project_id)
     .fetch_one(&pool)

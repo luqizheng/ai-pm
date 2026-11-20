@@ -3,6 +3,7 @@
 pub mod acceptance_overview;
 pub mod acp06_07;
 pub mod actor;
+pub mod product;
 pub mod ai_context_items;
 pub mod ai_conversations;
 pub mod ai_interaction_envelope;

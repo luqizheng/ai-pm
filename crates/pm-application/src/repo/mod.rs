@@ -20,7 +20,7 @@ pub mod guard_query;
 pub mod platform_ops;
 pub mod kb_pc_query;
 pub mod runs;
-pub mod tenant_members;
+pub mod team_members;
 pub mod lists;
 
 pub mod viz_read;
@@ -36,5 +36,5 @@ pub use guard_query::GuardQueryRepo;
 pub use platform_ops::PlatformOpsRepo;
 pub use kb_pc_query::KbPcQueryRepo;
 pub use runs::RunRepo;
-pub use tenant_members::{MemberRepo, MemberRepoError};
+pub use team_members::{MemberRepo, MemberRepoError};
 pub use lists::{ListPage, PmListRepo};

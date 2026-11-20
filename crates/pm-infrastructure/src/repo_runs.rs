@@ -43,15 +43,14 @@ impl RunRepo for PgRunRepo {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|(project_id, role)| {
-            let tenant_role = match role.as_deref() {
+            let team_role = match role.as_deref() {
                 Some("owner") => Some("owner"),
-                Some("admin") => Some("admin"),
                 Some("member") => Some("member"),
                 _ => None,
             };
             RunAuthorizationCtx {
                 project_id,
-                tenant_role,
+                team_role,
             }
         }))
     }

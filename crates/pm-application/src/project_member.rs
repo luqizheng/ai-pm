@@ -16,7 +16,7 @@
 use sqlx::{PgConnection, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use pm_domain::{is_agent_role, ProjectMemberRole, TenantRole};
+use pm_domain::{ProjectMemberRole, TeamRole};
 
 use crate::actor::AuditActor;
 use crate::pm_write::append_audit;
@@ -184,16 +184,18 @@ pub async fn is_project_manager(
     project_id: Uuid,
     actor_id: Uuid,
 ) -> Result<bool, ProjectMemberError> {
-    let tenant_role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    // Team Owner 短路（P4-ORG：Team 面事实源 = core.team_member；admin 角色
+    // 已取消，D-1 下 Tenant Admin 不再参与任何管理面）。
+    let team_role: Option<String> = sqlx::query_scalar(
+        "SELECT tm.role FROM core.team_member tm            JOIN core.team t ON t.id = tm.team_id           WHERE t.tenant_id = $1 AND tm.principal_id = $2",
     )
     .bind(tenant_id)
     .bind(actor_id)
     .fetch_optional(pool)
     .await
     .map_err(db_err)?;
-    if let Some(role) = tenant_role.as_deref().and_then(TenantRole::parse) {
-        if role.is_tenant_admin() {
+    if let Some(role) = team_role.as_deref().and_then(TeamRole::parse) {
+        if role.is_owner() {
             return Ok(true);
         }
     }
@@ -218,8 +220,10 @@ async fn is_manager(
     project_id: Uuid,
     actor_id: Uuid,
 ) -> Result<bool, ProjectMemberError> {
-    let tenant_role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    // Team Owner 短路（P4-ORG：Team 面事实源 = core.team_member；admin 角色
+    // 已取消，D-1 下 Tenant Admin 不再参与任何管理面）。
+    let team_role: Option<String> = sqlx::query_scalar(
+        "SELECT tm.role FROM core.team_member tm            JOIN core.team t ON t.id = tm.team_id           WHERE t.tenant_id = $1 AND tm.principal_id = $2",
     )
     .bind(tenant_id)
     .bind(actor_id)
@@ -227,8 +231,8 @@ async fn is_manager(
     .await
     .map_err(db_err)?;
 
-    if let Some(role) = tenant_role.as_deref().and_then(TenantRole::parse) {
-        if role.is_tenant_admin() {
+    if let Some(role) = team_role.as_deref().and_then(TeamRole::parse) {
+        if role.is_owner() {
             return Ok(true);
         }
     }
@@ -269,9 +273,14 @@ async fn grant(
         });
     }
 
+    // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
+    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
+    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM core.tenant_member \
-          WHERE tenant_id = $1 AND principal_id = $2)",
+        "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
+           JOIN core.team t ON t.id = tm.team_id \
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2 FOR UPDATE OF t)",
     )
     .bind(tenant_id)
     .bind(principal_id)
@@ -349,12 +358,7 @@ async fn revoke(
     .map_err(db_err)?;
     let role = role.ok_or(ProjectMemberError::NotFound("member not found"))?;
 
-    if is_agent_role(&role) {
-        return Err(ProjectMemberError::Conflict {
-            code: "AGENT_ROW",
-            message: "agent rows are maintained by bootstrap and cannot be revoked here",
-        });
-    }
+    // P4-ORG Phase 4：agent 职能行已迁 ai.project_agent_member，本表只有人类行。
     if ProjectMemberRole::parse(&role) == Some(ProjectMemberRole::Owner) {
         return Err(ProjectMemberError::Conflict {
             code: "OWNER_LAST",
@@ -414,9 +418,14 @@ async fn transfer_owner(
         });
     }
 
+    // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
+    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
+    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM core.tenant_member \
-          WHERE tenant_id = $1 AND principal_id = $2)",
+        "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
+           JOIN core.team t ON t.id = tm.team_id \
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2 FOR UPDATE OF t)",
     )
     .bind(tenant_id)
     .bind(new_owner)
@@ -439,14 +448,7 @@ async fn transfer_owner(
     .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
-    let target_role = target_role.ok_or(ProjectMemberError::NotFound("member not found"))?;
-    if is_agent_role(&target_role) {
-        return Err(ProjectMemberError::Conflict {
-            code: "AGENT_ROW",
-            message: "agent rows cannot become project owner",
-        });
-    }
-
+    target_role.ok_or(ProjectMemberError::NotFound("member not found"))?;
     sqlx::query(
         "UPDATE core.project_member SET role = 'member' \
                   WHERE project_id = $1 AND principal_id = $2",

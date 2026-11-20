@@ -80,7 +80,7 @@ async fn ensure_authorization_manager(
             )
                 .into_response()
         })?;
-    let is_admin = ctx.tenant_role == Some("owner") || ctx.tenant_role == Some("admin");
+    let is_admin = ctx.team_role == Some("owner");
     if !(is_admin || is_project_owner) {
         return Err((
             axum::http::StatusCode::FORBIDDEN,

@@ -253,7 +253,9 @@ fn build_router(
         // 主体自查与管理端激活/停用（T-021a）。
         .merge(crate::principals::router())
         // 租户成员与角色管理（T-021b）：撤权即时生效的唯一写入路径。
-        .merge(crate::tenant_members::router())
+        .merge(crate::team_members::router())
+        // Product Membership 与生命周期（P4-ORG Phase 3 / DR-PA-01~03）。
+        .merge(crate::products::router())
         // 项目成员授权（S01-W13）：core.project_member 的唯一写入路径。
         .merge(crate::project_members::router())
         // 归档与 Run 取消（S01 · I1-D/P2）：归档事务收口 + cancel_run 外部入口。

@@ -285,11 +285,26 @@ async fn bootstrap_inner(
         Err(e) => return Err(BootstrapError::Db(e)),
     };
 
+    // P4-ORG Phase 4（DR-PA-04③/D-2）：project_member 只承载人类行（owner）；
+    // Agent 执行实例授权行落 ai.project_agent_member（职能 ≠ 访问角色）。
     insert_member(&mut tx, tenant_id, project_id, human_id, "owner").await?;
-    insert_member(&mut tx, tenant_id, project_id, ai_principal_id, "ai_pm").await?;
-    insert_member(&mut tx, tenant_id, project_id, architect_id, "architect").await?;
-    insert_member(&mut tx, tenant_id, project_id, developer_id, "developer").await?;
-    insert_member(&mut tx, tenant_id, project_id, tester_id, "tester").await?;
+    for (agent_principal_id, kind) in [
+        (ai_principal_id, "ai_pm"),
+        (architect_id, "architect"),
+        (developer_id, "developer"),
+        (tester_id, "tester"),
+    ] {
+        sqlx::query(
+            "INSERT INTO ai.project_agent_member (tenant_id, project_id, principal_id, role_kind)              VALUES ($1, $2, $3, $4)",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(agent_principal_id)
+        .bind(kind)
+        .execute(&mut *tx)
+        .await
+        .map_err(BootstrapError::Db)?;
+    }
 
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
@@ -346,15 +361,15 @@ async fn bootstrap_inner(
     })
 }
 
-/// 按 `core.project_member.role` 解析承接任务的 principal；未知角色返回 None。
+/// 按项目 Agent 实例授权（`ai.project_agent_member.role_kind`）解析承接任务的
+/// principal；未知职能返回 None。
 pub async fn resolve_assignee(
     pool: &PgPool,
     project_id: ProjectId,
     role: &str,
 ) -> Result<Option<PrincipalId>, BootstrapError> {
     sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-         WHERE project_id = $1 AND role = $2 LIMIT 1",
+        "SELECT principal_id FROM ai.project_agent_member          WHERE project_id = $1 AND role_kind = $2 LIMIT 1",
     )
     .bind(project_id)
     .bind(role)

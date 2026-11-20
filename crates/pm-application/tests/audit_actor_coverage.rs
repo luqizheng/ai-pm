@@ -29,7 +29,7 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/pm_write/audit.rs", 2), // A1, A2
     ("crates/pm-application/src/repository/support.rs", 1), // A3
     // A4（tenant_audit_log；批 B 域5 迁仓储后落点 pm-infrastructure）
-    ("crates/pm-infrastructure/src/repo_tenant_members.rs", 1),
+    ("crates/pm-infrastructure/src/repo_team_members.rs", 1),
     ("crates/pm-application/src/command_executor/audit.rs", 1), // A5
     ("crates/pm-application/src/delivery/mod.rs", 1),   // A6
     ("crates/pm-application/src/knowledge_proposal/support.rs", 1), // A7
@@ -69,6 +69,9 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // P3-11 ProjC 确认闭环（projc/proposal.rs）：projc_proposal.create/submit/withdraw/
     // approve/reject 共用本 helper（pc/proposal.rs 同款镜像）
     ("crates/pm-application/src/projc/proposal.rs", 1),
+    // P4-ORG Product 域（product.rs）：product / product_member 变更留痕
+    // （governance.tenant_audit_log，发布者四列）
+    ("crates/pm-application/src/product.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {

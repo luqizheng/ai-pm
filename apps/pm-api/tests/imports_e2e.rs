@@ -169,6 +169,8 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     leaked.push(project.to_string());
     assert_eq!(status, StatusCode::CREATED, "body: {project}");
     let project_id = Uuid::parse_str(project["id"].as_str().unwrap()).unwrap();
+    // P4-ORG Phase 4：project_member 只剩人类 owner 行；四个 Agent 职能行落
+    // ai.project_agent_member（D-2：职能 ≠ 访问角色）。
     let roles: Vec<String> = sqlx::query_scalar(
         "SELECT role FROM core.project_member WHERE project_id = $1 ORDER BY role",
     )
@@ -176,14 +178,24 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
+    assert_eq!(roles, vec!["owner".to_string()], "human row = owner only");
+    let agent_kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT role_kind FROM ai.project_agent_member WHERE project_id = $1 ORDER BY role_kind",
+    )
+    .bind(project_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
     assert_eq!(
-        roles.len(),
-        5,
-        "new project must start with a five-role org chart"
+        agent_kinds,
+        vec![
+            "ai_pm".to_string(),
+            "architect".to_string(),
+            "developer".to_string(),
+            "tester".to_string()
+        ],
+        "new project must seed the four-agent org chart"
     );
-    for role in ["owner", "ai_pm", "architect", "developer", "tester"] {
-        assert!(roles.iter().any(|r| r == role), "missing role: {role}");
-    }
 
     // 2. HTTP 建 SSH 密钥 → 200，只回公钥与指纹。
     let (status, key) = body_json(

@@ -15,7 +15,7 @@ pub mod repo_access;
 pub mod task;
 pub mod task_run;
 pub mod task_transition;
-pub mod tenant;
+pub mod team;
 pub mod visualization;
 pub mod waiting;
 
@@ -25,7 +25,7 @@ pub use error::CommandError;
 pub use ids::*;
 pub use policy::PolicyDecision;
 pub use project_member::{
-    is_agent_role, ProjectMemberRole, PROJECT_MEMBER_AGENT_ROLES, PROJECT_MEMBER_ROLES,
+    ProjectMemberRole, PROJECT_MEMBER_ROLES,
 };
 pub use proposal::{AnalysisResult, Confidence, Finding, Proposal, RiskLevel};
 pub use repo_access::{parse_access_levels, RepoAccess};
@@ -36,7 +36,7 @@ pub use task_run::{
 pub use task_transition::{
     allowed_edges, validate_transition, SupersedeIntent, TransitionError, TransitionInput,
 };
-pub use tenant::{TenantRole, SYSTEM_TENANT};
+pub use team::{TeamRole, SYSTEM_TENANT};
 pub use visualization::{
     validate, DerivedTrace, Nature, RelationRegistry, RelationStatus, Severity, SourceRef, VizSpec,
     VizProblem, ValidationReport,

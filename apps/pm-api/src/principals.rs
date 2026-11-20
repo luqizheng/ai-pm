@@ -64,7 +64,7 @@ async fn me_handler(
         "is_active": principal.is_active,
         "is_admin": principal.is_admin,
         "tenant_id": principal.tenant_id,
-        "tenant_role": principal.tenant_role.as_str(),
+        "team_role": principal.team_role.as_str(),
         "provider": principal.provider,
         "claims_tenant_key": principal.claims_tenant_key,
         "subject": principal.subject,

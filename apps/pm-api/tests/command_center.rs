@@ -330,8 +330,7 @@ async fn cognition_without_pending_work_keeps_six_state_semantics(pool: PgPool) 
 async fn active_runs_report_the_task_assignee_as_agent(pool: PgPool) {
     let (project_id, _owner) = seed_project(&pool, "I5-3").await;
     let developer: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-          WHERE project_id = $1 AND role = 'developer' LIMIT 1",
+        "SELECT principal_id FROM ai.project_agent_member \n          WHERE project_id = $1 AND role_kind = 'developer' LIMIT 1",
     )
     .bind(project_id)
     .fetch_one(&pool)

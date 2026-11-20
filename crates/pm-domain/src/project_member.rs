@@ -41,22 +41,10 @@ impl ProjectMemberRole {
     }
 }
 
-/// `core.project_member.role` 的全部合法值（真人角色 + Agent 职能定位）。
+/// `core.project_member.role` 的全部合法值——**人类两值**（P4-ORG Phase 4 /
+/// DR-PA-04③：Agent 职能（ai_pm/architect/developer/tester）已迁出本列，
+/// 项目级承载见 `ai.project_agent_member`，租户级能力见
+/// `ai.ai_executor_capability`）。
 ///
-/// 与迁移 `0030` 的 `ck_project_member_role` CHECK 保持同一份口径。
-pub const PROJECT_MEMBER_ROLES: [&str; 6] = [
-    "owner",
-    "member",
-    "ai_pm",
-    "architect",
-    "developer",
-    "tester",
-];
-
-/// Agent 职能值（任务承接定位，**不是**访问等级）。
-pub const PROJECT_MEMBER_AGENT_ROLES: [&str; 4] = ["ai_pm", "architect", "developer", "tester"];
-
-/// 该 role 值是否为 Agent 职能行。
-pub fn is_agent_role(role: &str) -> bool {
-    PROJECT_MEMBER_AGENT_ROLES.contains(&role)
-}
+/// 与迁移 `0041` 的 `ck_project_member_role` CHECK 保持同一份口径。
+pub const PROJECT_MEMBER_ROLES: [&str; 2] = ["owner", "member"];

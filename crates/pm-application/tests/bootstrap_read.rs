@@ -144,7 +144,8 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
         "bootstrap must create exactly 5 principals"
     );
 
-    // Project members: each principal has exactly the expected role.
+    // Project members（P4-ORG Phase 4）：project_member 只承载人类行（owner）；
+    // Agent 执行实例授权行落 ai.project_agent_member（职能 ≠ 访问角色）。
     let roles: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT principal_id, role FROM core.project_member WHERE project_id = $1 ORDER BY role",
     )
@@ -154,11 +155,23 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
     .unwrap();
     assert_eq!(
         roles,
+        vec![(outcome.human_id, "owner".to_string())],
+        "project_member must contain exactly the human owner row"
+    );
+    let agent_roles: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT principal_id, role_kind FROM ai.project_agent_member \
+          WHERE project_id = $1 ORDER BY role_kind",
+    )
+    .bind(outcome.project_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        agent_roles,
         vec![
             (outcome.ai_principal_id, "ai_pm".to_string()),
             (outcome.architect_id, "architect".to_string()),
             (outcome.developer_id, "developer".to_string()),
-            (outcome.human_id, "owner".to_string()),
             (outcome.tester_id, "tester".to_string()),
         ]
     );

@@ -186,8 +186,7 @@ pub async fn probe_visible_objects(
     let visible_projects: HashSet<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT p.id FROM core.project p \
            JOIN core.project_member m ON m.project_id = p.id \
-          WHERE p.id = ANY($1) AND p.tenant_id = $2 AND m.principal_id = $3 \
-            AND p.status <> 'deleted'",
+          WHERE p.id = ANY($1) AND p.tenant_id = $2 AND m.principal_id = $3'",
     )
     .bind(&project_ids)
     .bind(scope.tenant_id)

@@ -187,8 +187,8 @@ async fn create_requirements_batch_writes_draft_revisions(pool: PgPool) {
 async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
     let fx = seed(&pool, "BATCH-T").await;
     // "未解析角色" 需要真的没有对应成员：bootstrap 默认会编制 architect，
-    // 所以先移除它，才能覆盖 findings 里的 assignee_unresolved 分支。
-    sqlx::query("DELETE FROM core.project_member WHERE project_id = $1 AND role = 'architect'")
+    // 所以先移除其项目授权行，才能覆盖 findings 里的 assignee_unresolved 分支。
+    sqlx::query("DELETE FROM ai.project_agent_member WHERE project_id = $1 AND role_kind = 'architect'")
         .bind(fx.project_id)
         .execute(&pool)
         .await
@@ -238,7 +238,7 @@ async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
         .unwrap();
 
     let developer_id: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member WHERE project_id = $1 AND role = 'developer'",
+        "SELECT principal_id FROM ai.project_agent_member WHERE project_id = $1 AND role_kind = 'developer'",
     )
     .bind(fx.project_id)
     .fetch_one(&pool)

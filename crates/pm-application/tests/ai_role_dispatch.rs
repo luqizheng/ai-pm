@@ -9,10 +9,11 @@
 //! ④ requirement_analyst（V1 无映射、且无 manual 能力行）→ None；
 //! ⑤ 空闲优先（活跃 delivery run 归因 = task.assignee_id），都忙时取最小
 //!    principal_id（确定性）。
-//! Registry 期六条（0061）：
-//! R1 capability 行 + 成员行（role 值不匹配）→ 解析成功（解耦证明）；
-//! R2 registry 空 → legacy 成员角色映射回退仍解析（回退证明）；
-//! R3 capability 行 revoked_at 非空（且无 legacy 候选）→ 不解析；
+//! Registry 期六条（0061；P4-ORG Phase 4 后 registry-only）：
+//! R1 capability 行 + ai.project_agent_member 项目授权行 → 解析成功
+//!    （core.project_member 无 agent 行——与成员表彻底解耦的证明）；
+//! R2 registry 空（无能力行）→ None（legacy 回退已废除）；
+//! R3 capability 行 revoked_at 非空 → 不解析；
 //! R4 registry 多候选 → 空闲优先 + 平局取小保持（测试 ⑤ 升级为双候选均在
 //!    registry）；
 //! R5 manual 行（requirement_analyst）→ 解析成功；
@@ -43,8 +44,9 @@ async fn role_version_id(pool: &PgPool, project_id: Uuid, role_key: &str) -> Uui
 
 /// 再授权一个 dev_agent principal 进项目（bootstrap 只给每角色一个实例；
 /// 选取规则的「空闲优先 / 平局取小」需要 ≥2 候选才能区分）。
-/// V2.0-D：同时授同名 capability 行（source='agent_definition'），使新候选
-/// 进入 registry——多候选空闲语义在 registry 路径上验证（R4）。
+/// P4-ORG Phase 4：项目授权行落 ai.project_agent_member（role_kind）；
+/// 同时授同名 capability 行（source='agent_definition'），使新候选进入
+/// registry——多候选空闲语义在 registry 路径上验证（R4）。
 async fn add_dev_agent_member(pool: &PgPool, project_id: Uuid, role: &str) -> Uuid {
     let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
         .bind(project_id)
@@ -60,7 +62,7 @@ async fn add_dev_agent_member(pool: &PgPool, project_id: Uuid, role: &str) -> Uu
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+        "INSERT INTO ai.project_agent_member (tenant_id, project_id, principal_id, role_kind) \
          VALUES ($1, $2, $3, $4)",
     )
     .bind(tenant_id)
@@ -81,20 +83,6 @@ async fn add_dev_agent_member(pool: &PgPool, project_id: Uuid, role: &str) -> Uu
     .await
     .unwrap();
     principal
-}
-
-/// 把某成员行的 role 改成 'member'（与能力/映射词表都不匹配）：从 legacy
-/// 视角该成员失去全部候选资格，用于隔离 registry 语义（R1/R3）。
-async fn decouple_member_role(pool: &PgPool, project_id: Uuid, principal_id: Uuid) {
-    sqlx::query(
-        "UPDATE core.project_member SET role = 'member' \
-          WHERE project_id = $1 AND principal_id = $2",
-    )
-    .bind(project_id)
-    .bind(principal_id)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 /// 把某个 principal 标记为「忙」：task.assignee_id + 一条活跃 delivery run。
@@ -159,7 +147,7 @@ async fn seed_human_only_project(pool: &PgPool, external_key: &str, code: &str) 
     .unwrap();
     sqlx::query(
         "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
-         VALUES ($1, $2, $3, 'developer')",
+         VALUES ($1, $2, $3, 'member')",
     )
     .bind(tenant_id)
     .bind(project_id)
@@ -370,9 +358,9 @@ async fn returns_none_for_version_anchored_to_another_project(pool: PgPool) {
 // Batch E（V2.0-D Capability Registry V1，0061）：registry-first 语义 R1–R6
 // ---------------------------------------------------------------------------
 
-/// R1 解耦证明：dev_agent 有 capability 行 + project_member 行（role 值
-/// **不匹配**该能力，'member'）→ 解析成功——registry 只认成员行存在，
-/// 不再依赖成员角色值。
+/// R1 解耦证明：dev_agent 有 capability 行 + ai.project_agent_member 项目授权
+/// 行 → 解析成功；core.project_member 无 agent 行（P4-ORG Phase 4 后只有人类
+/// 行）——承接解析与成员表彻底解耦。
 #[sqlx::test(migrations = "../../migrations")]
 async fn registry_resolves_without_matching_member_role(pool: PgPool) {
     let boot = bootstrap_project(
@@ -386,9 +374,21 @@ async fn registry_resolves_without_matching_member_role(pool: PgPool) {
     .await
     .unwrap();
     let version = role_version_id(&pool, boot.project_id, "developer").await;
-    // 成员行 role 改成 'member'：legacy CASE 映射从此无候选，解析若成功
-    // 必然走的是 registry 能力行。
-    decouple_member_role(&pool, boot.project_id, boot.developer_id).await;
+    // project_member 只有人类行：agent principal 不在其中，解析若成功
+    // 必然走 capability ∩ project_agent_member 的 registry 路径。
+    let member_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.project_member \
+          WHERE project_id = $1 AND principal_id = $2",
+    )
+    .bind(boot.project_id)
+    .bind(boot.developer_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        member_rows, 0,
+        "agent principals must not appear in core.project_member anymore"
+    );
 
     let resolved = resolve_role_assignee(&pool, SYSTEM_TENANT, boot.project_id, version)
         .await
@@ -396,12 +396,12 @@ async fn registry_resolves_without_matching_member_role(pool: PgPool) {
     assert_eq!(
         resolved,
         Some(boot.developer_id),
-        "registry must resolve on the capability row alone; member role value is irrelevant"
+        "registry must resolve on capability + project authorization; project_member is irrelevant"
     );
 }
 
-/// R2 回退证明：registry 空（清空租户能力行）→ legacy 成员角色映射仍解析
-/// （member role 'developer' 命中 ROLE_EXECUTOR_MAP）。
+/// R2 空注册表：registry 空（清空租户能力行）→ None（legacy 成员角色映射
+/// 回退已废除——P4-ORG Phase 4 后无能力行即无候选）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn legacy_map_still_resolves_when_registry_is_empty(pool: PgPool) {
     let boot = bootstrap_project(
@@ -425,15 +425,13 @@ async fn legacy_map_still_resolves_when_registry_is_empty(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        resolved,
-        Some(boot.developer_id),
-        "an empty registry must fall back to the legacy member-role map"
+        resolved, None,
+        "an empty registry must yield no executor (no legacy fallback)"
     );
 }
 
-/// R3 撤销语义：capability 行 revoked_at 非空 → 不参与解析。成员角色先解耦
-/// （'member'）以排除 legacy 候选——否则 revoked 行会经 legacy 回退照常解析
-/// （回退语义见 R2；Phase 3 删 legacy 后 revoke 即完全停用）。
+/// R3 撤销语义：capability 行 revoked_at 非空 → 不参与解析
+/// （registry-only 后 revoke 即完全停用；项目授权行仍在也不解析）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn revoked_capability_row_does_not_resolve(pool: PgPool) {
     let boot = bootstrap_project(
@@ -447,7 +445,6 @@ async fn revoked_capability_row_does_not_resolve(pool: PgPool) {
     .await
     .unwrap();
     let version = role_version_id(&pool, boot.project_id, "developer").await;
-    decouple_member_role(&pool, boot.project_id, boot.developer_id).await;
     sqlx::query(
         "UPDATE ai.ai_executor_capability SET revoked_at = now() \
           WHERE tenant_id = $1 AND capability = 'developer'",
@@ -467,8 +464,9 @@ async fn revoked_capability_row_does_not_resolve(pool: PgPool) {
 }
 
 /// R5 manual 行：requirement_analyst 无播种词表（播种限三 dev_agent
-/// role_kind），但人工 manual 能力行即生效——dev_agent 成员行 role='member'
-/// 照样解析（能力与成员角色解耦的另一半证明）。
+/// role_kind），但人工 manual 能力行 + 项目授权行即生效——解析只要求
+/// ai.project_agent_member 行存在，role_kind 值不参与匹配（CHECK 限定四值，
+/// 此处取 'developer' 泛指执行实例授权）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn manual_capability_row_resolves_requirement_analyst(pool: PgPool) {
     let boot = bootstrap_project(
@@ -497,8 +495,8 @@ async fn manual_capability_row_resolves_requirement_analyst(pool: PgPool) {
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
-         VALUES ($1, $2, $3, 'member')",
+        "INSERT INTO ai.project_agent_member (tenant_id, project_id, principal_id, role_kind) \
+         VALUES ($1, $2, $3, 'developer')",
     )
     .bind(tenant_id)
     .bind(boot.project_id)

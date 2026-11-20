@@ -359,7 +359,7 @@ pub async fn list_devices(
     pool: &PgPool,
     caller: &HumanActor,
 ) -> Result<Vec<DeviceRow>, DeviceError> {
-    let is_admin = caller_is_tenant_admin(pool, caller).await?;
+    let is_admin = caller_is_team_owner(pool, caller).await?;
     let rows = sqlx::query(
         "SELECT id, tenant_id, owner_principal_id, name, platform, os_version, \
                 executor_kind, executor_version, status, readiness, last_check_at, \
@@ -384,7 +384,7 @@ pub async fn get_device(
     caller: &HumanActor,
     device_id: Uuid,
 ) -> Result<DeviceDetail, DeviceError> {
-    let is_admin = caller_is_tenant_admin(pool, caller).await?;
+    let is_admin = caller_is_team_owner(pool, caller).await?;
     let device = fetch_device(pool, device_id)
         .await?
         .ok_or(DeviceError::NotFound)?;
@@ -421,7 +421,7 @@ pub async fn revoke_device(
     caller: &HumanActor,
     device_id: Uuid,
 ) -> Result<DeviceRow, DeviceError> {
-    let is_admin = caller_is_tenant_admin(pool, caller).await?;
+    let is_admin = caller_is_team_owner(pool, caller).await?;
     let device = fetch_device(pool, device_id)
         .await?
         .ok_or(DeviceError::NotFound)?;
@@ -501,21 +501,21 @@ pub(crate) async fn list_bindings(
     Ok(rows.into_iter().map(binding_from_row).collect())
 }
 
-/// 调用人是否是租户管理员（`core.tenant_member.role` 是唯一事实源，
-/// ADR-0001 D5：token 的 roles 不参与授权）。
-pub(crate) async fn caller_is_tenant_admin(
+/// 调用人是否是 Team Owner（`core.team_member.role` 是唯一事实源，
+/// P4-ORG DR-ORG-02：admin 角色已取消，token 的 roles 不参与授权）。
+pub(crate) async fn caller_is_team_owner(
     pool: &PgPool,
     caller: &HumanActor,
 ) -> Result<bool, DeviceError> {
     let role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+        "SELECT tm.role FROM core.team_member tm            JOIN core.team t ON t.id = tm.team_id           WHERE t.tenant_id = $1 AND tm.principal_id = $2",
     )
     .bind(caller.tenant_id)
     .bind(caller.principal_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| DeviceError::Db(e.to_string()))?;
-    Ok(matches!(role.as_deref(), Some("owner") | Some("admin")))
+    Ok(role.as_deref() == Some("owner"))
 }
 
 /// 取设备的 owner（用于可见性判定）。

@@ -97,7 +97,7 @@ pub async fn create_draft(
 
     // 项目归属校验（同一租户内；非成员/跨租户一律 404 同形）
     let tenant_id: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1 AND status <> 'deleted'",
+        "SELECT tenant_id FROM core.project WHERE id = $1",
     )
     .bind(project_id)
     .fetch_optional(&mut *tx)

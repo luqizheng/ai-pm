@@ -1,16 +1,14 @@
-//! 租户成员名册读写 port（任务书批 B 第五域，自 pm-api `tenant_members.rs`
-//! 收口）。
+//! Team 成员名册读写 port（P4-ORG Phase 2，原 tenant_members 收口重命名）。
 //!
-//! 域语义（T-021b / ADR-0001 D5，见 tenant_members 模块头）：授权事实源是
-//! `core.tenant_member.role`；撤权即时生效（每请求查库）。写路径单事务：
-//! 锁租户行串行化 → 锁调用者行验权 → 锁目标行 → 规则判定（HTTP 层纯函数）
-//! → DML + 级联撤权 + 租户审计。
+//! 域语义（DR-ORG-02，基线 V0.1 §3）：授权事实源是 `core.team_member.role`
+//! （唯一值域 owner|member）；撤权即时生效（每请求查库）。写路径单事务：
+//! 锁 core.team 行串行化本 Team 的成员变更 → 锁调用者行验权 → 锁目标行 →
+//! 规则判定（HTTP 层纯函数）→ DML + 级联撤权 + 租户审计。
 //!
 //! 规则判定失败要回 HTTP Response，无法经 port 回调表达——所以事务编排分两
-//! 段：[`MemberRepo::change_snapshot`] 在锁内取判定输入（三个 role + owner
-//! 计数 + 项目 owner 依赖），HTTP 层纯函数裁决；[`MemberRepo::apply_change`]
-//! 落裁决产出的 DML 与审计。两段之间锁由实现侧持有（实现内部一个事务里先
-//! 取快照、经回调裁决、再落库——见 PgMemberRepo）。
+//! 段：回调闭包在锁内取判定输入（两个 role + owner 计数），HTTP 层纯函数
+//! 裁决；实现侧落裁决产出的 DML 与审计。锁由实现侧持有（实现内部一个事务
+//! 里先取快照、经回调裁决、再落库——见 PgMemberRepo）。
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -18,7 +16,7 @@ use uuid::Uuid;
 
 /// 名册行（list/detail 共用）。
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
-pub struct TenantMemberRow {
+pub struct TeamMemberRow {
     pub principal_id: Uuid,
     pub display_name: String,
     pub role: String,
@@ -26,7 +24,7 @@ pub struct TenantMemberRow {
     pub created_at: DateTime<Utc>,
 }
 
-/// 域级语义错误：NotFound（租户/成员不存在）、规则拒绝（回滚通道）与
+/// 域级语义错误：NotFound（团队/成员不存在）、规则拒绝（回滚通道）与
 /// S01-W13 项目 owner 依赖。
 #[derive(Debug)]
 pub enum MemberRepoError {
@@ -52,7 +50,7 @@ pub struct ChangeSnapshot {
     pub actor_role: Option<&'static str>,
     /// 目标当前角色（无行 = 非成员）。
     pub target_role: Option<&'static str>,
-    /// 本租户 owner 数。
+    /// 本 Team 的 owner 数。
     pub owner_count: i64,
 }
 
@@ -70,10 +68,6 @@ pub enum MemberWrite {
     },
     Remove {
         principal_id: Uuid,
-    },
-    TransferOwner {
-        old_owner: Uuid,
-        new_owner: Uuid,
     },
 }
 
@@ -106,7 +100,7 @@ pub struct MemberAuditActor {
 }
 
 /// 锁内快照 → 裁决 的同步回调（规则判定是纯函数，无 await）。
-/// Err = (错误码, 消息)——HTTP 错误码契约（OWNER_LAST / USE_OWNER_TRANSFER 等）
+/// Err = (错误码, 消息)——HTTP 错误码契约（TEAM_OWNER_REQUIRED / OWNER_LAST 等）
 /// 由规则层携带，实现侧只负责回滚。
 pub type PlanFn<'a> =
     &'a (dyn Fn(ChangeSnapshot) -> Result<(Vec<MemberWrite>, Vec<MemberAuditLine>), (String, String)>
@@ -115,26 +109,23 @@ pub type PlanFn<'a> =
 
 #[async_trait]
 pub trait MemberRepo: Send + Sync {
-    async fn list_members(
-        &self,
-        tenant_id: Uuid,
-    ) -> Result<Vec<TenantMemberRow>, MemberRepoError>;
+    async fn list_members(&self, team_id: Uuid) -> Result<Vec<TeamMemberRow>, MemberRepoError>;
 
     async fn find_member(
         &self,
-        tenant_id: Uuid,
+        team_id: Uuid,
         principal_id: Uuid,
-    ) -> Result<Option<TenantMemberRow>, MemberRepoError>;
+    ) -> Result<Option<TeamMemberRow>, MemberRepoError>;
 
-    /// 成员变更单事务：锁租户行 → 锁调用者行 → 锁目标行 → owner 计数 →
-    /// `plan` 裁决（锁内回调）→ Remove 先做项目 owner 依赖检查（S01-W13）→
-    /// DML + 级联撤权（真人项目成员关系）+ 审计行。
+    /// 成员变更单事务：锁 core.team 行（同 Team 变更串行化）→ 锁调用者行 →
+    /// 锁目标行 → owner 计数 → `plan` 裁决（锁内回调）→ Remove 先做项目
+    /// owner 依赖检查（S01-W13）→ DML + 级联撤权（真人项目成员关系）+ 审计行。
     ///
-    /// `plan` 返回 Err(消息) 时整体回滚；快照非法（租户/调用者不存在）由
+    /// `plan` 返回 Err(消息) 时整体回滚；快照非法（团队/调用者不存在）由
     /// 实现侧在回调前返回 NotFound。
     async fn apply_change(
         &self,
-        tenant_id: Uuid,
+        team_id: Uuid,
         actor: &MemberAuditActor,
         target_id: Uuid,
         plan: PlanFn<'_>,

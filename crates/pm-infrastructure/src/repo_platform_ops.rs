@@ -26,14 +26,15 @@ impl PlatformOpsRepo for PgPlatformOpsRepo {
         principal_id: Uuid,
     ) -> Result<Vec<(Uuid, String, String, Option<String>, Option<String>)>, sqlx::Error> {
         let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<String>)>(
-            // 只统计 ACTIVE 成员关系：未激活 principal 的 provision member 行
-            // 不算「已加入」（onboarding_required 语义与之配套）；休眠租户
-            // 的成员关系已随 dissolve 清空，双重保险再滤 is_active。
-            "SELECT t.id, t.display_name, tm.role, t.slug, t.description \
-               FROM core.tenant_member tm \
-               JOIN core.tenant t ON t.id = tm.tenant_id \
+            // 只统计 ACTIVE 成员关系：未激活 principal 的 provision 预登记行
+            // 不算「已加入」（onboarding_required 语义与之配套）。 memberships
+            // 事实源 = core.team_member（P4-ORG Phase 2）。
+            "SELECT t.id, t.name, tm.role, tn.slug, t.description \
+               FROM core.team_member tm \
+               JOIN core.team t ON t.id = tm.team_id \
+               JOIN core.tenant tn ON tn.id = t.tenant_id \
                JOIN core.principal p ON p.id = tm.principal_id \
-              WHERE tm.principal_id = $1 AND p.is_active AND t.is_active \
+              WHERE tm.principal_id = $1 AND p.is_active \
               ORDER BY t.created_at",
         )
         .bind(principal_id)
@@ -161,19 +162,18 @@ impl PlatformOpsRepo for PgPlatformOpsRepo {
         Ok(row)
     }
 
-    async fn active_tenant_membership(
+    async fn active_team_membership(
         &self,
-        tenant_id: Uuid,
+        team_id: Uuid,
         principal_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
         let active: Option<Uuid> = sqlx::query_scalar(
-            "SELECT tm.tenant_id \
-               FROM core.tenant_member tm \
+            "SELECT tm.team_id \
+               FROM core.team_member tm \
                JOIN core.principal p ON p.id = tm.principal_id \
-               JOIN core.tenant t ON t.id = tm.tenant_id AND t.is_active \
-              WHERE tm.tenant_id = $1 AND tm.principal_id = $2 AND p.is_active",
+              WHERE tm.team_id = $1 AND tm.principal_id = $2 AND p.is_active",
         )
-        .bind(tenant_id)
+        .bind(team_id)
         .bind(principal_id)
         .fetch_optional(&self.pool)
         .await?;

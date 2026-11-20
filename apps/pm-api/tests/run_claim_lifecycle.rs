@@ -26,8 +26,8 @@ async fn seed_project(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
 }
 
 async fn seed_ready_task_and_run(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {
-    // 判定 4：执行主体必须是 `dev_agent` 职能行（bootstrap 的 developer 是真人，
-    // 需另造 dev_agent principal 并挂为项目成员职能行）。
+    // 判定 4：执行主体必须是 `dev_agent` 执行实例（另造 dev_agent principal，
+    // 项目授权行落 ai.project_agent_member——P4-ORG Phase 4：职能 ≠ 成员角色）。
     let dev_agent: Uuid = sqlx::query_scalar(
         "INSERT INTO core.principal (kind, display_name) \
          VALUES ('dev_agent', $2) RETURNING id",
@@ -38,7 +38,7 @@ async fn seed_ready_task_and_run(pool: &PgPool, project_id: Uuid, title: &str) -
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+        "INSERT INTO ai.project_agent_member (tenant_id, project_id, principal_id, role_kind) \
          VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, 'developer')",
     )
     .bind(project_id)

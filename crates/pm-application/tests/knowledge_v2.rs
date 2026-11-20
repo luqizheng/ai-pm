@@ -73,7 +73,7 @@ async fn boot(pool: &PgPool, code: &str) -> Boot {
     .unwrap();
     let ai_pm_id: Uuid = sqlx::query_scalar(
         "SELECT p.id FROM core.principal p \
-           JOIN core.project_member m ON m.principal_id = p.id \
+           JOIN ai.project_agent_member m ON m.principal_id = p.id \
           WHERE m.project_id = $1 AND p.kind = 'ai_pm' LIMIT 1",
     )
     .bind(outcome.project_id)

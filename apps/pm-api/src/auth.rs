@@ -38,7 +38,7 @@ use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
 use pm_application::repo::identity::{IdentityRepo, IdentityRepoError, ProvisionIdentity, ResolvedIdentity};
-use pm_domain::TenantRole;
+use pm_domain::TeamRole;
 
 /// The `off`-mode principal (fixed id so tests and dev seeds are stable).
 pub const DEV_OFF_PRINCIPAL: Uuid = Uuid::from_u128(0x00ff);
@@ -170,9 +170,9 @@ pub struct AuthedPrincipal {
     pub is_active: bool,
     /// 租户维度（T-021b）：所有租户业务写入的 `tenant_id` 来源。
     pub tenant_id: Uuid,
-    /// `core.tenant_member.role` 的当前值；无成员行时落 `Member`（最小权限）。
-    pub tenant_role: TenantRole,
-    /// 是否可进入租户管理面 = `tenant_role.is_tenant_admin()`。
+    /// `core.team_member.role` 的当前值；无成员行时落 `Member`（最小权限）。
+    pub team_role: TeamRole,
+    /// 是否可进入 Team 管理面 = `team_role.is_owner()`（P4-ORG：admin 角色已取消）。
     pub is_admin: bool,
     pub auth_mode: String,
     pub provider: String,
@@ -227,7 +227,7 @@ pub async fn require_bearer(
             }
             return match pm_application::device_credential::resolve(&auth.pool, token).await {
                 Ok(Some(resolved)) => {
-                    let tenant_role = tenant_role_of(&auth.pool, resolved.owner_principal_id).await;
+                    let team_role = team_role_of(&auth.pool, resolved.owner_principal_id).await;
                     // 权限门（require_mcp_permission）读 AuthenticatedIdentity——
                     // cpk 通道的权限真源 = granted_permissions 列（Q-C 双轨）。
                     let identity = AuthenticatedIdentity {
@@ -249,8 +249,8 @@ pub async fn require_bearer(
                         display_name: format!("client:{}", resolved.device_id),
                         is_active: true,
                         tenant_id: resolved.tenant_id,
-                        tenant_role,
-                        is_admin: tenant_role.is_tenant_admin(),
+                        team_role,
+                        is_admin: team_role.is_owner(),
                         auth_mode: "client_credential".to_string(),
                         provider: "client-registry".to_string(),
                         claims_tenant_key: "-".to_string(),
@@ -440,7 +440,7 @@ pub async fn inject_dev_principal(
         display_name: "dev-off".to_string(),
         is_active: true,
         tenant_id: SYSTEM_TENANT,
-        tenant_role: TenantRole::Owner,
+        team_role: TeamRole::Owner,
         is_admin: true,
         auth_mode: "off".to_string(),
         provider: "dev-off".to_string(),
@@ -492,10 +492,10 @@ async fn resolve_or_provision(
 
     // D5：角色唯一事实源是库内的 tenant_member.role，不是 token roles。
     let role = repo.tenant_role(tenant_id, principal_id).await?;
-    let tenant_role = role
+    let team_role = role
         .as_deref()
-        .and_then(TenantRole::parse)
-        .unwrap_or_else(TenantRole::min_privilege);
+        .and_then(TeamRole::parse)
+        .unwrap_or_else(TeamRole::min_privilege);
 
     Ok(AuthedPrincipal {
         principal_id,
@@ -503,8 +503,8 @@ async fn resolve_or_provision(
         display_name,
         is_active,
         tenant_id,
-        tenant_role,
-        is_admin: tenant_role.is_tenant_admin(),
+        team_role,
+        is_admin: team_role.is_owner(),
         auth_mode: identity.auth_mode().to_string(),
         provider: identity.provider.to_string(),
         claims_tenant_key: identity.claims_tenant_key.clone(),
@@ -693,17 +693,17 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
 }
 
-/// cpk 通道：owner 的租户角色（无行 = Member，最小权限）。
-async fn tenant_role_of(pool: &sqlx::PgPool, principal_id: Uuid) -> TenantRole {
+/// cpk 通道：Team Owner 角色（无行 = Member，最小权限）。
+async fn team_role_of(pool: &sqlx::PgPool, principal_id: Uuid) -> TeamRole {
     let role = crate::support::repos::identity_repo(pool)
         .any_tenant_role(principal_id)
         .await
         .ok()
         .flatten();
     match role.as_deref() {
-        Some("owner") => TenantRole::Owner,
-        Some("admin") => TenantRole::Admin,
-        _ => TenantRole::Member,
+        Some("owner") => TeamRole::Owner,
+
+        _ => TeamRole::Member,
     }
 }
 

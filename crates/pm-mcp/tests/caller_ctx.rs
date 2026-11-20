@@ -100,7 +100,7 @@ async fn seed_fixture(pool: &PgPool) -> Fx {
 /// （与 `tests/contract.rs` 的种子同构——claim 政策的判定 4 / 至少一可写仓）。
 async fn seed_claimable_task(pool: &PgPool, project_id: Uuid) -> Uuid {
     let agent_id: Uuid = sqlx::query_scalar(
-        "SELECT pm.principal_id FROM core.project_member pm            JOIN core.principal p ON p.id = pm.principal_id           WHERE pm.project_id = $1 AND p.kind = 'dev_agent' LIMIT 1",
+        "SELECT am.principal_id FROM ai.project_agent_member am            JOIN core.principal p ON p.id = am.principal_id           WHERE am.project_id = $1 AND p.kind = 'dev_agent' LIMIT 1",
     )
     .bind(project_id)
     .fetch_one(pool)

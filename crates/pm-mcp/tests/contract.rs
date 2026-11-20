@@ -665,7 +665,7 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     let value = submit_result_with(&pool, args.clone(), &options, &test_caller(fx.human_id))
         .await
         .unwrap();
-    assert_eq!(value["outcome"], "accepted");
+    assert_eq!(value["outcome"], "accepted", "submit rejected: {value}");
     assert_eq!(value["integration_status"], "passed");
     assert_eq!(value["commit_count"], 1);
 

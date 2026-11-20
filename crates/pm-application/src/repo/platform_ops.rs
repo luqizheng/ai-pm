@@ -68,10 +68,10 @@ pub trait PlatformOpsRepo: Send + Sync {
         device_id: Uuid,
     ) -> Result<Option<(Uuid, Uuid, String)>, sqlx::Error>;
 
-    /// 活跃租户成员判定（守卫 tenant_llm 侧：principal 与租户都 ACTIVE）。
-    async fn active_tenant_membership(
+    /// 活跃 Team 成员判定（守卫 Team 读面：principal ACTIVE 且在 Team 名册）。
+    async fn active_team_membership(
         &self,
-        tenant_id: Uuid,
+        team_id: Uuid,
         principal_id: Uuid,
     ) -> Result<bool, sqlx::Error>;
 

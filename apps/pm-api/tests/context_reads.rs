@@ -87,6 +87,17 @@ async fn seed(pool: &PgPool, code: &str) -> (axum::Router, PgPool, Uuid, Uuid) {
 
     let me = send(&a, req("GET", "/v1/pm/me", None)).await;
     assert_eq!(me.0, StatusCode::OK, "activation");
+    // P4-ORG Phase 2：管理操作（激活他人）要求 Team Owner——先认领建团。
+    let (team_status, team_body) = send(
+        &a,
+        req(
+            "POST",
+            "/v1/pm/teams",
+            Some(serde_json::json!({ "name": "Ctx Reads Team" })),
+        ),
+    )
+    .await;
+    assert_eq!(team_status, StatusCode::CREATED, "{team_body}");
     let human: Uuid = me.1["principal_id"].as_str().unwrap().parse().unwrap();
     sqlx::query(
         "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \

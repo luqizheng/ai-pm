@@ -3,7 +3,7 @@
 //!
 //! 实体映射（2026-11-06 现实扫描裁决，设计稿 §14「Extend 不重建」）：**Team ≡
 //! `core.tenant`**（DEC-LLM-001 口径）——团队档案 = tenant 行（0044 补
-//! slug/description），成员关系 = `core.tenant_member`（owner/admin/member 现成）；
+//! slug（租户键），成员关系 = `core.team_member`（owner|member 两值，DR-ORG-02）；
 //! project 保持 tenant_id 组合 FK，不新增 team_id。owner 转移/移除/角色升降沿用
 //! `tenant_members` 既有端点，本服务只补 onboarding 缺口：
 //!
@@ -320,22 +320,21 @@ fn map_pending_conflict(err: sqlx::Error) -> TeamOnboardingError {
 
 // ─────────────────────────────────────────────────────────── 团队档案
 
-/// 团队档案读（成员可见；跨租户由 handler 的 guard_tenant 收口）。
+/// 团队档案读（成员可见；跨团队由 handler 的 guard_team 收口）。
 pub async fn team_profile(
     pool: &PgPool,
-    tenant_id: Uuid,
+    team_id: Uuid,
 ) -> Result<Option<TeamProfile>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT id, display_name AS name, slug, description \
-           FROM core.tenant WHERE id = $1",
+        "SELECT t.id, t.name, tn.slug, t.description            FROM core.team t            JOIN core.tenant tn ON tn.id = t.tenant_id           WHERE t.id = $1",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_optional(pool)
     .await
 }
 
-/// 认领建团（Q1/Q2）：锁 tenant 行 → 校验零 ACTIVE 成员 → 写档案 + 自升 owner
-/// + 激活，单事务。并发认领由行锁串行化，输家 409。
+/// 认领建团（Q1/Q2）：锁 tenant 行 → 校验该租户尚无 Team → 建 Team + 首位
+/// Owner 落行 + 激活，单事务。并发认领由行锁串行化，输家 409。
 pub async fn create_team(
     pool: &PgPool,
     actor: &AuditActor,
@@ -362,17 +361,14 @@ pub async fn create_team(
         return Err(TeamOnboardingError::NotFound);
     };
 
-    // 认领前提：租户内没有任何 ACTIVE 成员（provision 落的行 principal 均
-    // inactive，不计入）。系统租户/已认领租户在此被拒绝。
-    let active_members: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.tenant_member tm \
-          JOIN core.principal p ON p.id = tm.principal_id \
-          WHERE tm.tenant_id = $1 AND p.is_active",
-    )
-    .bind(tenant_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if active_members > 0 {
+    // 认领前提：该租户尚无 Team 行（认领制一次成团；provision 预登记行
+    // 不算已加入）。系统租户/已认领租户在此被拒绝。
+    let existing: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.team WHERE tenant_id = $1 FOR UPDATE")
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if existing.is_some() {
         return Err(TeamOnboardingError::Conflict("team_already_exists"));
     }
 
@@ -392,27 +388,33 @@ pub async fn create_team(
 
     sqlx::query(
         "UPDATE core.tenant \
-            SET display_name = $2, slug = $3, description = $4, is_active = true, updated_at = now() \
+            SET display_name = $2, slug = $3, is_active = true, updated_at = now() \
           WHERE id = $1",
     )
     .bind(tenant_id)
     .bind(&display_name)
     .bind(&slug)
-    .bind(&description)
     .execute(&mut *tx)
     .await
     .map_err(map_slug_conflict)?;
 
-    // 创建者自升 OWNER（Q2）：provision 已落 member 行 → 覆盖为 owner；
-    // 无行（极端：成员行被清）→ 插入。
-    sqlx::query(
-        "INSERT INTO core.tenant_member (tenant_id, principal_id, role, granted_by) \
-         VALUES ($1, $2, 'owner', $2) \
-         ON CONFLICT (tenant_id, principal_id) \
-         DO UPDATE SET role = 'owner', granted_by = $2, updated_at = now()",
+    // 建 Team 行（Tenant → Team 1:N 的当前 1:1 实例）+ 创建者 = 首位
+    // Team Owner（Q2 / DR-ORG-02：多 Owner 任命制）。
+    let team_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.team (tenant_id, name, description) VALUES ($1, $2, $3) RETURNING id",
     )
     .bind(tenant_id)
+    .bind(&display_name)
+    .bind(&description)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO core.team_member (team_id, principal_id, tenant_id, role, granted_by)          VALUES ($1, $2, $3, 'owner', $2)",
+    )
+    .bind(team_id)
     .bind(principal_id)
+    .bind(tenant_id)
     .execute(&mut *tx)
     .await?;
 
@@ -426,8 +428,8 @@ pub async fn create_team(
         tenant_id,
         actor,
         "team.created",
-        "tenant",
-        tenant_id,
+        "team",
+        team_id,
         None,
         Some(json!({ "name": display_name, "slug": slug, "owner": principal_id })),
     )
@@ -435,18 +437,18 @@ pub async fn create_team(
 
     tx.commit().await?;
     Ok(TeamProfile {
-        id: tenant_id,
+        id: team_id,
         name: display_name,
         slug,
         description,
     })
 }
 
-/// 修改团队资料（owner/admin；角色矩阵「修改团队资料」）。
+/// 修改团队资料（Team Owner；P4-ORG DR-ORG-02：Team 面无 admin 角色）。
 pub async fn update_team_profile(
     pool: &PgPool,
     actor: &AuditActor,
-    tenant_id: Uuid,
+    team_id: Uuid,
     req: UpdateTeamRequest,
 ) -> Result<TeamProfile, TeamOnboardingError> {
     if let Some(name) = req.name.as_deref() {
@@ -460,15 +462,19 @@ pub async fn update_team_profile(
 
     let mut tx = pool.begin().await?;
     let current: Option<TeamProfile> = sqlx::query_as(
-        "SELECT id, display_name AS name, slug, description \
-           FROM core.tenant WHERE id = $1 FOR UPDATE",
+        "SELECT t.id, t.name, tn.slug, t.description FROM core.team t JOIN core.tenant tn ON tn.id = t.tenant_id WHERE t.id = $1 FOR UPDATE",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_optional(&mut *tx)
     .await?;
     let Some(current) = current else {
         return Err(TeamOnboardingError::NotFound);
     };
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_one(&mut *tx)
+            .await?;
 
     // 审计 before 快照先行（下方 unwrap_or 会移走 current 的字段）。
     let before = json!({
@@ -484,6 +490,7 @@ pub async fn update_team_profile(
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .unwrap_or(current.name);
+    let prev_slug = current.slug.clone();
     let slug = match req.slug.as_deref() {
         Some(s) if !s.trim().is_empty() => Some(s.trim().to_owned()),
         Some(_) => None, // 显式空串 = 清除 slug
@@ -496,25 +503,29 @@ pub async fn update_team_profile(
     };
 
     sqlx::query(
-        "UPDATE core.tenant \
-            SET display_name = $2, slug = $3, description = $4, updated_at = now() \
-          WHERE id = $1",
+        "UPDATE core.team SET name = $2, description = $3, updated_at = now() WHERE id = $1",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .bind(&name)
-    .bind(&slug)
     .bind(&description)
     .execute(&mut *tx)
-    .await
-    .map_err(map_slug_conflict)?;
+    .await?;
+    if slug != prev_slug {
+        sqlx::query("UPDATE core.tenant SET slug = $2, updated_at = now() WHERE id = $1")
+            .bind(tenant_id)
+            .bind(&slug)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_slug_conflict)?;
+    }
 
     insert_tenant_audit(
         &mut tx,
         tenant_id,
         actor,
         "team.updated",
-        "tenant",
-        tenant_id,
+        "team",
+        team_id,
         Some(before),
         Some(json!({ "name": name, "slug": slug, "description": description })),
     )
@@ -522,7 +533,7 @@ pub async fn update_team_profile(
 
     tx.commit().await?;
     Ok(TeamProfile {
-        id: tenant_id,
+        id: team_id,
         name,
         slug,
         description,
@@ -530,12 +541,11 @@ pub async fn update_team_profile(
 }
 
 // ─────────────────────────────────────────────────────────── 邮箱邀请
-
-/// 创建邮箱邀请（owner/admin；角色仅 admin|member）。返回一次性明文 token。
+/// 创建邮箱邀请（Team Owner；角色仅 member——Owner 只能经任命产生，DR-ORG-02）。
 pub async fn create_invitation(
     pool: &PgPool,
     actor: &AuditActor,
-    tenant_id: Uuid,
+    team_id: Uuid,
     req: CreateInvitationRequest,
 ) -> Result<InvitationCreated, TeamOnboardingError> {
     let email = req.email.trim().to_string();
@@ -543,10 +553,10 @@ pub async fn create_invitation(
         return Err(TeamOnboardingError::Validation("invalid email"));
     }
     let role = req.role.trim().to_lowercase();
-    if role != "admin" && role != "member" {
-        // OWNER 不可经邀请产生（spec §5.1 / 权限矩阵）。
+    if role != "member" {
+        // Owner 只能经 PATCH role 任命产生（P4-ORG DR-ORG-02）。
         return Err(TeamOnboardingError::Validation(
-            "invitation role must be admin or member",
+            "invitation role must be member",
         ));
     }
     let email_normalized = normalize_email(&email);
@@ -554,13 +564,21 @@ pub async fn create_invitation(
     let token = generate_token()?;
 
     let mut tx = pool.begin().await?;
+    // Team 锚：邀请挂 Team（0039 team_id），tenant_id 保留租户边界列。
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(TeamOnboardingError::NotFound)?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.tenant_invitation \
-             (tenant_id, email, email_normalized, role, token_hash, invited_by, expires_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) \
+             (tenant_id, team_id, email, email_normalized, role, token_hash, invited_by, expires_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
          RETURNING id",
     )
     .bind(tenant_id)
+    .bind(team_id)
     .bind(&email)
     .bind(&email_normalized)
     .bind(&role)
@@ -597,7 +615,7 @@ pub async fn create_invitation(
 /// 只发生在 accept 命中时——列表是读面，不因查看而写）。
 pub async fn list_invitations(
     pool: &PgPool,
-    tenant_id: Uuid,
+    team_id: Uuid,
 ) -> Result<Vec<InvitationRow>, sqlx::Error> {
     sqlx::query_as(
         "SELECT i.id, i.email, i.role, \
@@ -607,33 +625,38 @@ pub async fn list_invitations(
                 i.expires_at, i.created_at, i.accepted_at \
            FROM core.tenant_invitation i \
            LEFT JOIN core.principal p ON p.id = i.invited_by \
-          WHERE i.tenant_id = $1 \
+          WHERE i.team_id = $1 \
           ORDER BY i.created_at DESC",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_all(pool)
     .await
 }
 
-/// 撤销邀请（owner/admin；仅 PENDING 可撤销，设计稿 §7 异常表）。
+/// 撤销邀请（Team Owner；仅 PENDING 可撤销，设计稿 §7 异常表）。
 pub async fn revoke_invitation(
     pool: &PgPool,
     actor: &AuditActor,
-    tenant_id: Uuid,
+    team_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     let locked: Option<(String,)> = sqlx::query_as(
         "SELECT status FROM core.tenant_invitation \
-          WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+          WHERE id = $1 AND team_id = $2 FOR UPDATE",
     )
     .bind(invitation_id)
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_optional(&mut *tx)
     .await?;
     let Some((status,)) = locked else {
         return Err(TeamOnboardingError::NotFound);
     };
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_one(&mut *tx)
+            .await?;
     if status != "PENDING" {
         return Err(TeamOnboardingError::Conflict("invitation_not_pending"));
     }
@@ -676,12 +699,13 @@ pub async fn preview_invitation(
         String,
     )>;
     let row: Row = sqlx::query_as(
-        "SELECT t.display_name, t.slug, i.role, p.display_name, \
+        "SELECT t.name, tn.slug, i.role, p.display_name, \
                     CASE WHEN i.status = 'PENDING' AND i.expires_at < now() \
                          THEN 'EXPIRED' ELSE i.status END AS status, \
                     i.expires_at, i.email_normalized, i.status \
                FROM core.tenant_invitation i \
-               JOIN core.tenant t ON t.id = i.tenant_id \
+               JOIN core.team t ON t.id = i.team_id \
+               JOIN core.tenant tn ON tn.id = t.tenant_id \
                LEFT JOIN core.principal p ON p.id = i.invited_by \
               WHERE i.token_hash = $1",
     )
@@ -716,15 +740,15 @@ pub async fn accept_invitation(
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     // 锁定即取全决策所需列：id/租户/角色/状态/有效期/规范化邮箱/邀请人。
-    type Row = Option<(Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)>;
+    type Row = Option<(Uuid, Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)>;
     let locked: Row = sqlx::query_as(
-        "SELECT id, tenant_id, role, status, expires_at, email_normalized, invited_by \
+        "SELECT id, tenant_id, team_id, role, status, expires_at, email_normalized, invited_by \
                FROM core.tenant_invitation WHERE token_hash = $1 FOR UPDATE",
     )
     .bind(hash_token(&req.token))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((invitation_id, tenant_id, role, status, expires_at, email_normalized, invited_by)) =
+    let Some((invitation_id, tenant_id, team_id, role, status, expires_at, email_normalized, invited_by)) =
         locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
@@ -771,37 +795,36 @@ pub async fn accept_invitation(
 
     // 成员现状：ACTIVE 成员 → 幂等终结；否则激活 + 落被邀角色。
     let membership: Option<(String,)> = sqlx::query_as(
-        "SELECT tm.role FROM core.tenant_member tm \
+        "SELECT tm.role FROM core.team_member tm \
           JOIN core.principal p ON p.id = tm.principal_id \
-          WHERE tm.tenant_id = $1 AND tm.principal_id = $2 AND p.is_active",
+          WHERE tm.team_id = $1 AND tm.principal_id = $2 AND p.is_active",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .bind(principal_id)
     .fetch_optional(&mut *tx)
     .await?;
 
     let team_name: String =
-        sqlx::query_scalar("SELECT display_name FROM core.tenant WHERE id = $1")
-            .bind(tenant_id)
+        sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
+            .bind(team_id)
             .fetch_one(&mut *tx)
             .await?;
 
     let outcome = if membership.is_some() {
         AcceptOutcome {
             outcome: "already_member",
-            team_id: tenant_id,
+            team_id,
             team_name,
             role,
         }
     } else {
         sqlx::query(
-            "INSERT INTO core.tenant_member (tenant_id, principal_id, role, granted_by) \
-             VALUES ($1, $2, $3, $4) \
-             ON CONFLICT (tenant_id, principal_id) \
-             DO UPDATE SET role = $3, granted_by = $4, updated_at = now()",
+            "INSERT INTO core.team_member (team_id, principal_id, tenant_id, role, granted_by) \
+             VALUES ($1, $2, $3, $4, $5)",
         )
-        .bind(tenant_id)
+        .bind(team_id)
         .bind(principal_id)
+        .bind(tenant_id)
         .bind(&role)
         // granted_by = 邀请人（迁移 0019 列语义）。
         .bind(invited_by)
@@ -824,7 +847,7 @@ pub async fn accept_invitation(
         .await?;
         AcceptOutcome {
             outcome: "joined",
-            team_id: tenant_id,
+            team_id,
             team_name,
             role,
         }
@@ -864,7 +887,7 @@ pub async fn accept_invitation(
 pub async fn create_invitation_link(
     pool: &PgPool,
     actor: &AuditActor,
-    tenant_id: Uuid,
+    team_id: Uuid,
     req: CreateLinkRequest,
 ) -> Result<LinkCreated, TeamOnboardingError> {
     let role = req
@@ -894,12 +917,19 @@ pub async fn create_invitation_link(
     let token = generate_token()?;
 
     let mut tx = pool.begin().await?;
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(TeamOnboardingError::NotFound)?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.tenant_invitation_link \
-             (tenant_id, token_hash, default_role, max_uses, expires_at, created_by) \
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+             (tenant_id, team_id, token_hash, default_role, max_uses, expires_at, created_by) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
     )
     .bind(tenant_id)
+    .bind(team_id)
     .bind(hash_token(&token))
     .bind(&role)
     .bind(req.max_uses)
@@ -933,7 +963,7 @@ pub async fn create_invitation_link(
 /// 链接列表（owner/admin）；ACTIVE 行按过期/余量给计算态。
 pub async fn list_invitation_links(
     pool: &PgPool,
-    tenant_id: Uuid,
+    team_id: Uuid,
 ) -> Result<Vec<InvitationLinkRow>, sqlx::Error> {
     sqlx::query_as(
         "SELECT l.id, l.default_role, \
@@ -943,10 +973,10 @@ pub async fn list_invitation_links(
                      ELSE l.status END AS status, \
                 l.max_uses, l.used_count, l.expires_at, l.created_at \
            FROM core.tenant_invitation_link l \
-          WHERE l.tenant_id = $1 \
+          WHERE l.team_id = $1 \
           ORDER BY l.created_at DESC",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_all(pool)
     .await
 }
@@ -955,21 +985,26 @@ pub async fn list_invitation_links(
 pub async fn revoke_invitation_link(
     pool: &PgPool,
     actor: &AuditActor,
-    tenant_id: Uuid,
+    team_id: Uuid,
     link_id: Uuid,
 ) -> Result<(), TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     let locked: Option<(String,)> = sqlx::query_as(
         "SELECT status FROM core.tenant_invitation_link \
-          WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+          WHERE id = $1 AND team_id = $2 FOR UPDATE",
     )
     .bind(link_id)
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_optional(&mut *tx)
     .await?;
     let Some((status,)) = locked else {
         return Err(TeamOnboardingError::NotFound);
     };
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_one(&mut *tx)
+            .await?;
     if status != "ACTIVE" {
         return Err(TeamOnboardingError::Conflict("link_not_active"));
     }
@@ -1002,9 +1037,9 @@ pub async fn preview_invitation_link(
 ) -> Result<Option<LinkPreview>, sqlx::Error> {
     type Row = Option<(String, String, Option<i32>, i32, DateTime<Utc>, String)>;
     let row: Row = sqlx::query_as(
-        "SELECT t.display_name, l.default_role, l.max_uses, l.used_count, l.expires_at, l.status \
+        "SELECT t.name, l.default_role, l.max_uses, l.used_count, l.expires_at, l.status \
            FROM core.tenant_invitation_link l \
-           JOIN core.tenant t ON t.id = l.tenant_id \
+           JOIN core.team t ON t.id = l.team_id \
           WHERE l.token_hash = $1",
     )
     .bind(hash_token(token))
@@ -1041,15 +1076,15 @@ pub async fn accept_invitation_link(
     token: &str,
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
-    type Row = Option<(Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)>;
+    type Row = Option<(Uuid, Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)>;
     let locked: Row = sqlx::query_as(
-        "SELECT id, tenant_id, default_role, status, max_uses, used_count, expires_at \
+        "SELECT id, tenant_id, team_id, default_role, status, max_uses, used_count, expires_at \
                FROM core.tenant_invitation_link WHERE token_hash = $1 FOR UPDATE",
     )
     .bind(hash_token(token))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((link_id, tenant_id, default_role, status, max_uses, used_count, expires_at)) = locked
+    let Some((link_id, tenant_id, team_id, default_role, status, max_uses, used_count, expires_at)) = locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
     };
@@ -1086,18 +1121,18 @@ pub async fn accept_invitation_link(
     }
 
     let membership: Option<(String,)> = sqlx::query_as(
-        "SELECT tm.role FROM core.tenant_member tm \
+        "SELECT tm.role FROM core.team_member tm \
           JOIN core.principal p ON p.id = tm.principal_id \
-          WHERE tm.tenant_id = $1 AND tm.principal_id = $2 AND p.is_active",
+          WHERE tm.team_id = $1 AND tm.principal_id = $2 AND p.is_active",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .bind(principal_id)
     .fetch_optional(&mut *tx)
     .await?;
 
     let team_name: String =
-        sqlx::query_scalar("SELECT display_name FROM core.tenant WHERE id = $1")
-            .bind(tenant_id)
+        sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
+            .bind(team_id)
             .fetch_one(&mut *tx)
             .await?;
 
@@ -1115,7 +1150,7 @@ pub async fn accept_invitation_link(
         .await?;
         AcceptOutcome {
             outcome: "already_member",
-            team_id: tenant_id,
+            team_id,
             team_name,
             role: default_role,
         }
@@ -1133,13 +1168,12 @@ pub async fn accept_invitation_link(
             return Err(TeamOnboardingError::Exhausted);
         }
         sqlx::query(
-            "INSERT INTO core.tenant_member (tenant_id, principal_id, role, granted_by) \
-             VALUES ($1, $2, $3, $4) \
-             ON CONFLICT (tenant_id, principal_id) \
-             DO UPDATE SET role = $3, granted_by = $4, updated_at = now()",
+            "INSERT INTO core.team_member (team_id, principal_id, tenant_id, role, granted_by) \
+             VALUES ($1, $2, $3, $4, $5)",
         )
-        .bind(tenant_id)
+        .bind(team_id)
         .bind(principal_id)
+        .bind(tenant_id)
         .bind(&default_role)
         .bind(actor.principal_id) // 链接无邀请人主体，granted_by 记领用人
         .execute(&mut *tx)
@@ -1185,7 +1219,7 @@ pub async fn accept_invitation_link(
         .await?;
         AcceptOutcome {
             outcome: "joined",
-            team_id: tenant_id,
+            team_id,
             team_name,
             role: default_role,
         }
@@ -1205,134 +1239,4 @@ pub async fn accept_invitation_link(
 
     tx.commit().await?;
     Ok(outcome)
-}
-
-// ─────────────────────────────────────────────────────────── 解散团队
-
-/// 解散结果（审计与回显用）。
-#[derive(Debug, Clone, Serialize)]
-pub struct DissolveOutcome {
-    pub projects_deleted: i64,
-    pub members_removed: i64,
-}
-
-/// 解散团队（产品裁决 2026-11-06：**Owner 独占**；admin/member 均不可）。
-///
-/// 级联语义——「projects 全部删除」在事务内落地为**终态软删**：
-/// `core.project.status → 'deleted'` + 项目成员行清空（两道闸都使项目从
-/// 列表与可见性检查中消失）。硬删不可行：`governance.audit_log.project_id`
-/// NOT NULL FK 锚定审计链，且数十张业务表无级联——审计优先口径下删除历史
-/// 不可接受。团队面同步清算：成员关系全撤（含 Owner 本人）、邀请/链接/
-/// 领用记录清空、租户休眠（is_active=false + 档案列清空，slug 释放）。
-///
-/// 后续语义：休眠租户在 `/me` 呈现 team=null → onboarding_required=true，
-/// 原 member（principal 仍 active）经认领路径可**重建**团队（create_team
-/// 会翻回 is_active）——解散后同 lmms 租户的人不会被永久锁死。不可逆性：
-/// 软删项目无恢复端点（V1），租户重建后旧项目不可见。
-pub async fn dissolve_team(
-    pool: &PgPool,
-    actor: &AuditActor,
-    principal_id: Uuid,
-    tenant_id: Uuid,
-) -> Result<DissolveOutcome, TeamOnboardingError> {
-    let mut tx = pool.begin().await?;
-
-    let locked: Option<(bool,)> =
-        sqlx::query_as("SELECT is_active FROM core.tenant WHERE id = $1 FOR UPDATE")
-            .bind(tenant_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-    let Some((is_active,)) = locked else {
-        return Err(TeamOnboardingError::NotFound);
-    };
-    if !is_active {
-        return Err(TeamOnboardingError::Conflict("team_already_dissolved"));
-    }
-
-    // Owner 独占：admin/member 一律拒绝（实时查库，token 不参与授权）。
-    let role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member \
-          WHERE tenant_id = $1 AND principal_id = $2 AND principal_id IN \
-                (SELECT id FROM core.principal WHERE is_active)",
-    )
-    .bind(tenant_id)
-    .bind(principal_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if role.as_deref() != Some("owner") {
-        return Err(TeamOnboardingError::Forbidden("team owner required"));
-    }
-
-    // 终态软删项目 + 清项目成员行（两道可见性闸同时失效）。
-    let projects_deleted: i64 = sqlx::query_scalar(
-        "WITH moved AS ( \
-             UPDATE core.project SET status = 'deleted', updated_at = now() \
-              WHERE tenant_id = $1 AND status <> 'deleted' \
-              RETURNING 1) \
-         SELECT count(*) FROM moved",
-    )
-    .bind(tenant_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    sqlx::query(
-        "DELETE FROM core.project_member \
-          WHERE project_id IN (SELECT id FROM core.project WHERE tenant_id = $1)",
-    )
-    .bind(tenant_id)
-    .execute(&mut *tx)
-    .await?;
-
-    // 团队面清算：邀请/链接/领用清空，成员关系全撤（含 Owner 本人）。
-    sqlx::query("DELETE FROM core.tenant_invitation_link_redemption WHERE tenant_id = $1")
-        .bind(tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM core.tenant_invitation WHERE tenant_id = $1")
-        .bind(tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM core.tenant_invitation_link WHERE tenant_id = $1")
-        .bind(tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    let members_removed: i64 = sqlx::query_scalar(
-        "WITH gone AS ( \
-             DELETE FROM core.tenant_member WHERE tenant_id = $1 RETURNING 1) \
-         SELECT count(*) FROM gone",
-    )
-    .bind(tenant_id)
-    .fetch_one(&mut *tx)
-    .await?;
-
-    // 租户休眠 + 档案清空（slug 释放，重建团队可复用）。
-    sqlx::query(
-        "UPDATE core.tenant \
-            SET is_active = false, slug = NULL, description = NULL, updated_at = now() \
-          WHERE id = $1",
-    )
-    .bind(tenant_id)
-    .execute(&mut *tx)
-    .await?;
-
-    insert_tenant_audit(
-        &mut tx,
-        tenant_id,
-        actor,
-        "team.dissolved",
-        "tenant",
-        tenant_id,
-        None,
-        Some(json!({
-            "projects_deleted": projects_deleted,
-            "members_removed": members_removed,
-            "by": principal_id
-        })),
-    )
-    .await?;
-
-    tx.commit().await?;
-    Ok(DissolveOutcome {
-        projects_deleted,
-        members_removed,
-    })
 }

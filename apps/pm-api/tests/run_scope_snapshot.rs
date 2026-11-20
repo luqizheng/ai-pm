@@ -61,8 +61,7 @@ async fn seed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     .unwrap();
     // 判定 4：assignee 必须是 dev_agent 才可领取。
     let developer: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-          WHERE project_id = $1 AND role = 'developer' LIMIT 1",
+        "SELECT principal_id FROM ai.project_agent_member \n          WHERE project_id = $1 AND role_kind = 'developer' LIMIT 1",
     )
     .bind(boot.project_id)
     .fetch_one(pool)

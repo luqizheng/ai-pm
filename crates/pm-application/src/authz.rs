@@ -83,11 +83,13 @@ pub async fn resolve_project_executor(
     project_id: Uuid,
     kind: ExecutorKind,
 ) -> Result<Uuid, AuthzError> {
+    // P4-ORG Phase 4：执行主体锚 = ai.project_agent_member（agent 职能行已迁出
+    // project_member）。按 principal.kind 过滤保留（ExecutorKind 语义不变）。
     let principal_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT pm.principal_id FROM core.project_member pm \
-         JOIN core.principal p ON p.id = pm.principal_id \
-         WHERE pm.project_id = $1 AND p.kind = $2 \
-         ORDER BY pm.principal_id LIMIT 1",
+        "SELECT am.principal_id FROM ai.project_agent_member am \
+         JOIN core.principal p ON p.id = am.principal_id \
+         WHERE am.project_id = $1 AND p.kind = $2 \
+         ORDER BY am.principal_id LIMIT 1",
     )
     .bind(project_id)
     .bind(kind.principal_kind())

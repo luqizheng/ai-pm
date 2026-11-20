@@ -1,11 +1,5 @@
-//! Team Onboarding HTTP 面（设计稿 `docs/team-onboarding/`，产品裁决 2026-11-06）。
-//!
-//! 路由分两组：
-//! - 租户管理组（`/v1/pm/tenants/{tenant_id}*`）：建团/档案/邀请/链接，owner/admin
-//!   守卫随 `team_llm_guard`（跨租户 404 + 非管理员 403）。
-//! - 自助组（`/v1/pm/teams`、`/v1/pm/invitations/*`、`/v1/pm/invitation-links/*`）：
-//!   未激活 principal 也可调（`auth::is_self_service_path` 放行）——这正是
-//!   onboarding 的入口（认领建团 / 接受邀请）。仍需 bearer。
+//! Team Onboarding HTTP 面（设计稿 `docs/team-onboarding/`，产品裁决 2026-11-06；
+//! P4-ORG Phase 2：Team 面锚切换 core.team / team_id，守卫 = guard_team）。
 //!
 //! 错误契约：`{message}` 单字段（support.rs 口径）；邀请域的终态错误使用稳定
 //! machine message（`invitation_expired` / `invitation_revoked` /
@@ -27,39 +21,34 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::team_llm_guard::{err_not_found, guard_tenant};
+use crate::team_llm_guard::err_not_found;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         // 建团（认领当前 token 租户）：自助路径，未激活 principal 可调。
         .route("/v1/pm/teams", post(create_team_handler))
-        // 团队档案：成员读 / admin 写。
+        // 团队档案：成员读 / Team Owner 写。
         .route(
-            "/v1/pm/tenants/{tenant_id}",
+            "/v1/pm/teams/{team_id}",
             get(team_profile_handler).patch(update_team_handler),
         )
-        // 邮箱邀请管理（admin）。
+        // 邮箱邀请管理（Team Owner）。
         .route(
-            "/v1/pm/tenants/{tenant_id}/invitations",
+            "/v1/pm/teams/{team_id}/invitations",
             get(list_invitations_handler).post(create_invitation_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/invitations/{invitation_id}/revoke",
+            "/v1/pm/teams/{team_id}/invitations/{invitation_id}/revoke",
             post(revoke_invitation_handler),
         )
-        // 邀请链接管理（admin）。
+        // 邀请链接管理（Team Owner）。
         .route(
-            "/v1/pm/tenants/{tenant_id}/invitation-links",
+            "/v1/pm/teams/{team_id}/invitation-links",
             get(list_links_handler).post(create_link_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/invitation-links/{link_id}/revoke",
+            "/v1/pm/teams/{team_id}/invitation-links/{link_id}/revoke",
             post(revoke_link_handler),
-        )
-        // 解散团队（Owner 独占，产品裁决 2026-11-06）：projects 全部终态软删。
-        .route(
-            "/v1/pm/tenants/{tenant_id}/dissolve",
-            post(dissolve_handler),
         )
         // 自助：预览 + 接受（未激活 principal 可调，仍需 bearer）。
         .route(
@@ -129,12 +118,12 @@ async fn create_team_handler(
 async fn team_profile_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
-    match svc::team_profile(&state.pool, tenant_id).await {
+    match svc::team_profile(&state.pool, team_id).await {
         Ok(Some(team)) => (axum::http::StatusCode::OK, Json(team)).into_response(),
         Ok(None) => err_not_found("tenant not found"),
         Err(e) => internal(axum::Error::new(e)),
@@ -144,16 +133,16 @@ async fn team_profile_handler(
 async fn update_team_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     Json(req): Json<svc::UpdateTeamRequest>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::update_team_profile(&state.pool, &caller.audit_actor(), tenant_id, req).await {
+    match svc::update_team_profile(&state.pool, &caller.audit_actor(), team_id, req).await {
         Ok(team) => (axum::http::StatusCode::OK, Json(team)).into_response(),
         Err(err) => api_err(err),
     }
@@ -164,16 +153,16 @@ async fn update_team_handler(
 async fn create_invitation_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     Json(req): Json<svc::CreateInvitationRequest>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::create_invitation(&state.pool, &caller.audit_actor(), tenant_id, req).await {
+    match svc::create_invitation(&state.pool, &caller.audit_actor(), team_id, req).await {
         Ok(created) => (axum::http::StatusCode::CREATED, Json(created)).into_response(),
         Err(err) => api_err(err),
     }
@@ -182,15 +171,15 @@ async fn create_invitation_handler(
 async fn list_invitations_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::list_invitations(&state.pool, tenant_id).await {
+    match svc::list_invitations(&state.pool, team_id).await {
         Ok(rows) => (axum::http::StatusCode::OK, Json(rows)).into_response(),
         Err(e) => internal(axum::Error::new(e)),
     }
@@ -199,15 +188,15 @@ async fn list_invitations_handler(
 async fn revoke_invitation_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path((tenant_id, invitation_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), tenant_id, invitation_id).await
+    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), team_id, invitation_id).await
     {
         Ok(()) => (
             axum::http::StatusCode::OK,
@@ -223,16 +212,16 @@ async fn revoke_invitation_handler(
 async fn create_link_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     Json(req): Json<svc::CreateLinkRequest>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::create_invitation_link(&state.pool, &caller.audit_actor(), tenant_id, req).await {
+    match svc::create_invitation_link(&state.pool, &caller.audit_actor(), team_id, req).await {
         Ok(created) => (axum::http::StatusCode::CREATED, Json(created)).into_response(),
         Err(err) => api_err(err),
     }
@@ -241,15 +230,15 @@ async fn create_link_handler(
 async fn list_links_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::list_invitation_links(&state.pool, tenant_id).await {
+    match svc::list_invitation_links(&state.pool, team_id).await {
         Ok(rows) => (axum::http::StatusCode::OK, Json(rows)).into_response(),
         Err(e) => internal(axum::Error::new(e)),
     }
@@ -258,43 +247,21 @@ async fn list_links_handler(
 async fn revoke_link_handler(
     State(state): State<AppState>,
     axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path((tenant_id, link_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, link_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
+        return resp;
     }
     if !caller.is_admin {
-        return crate::team_llm_guard::err_forbidden("tenant admin required");
+        return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::revoke_invitation_link(&state.pool, &caller.audit_actor(), tenant_id, link_id).await
+    match svc::revoke_invitation_link(&state.pool, &caller.audit_actor(), team_id, link_id).await
     {
         Ok(()) => (
             axum::http::StatusCode::OK,
             Json(json!({ "id": link_id, "status": "REVOKED" })),
         )
             .into_response(),
-        Err(err) => api_err(err),
-    }
-}
-
-/// 解散团队（Owner 独占；权限在服务层实时查库判定，admin/member 403）。
-async fn dissolve_handler(
-    State(state): State<AppState>,
-    axum::Extension(caller): axum::Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
-) -> Response {
-    if guard_tenant(&caller, tenant_id).is_err() {
-        return err_not_found("tenant not found");
-    }
-    match svc::dissolve_team(
-        &state.pool,
-        &caller.audit_actor(),
-        caller.principal_id,
-        tenant_id,
-    )
-    .await
-    {
-        Ok(outcome) => (axum::http::StatusCode::OK, Json(outcome)).into_response(),
         Err(err) => api_err(err),
     }
 }

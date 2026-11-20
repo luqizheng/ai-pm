@@ -107,6 +107,26 @@ async fn world(pool: PgPool) -> World {
     )
     .await;
     let tenant_id = Uuid::parse_str(owner["tenant_id"].as_str().unwrap()).unwrap();
+    // P4-ORG Phase 2：first_admin 只落预登记行——先认领建团成为 Team Owner；
+    // admin 角色已取消，第二管理者改由 Owner 任命产生。
+    let owner_token = token("usr-owner", json!([]));
+    let (team_st, team_body) = call(
+        &app,
+        "POST",
+        "/v1/pm/teams",
+        &owner_token,
+        Some(json!({ "name": "LLM Team" })),
+    )
+    .await;
+    assert_eq!(team_st, StatusCode::CREATED, "{team_body}");
+    let owner2 = json_of(
+        app.clone()
+            .oneshot(request("GET", "/v1/pm/me", &owner_token, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let team_id = Uuid::parse_str(owner2["memberships"][0]["team_id"].as_str().unwrap()).unwrap();
 
     let admin = json_of(
         app.clone()
@@ -140,21 +160,31 @@ async fn world(pool: PgPool) -> World {
             &app,
             "PATCH",
             &format!("/v1/pm/principals/{id}"),
-            &token("usr-owner", json!([])),
+            &owner_token,
             Some(json!({ "is_active": true })),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+        // 入 Team 名册（成员名册事实源 = core.team_member）。
+        let (st, body) = call(
+            &app,
+            "POST",
+            &format!("/v1/pm/teams/{team_id}/members"),
+            &owner_token,
+            Some(json!({ "principal_id": id, "role": "member" })),
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK, "{body}");
     }
-    let (status, _) = call(
+    let (status, body) = call(
         &app,
         "PATCH",
-        &format!("/v1/pm/tenants/{tenant_id}/members/{admin_id}/role"),
-        &token("usr-owner", json!([])),
-        Some(json!({ "role": "admin" })),
+        &format!("/v1/pm/teams/{team_id}/members/{admin_id}/role"),
+        &owner_token,
+        Some(json!({ "role": "owner" })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "owner may grant admin");
+    assert_eq!(status, StatusCode::OK, "owner may appoint another owner: {body}");
 
     World {
         app,

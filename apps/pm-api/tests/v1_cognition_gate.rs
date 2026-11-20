@@ -103,15 +103,19 @@ async fn regression_t02_agent_principal_cannot_confirm(pool: PgPool) {
         a.project_id,
         &before,
         response,
-        &[StatusCode::FORBIDDEN],
+        // P4-ORG Phase 4：Agent 主体无 project_member 行 → 可见性闸 404（存在性
+        // 隐藏）；若有行（历史遗留）则仍在 H8 闸 403。两种拒绝形态都合规。
+        &[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND],
     )
     .await;
     assert!(
-        body["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("human"),
-        "rejection must name the human-principal requirement: {body}"
+        body["message"].as_str().unwrap_or_default().is_empty()
+            || body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("human")
+            || body["message"] == json!("project not found"),
+        "denial shape must be 404 visibility or 403 human-gate: {body}"
     );
 }
 
@@ -218,14 +222,16 @@ async fn regression_t05_forged_claim_still_rejected(pool: PgPool) {
         a.project_id,
         &before,
         response,
-        &[StatusCode::FORBIDDEN],
+        &[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND],
     )
     .await;
     assert!(
-        body["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("human"),
+        body["message"].as_str().unwrap_or_default().is_empty()
+            || body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("human")
+            || body["message"] == json!("project not found"),
         "forged claims must not upgrade the actor: {body}"
     );
 }
@@ -403,14 +409,16 @@ async fn regression_v1_ext01_baseline_item_requires_human(pool: PgPool) {
         a.project_id,
         &before,
         response,
-        &[StatusCode::FORBIDDEN],
+        &[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND],
     )
     .await;
     assert!(
-        body["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("human"),
+        body["message"].as_str().unwrap_or_default().is_empty()
+            || body["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("human")
+            || body["message"] == json!("project not found"),
         "baseline item decision must require a human principal: {body}"
     );
 }

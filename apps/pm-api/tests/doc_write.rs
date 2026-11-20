@@ -105,7 +105,7 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     assert_eq!(revisions.0, 1);
     // Acting principal is the project's ai_pm (knowledge maintainer), not the MCP caller.
     let ai_pm: String = sqlx::query_scalar(
-        "SELECT p.id::text FROM core.principal p JOIN core.project_member m ON m.principal_id = p.id \
+        "SELECT p.id::text FROM core.principal p JOIN ai.project_agent_member m ON m.principal_id = p.id \
          WHERE m.project_id = $1 AND p.kind = 'ai_pm' LIMIT 1",
     )
     .bind(boot.project_id)

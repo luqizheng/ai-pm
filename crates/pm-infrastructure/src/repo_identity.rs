@@ -178,9 +178,13 @@ impl IdentityRepo for PgIdentityRepo {
         tenant_id: Uuid,
         principal_id: Uuid,
     ) -> RepoResult<Option<String>> {
+        // Team 面事实源 = core.team_member（P4-ORG Phase 2；tenant_member 只剩
+        // provision 预登记行，不再承载授权）。
         let role: Option<String> = sqlx::query_scalar(
-            "SELECT role FROM core.tenant_member \
-              WHERE tenant_id = $1 AND principal_id = $2",
+            "SELECT tm.role \
+               FROM core.team_member tm \
+               JOIN core.team t ON t.id = tm.team_id \
+              WHERE t.tenant_id = $1 AND tm.principal_id = $2",
         )
         .bind(tenant_id)
         .bind(principal_id)
@@ -191,7 +195,7 @@ impl IdentityRepo for PgIdentityRepo {
 
     async fn any_tenant_role(&self, principal_id: Uuid) -> RepoResult<Option<String>> {
         let role: Option<String> =
-            sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE principal_id = $1 LIMIT 1")
+            sqlx::query_scalar("SELECT role FROM core.team_member WHERE principal_id = $1 LIMIT 1")
                 .bind(principal_id)
                 .fetch_optional(&self.pool)
                 .await?;

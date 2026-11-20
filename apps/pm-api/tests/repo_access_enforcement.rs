@@ -90,8 +90,7 @@ async fn world(pool: &PgPool, code: &str) -> World {
 /// 造一条 Task（关联仓库）+ queued Run，并让仓库进入 `verified`。
 async fn seed_task_and_run(pool: &PgPool, w: &World, code: &str) -> Uuid {
     let developer: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-          WHERE project_id = $1 AND role = 'developer' LIMIT 1",
+        "SELECT principal_id FROM ai.project_agent_member \n          WHERE project_id = $1 AND role_kind = 'developer' LIMIT 1",
     )
     .bind(w.project_id)
     .fetch_one(pool)

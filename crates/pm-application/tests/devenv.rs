@@ -151,16 +151,18 @@ async fn require_project_member_three_states(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn dev_agent_cannot_pass_member_check_as_authorization_subject(pool: PgPool) {
-    // 说明性断言：dev_agent 本身就是 project_member 一行——用它校验「恒真」。
-    // 这正是设计稿禁止把 dev_agent 当授权主体的原因（评审 P0-4 硬约束 1）。
+    // P4-ORG Phase 4：dev_agent 不再是 core.project_member 的一行（agent 职能
+    // 行迁 ai.project_agent_member）——「dev_agent 当授权主体」从设计约束
+    // （评审 P0-4 硬约束 1）变成结构性不可能：真人成员闸直接 NotMember。
     let fx = seed_project(&pool, "DV-AZ2").await;
     let dev_agent = resolve_project_executor(&pool, fx.project_id, ExecutorKind::DevAgent)
         .await
         .unwrap();
-    // dev_agent 是成员（恒真）→ 不能作为「调用人」去校验
-    require_project_member(&pool, dev_agent, SYSTEM_TENANT, fx.project_id)
-        .await
-        .unwrap();
+    assert_eq!(
+        require_project_member(&pool, dev_agent, SYSTEM_TENANT, fx.project_id).await,
+        Err(AuthzError::NotMember),
+        "dev_agent must not pass the human member gate"
+    );
     // 真人才是授权主体
     require_project_member(&pool, fx.human_id, SYSTEM_TENANT, fx.project_id)
         .await
@@ -435,12 +437,24 @@ async fn visibility_member_sees_own_admin_sees_tenant(pool: PgPool) {
         get_device(&pool, &them, mine.device.id).await.unwrap_err(),
         DeviceError::NotFound
     );
-    // 升为 admin → 见全租户
-    sqlx::query("UPDATE core.tenant_member SET role = 'admin' WHERE principal_id = $1")
-        .bind(fx.human_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    // 升为 Team Owner（P4-ORG：devenv 管理面 = Team Owner，事实源 core.team_member）→ 见全租户
+    let team_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.team (tenant_id, name) VALUES ($1, 'DV Team') RETURNING id",
+    )
+    .bind(SYSTEM_TENANT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.team_member (team_id, principal_id, tenant_id, role) \
+         VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(team_id)
+    .bind(fx.human_id)
+    .bind(SYSTEM_TENANT)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert_eq!(list_devices(&pool, &me).await.unwrap().len(), 2);
 }
 

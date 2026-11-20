@@ -13,9 +13,9 @@
 //! - 启停落 `governance.audit_log` 审计行；低频管理动作，不进 outbox（仓库惯例）。
 //!
 //! V2.0-D Capability Registry V1（迁移 0061，Batch E）：承接解析
-//! （[`resolve_role_assignee`]）registry-first——候选取
-//! `ai.ai_executor_capability`（capability 词表 = `ai_role_template.role_key`），
-//! registry 空时回退 legacy 成员角色映射（Phase 3 删）；bootstrap 播种见
+//! （[`resolve_role_assignee`]）**registry-only**——候选 = `ai.ai_executor_capability`
+//! （capability 词表 = `ai_role_template.role_key`）∩ `ai.project_agent_member`
+//! （P4-ORG Phase 4 删 legacy 成员角色映射）；bootstrap 播种见
 //! `bootstrap::ensure_executor_capabilities`。
 
 use chrono::{DateTime, Utc};
@@ -349,35 +349,18 @@ where
 // ai-pm-ai-team-kickoff-adjudication-pack-v1.md` §〇/§三，迁移 0059）
 // ---------------------------------------------------------------------------
 
-/// **Legacy 过渡映射（V2.0-D 起=回退路径）**：`ai.ai_role_template.role_key`
-/// → 既有承接定位（`core.project_member.role` 值；`ai_pm` 为 ai_pm principal
-/// 的成员角色）。
-///
-/// Batch E（0061 Capability Registry V1）起 [`resolve_role_assignee`] 改为
-/// **registry-first**：先查 `ai.ai_executor_capability`；registry 命中 0 候选
-/// 时才回退到本映射 SQL（保留原查询语义，作为 `legacy` CTE 内嵌）。
-/// **Phase 3 归宿**：registry 全量接管后本表与 legacy CTE 一并删除
-/// （batch record 五.1：过渡映射由本批替换，渐进期仅作回退兜底）。
-const ROLE_EXECUTOR_MAP: &[(&str, Option<&str>)] = &[
-    ("developer", Some("developer")),
-    ("architect", Some("architect")),
-    ("tester", Some("tester")),
-    ("project_manager", Some("ai_pm")),
-    ("requirement_analyst", None), // V1 无执行体（P2-13；registry 期由 manual 行承接）
-];
-
 /// 按 Role 版本解析任务的承接 principal（TaskReadyHandler 调度决策的解析步）。
 ///
-/// **Registry-first（V2.0-D V1，0061）**：候选 = `ai.ai_executor_capability`
-/// （tenant_id + capability = role_key + `revoked_at IS NULL`）JOIN
-/// `core.principal`（`kind='dev_agent'` 且 active）JOIN `core.project_member`
-/// （该项目**存在成员行即可，不要求其 role 值匹配**——这正是能力注册表对
-/// 成员角色映射的解耦点）。`requirement_analyst` 因此可解析：有 manual 能力
-/// 行即生效（V1 不解锁播种，播种词表仍限三 dev_agent role_kind）。
+/// **P4-ORG Phase 4（DR-PA-04③ / DR-ORG-08③）**：legacy `ROLE_EXECUTOR_MAP`
+/// 与 `core.project_member.role` 职能定向派发已废除——候选只来自
+/// `ai.ai_executor_capability`（租户级能力）∩ `ai.project_agent_member`
+/// （项目授权行，原 project_member agent 行承载迁移于此）。
 ///
-/// **Legacy 回退**：registry 命中 0 候选时，回退 [`ROLE_EXECUTOR_MAP`] 映射
-/// SQL（原查询，`legacy` CTE；Phase 3 删）。版本链闸门（版本存在 / 本项目 /
-/// enabled）对两条路径统一前置。
+/// **Registry-only**：候选 = `ai.ai_executor_capability`
+/// （tenant_id + capability = role_key + `revoked_at IS NULL`）JOIN
+/// `core.principal`（`kind='dev_agent'` 且 active）JOIN `ai.project_agent_member`
+/// （该项目存在授权行即可——能力与项目授权两层解耦）。
+/// 版本链闸门（版本存在 / 本项目 / enabled）统一前置。
 ///
 /// 选取规则（两条路径一致）：优先「空闲」（无以其为 `delivery.task.assignee_id`
 /// 的活跃 delivery run，status IN ('claimed','running')；`task_run.agent_id`
@@ -386,10 +369,8 @@ const ROLE_EXECUTOR_MAP: &[(&str, Option<&str>)] = &[
 /// `None`（调用方落 `no_executor_available` 等待）。
 ///
 /// 单查询实现（executor 泛型 + 事务内复用，sqlx 的 Executor 是消费式的，两次
-/// fetch 会 move）：registry 与 legacy 两个 CTE + `picked`（registry 空则并
-/// 入 legacy）在**一条语句**内完成判定；[`ROLE_EXECUTOR_MAP`] 在 SQL 文本里
-/// 展开成 `CASE` WHEN 列表（全部编译期常量，无注入面）；无映射 role_key 落
-/// `ELSE NULL`，`pm.role = NULL` 恒不成立，即 legacy 天然无候选。
+/// fetch 会 move）：`role`（版本链闸门）与 `registry`（能力 ∩ 项目授权）两个
+/// CTE 在**一条语句**内完成判定与选取。
 pub async fn resolve_role_assignee<'e, E>(
     executor: E,
     tenant_id: Uuid,
@@ -399,18 +380,10 @@ pub async fn resolve_role_assignee<'e, E>(
 where
     E: sqlx::PgExecutor<'e>,
 {
-    let case_whens: String = ROLE_EXECUTOR_MAP
-        .iter()
-        .filter_map(|(key, mapped)| {
-            mapped.map(|member_role| format!("WHEN '{key}' THEN '{member_role}'"))
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    // 版本不存在、挂到了别的项目、项目行 enabled=false、registry 与 legacy
-    // 均无合格 dev_agent，全部收敛为同一结果 None——调度语义里统一是
-    // 「无合格执行者」，不区分细分原因（审计 payload 里给恢复 hint）。
-    let candidate: Option<Uuid> = sqlx::query_scalar(&format!(
+    // 版本不存在、挂到了别的项目、项目行 enabled=false、无合格 dev_agent，
+    // 全部收敛为同一结果 None——调度语义里统一是「无合格执行者」，不区分
+    // 细分原因（审计 payload 里给恢复 hint）。
+    let candidate: Option<Uuid> = sqlx::query_scalar(
         "WITH role AS ( \
              SELECT pr.project_id, t.role_key \
                FROM ai.ai_role_version v \
@@ -426,35 +399,22 @@ where
                 AND cap.revoked_at IS NULL \
                JOIN core.principal p \
                  ON p.id = cap.principal_id AND p.kind = 'dev_agent' AND p.is_active \
-               JOIN core.project_member pm \
-                 ON pm.project_id = r.project_id AND pm.principal_id = cap.principal_id \
-         ), legacy AS ( \
-             SELECT pm.principal_id \
-               FROM role r \
-               JOIN core.project_member pm \
-                 ON pm.project_id = r.project_id \
-                AND pm.role = CASE r.role_key {case_whens} ELSE NULL END \
-               JOIN core.principal p \
-                 ON p.id = pm.principal_id AND p.kind = 'dev_agent' AND p.is_active \
-         ), picked AS ( \
-             SELECT principal_id FROM registry \
-             UNION ALL \
-             SELECT principal_id FROM legacy \
-              WHERE NOT EXISTS (SELECT 1 FROM registry) \
+               JOIN ai.project_agent_member am \
+                 ON am.project_id = r.project_id AND am.principal_id = cap.principal_id \
          ) \
-         SELECT picked.principal_id \
-           FROM picked \
+         SELECT registry.principal_id \
+           FROM registry \
           ORDER BY EXISTS ( \
                SELECT 1 FROM delivery.task_run tr \
                  JOIN delivery.task tt ON tt.id = tr.task_id \
-                WHERE tt.assignee_id = picked.principal_id \
+                WHERE tt.assignee_id = registry.principal_id \
                   AND tr.project_id = $3 \
                   AND tr.run_kind = 'delivery' \
                   AND tr.status IN ('claimed', 'running') \
            ) ASC, \
-           picked.principal_id ASC \
+           registry.principal_id ASC \
           LIMIT 1"
-    ))
+    )
     .bind(role_version_id)
     .bind(tenant_id)
     .bind(project_id)

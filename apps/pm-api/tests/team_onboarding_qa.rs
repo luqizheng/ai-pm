@@ -1,14 +1,23 @@
 //! Team Onboarding QA 补强套件（`test-case/team-qa-test-cases-v1.md` 的代码级证据）。
 //!
-//! 与 `team_onboarding.rs`（16 例）、`tenant_members.rs`（rv1~rv10/tn4/tn5）互补，
-//! 只覆盖既有用例未触达的面：并发（TDM-011/认领竞争/同邀请竞争）、错误契约
-//! 未覆盖分支、admin/member 权限矩阵补全、解散后残留凭证、跨租户写面、
-//! 被移除成员的残留访问、DB 终态（token 只存哈希、TTL、名额计数）。
+//! **P4-ORG Phase 2 改写登记（2026-11-20）**：Team 面锚切换 `core.team`/team_id，
+//! 全部路径改 `/v1/pm/teams/{team_id}`；admin 角色取消后——B02-12（admin 邀请）
+//! 改写为「member 邀请落 team_member 行 + team_member.activated 审计」、
+//! B02-18（admin 授 admin，原待裁决）改写为「PATCH role 任命第二 Owner +
+//! role_changed 审计 + 第二 Owner 同享管理面」；B02-13/14 的提权面随角色值域
+//! 收敛为 member 单值（B02-14 由待裁决改为常规断言）；B02-19 改写为现状契约
+//! （EXPIRED 二次接受 = invitation_already_accepted）；B04-01 admin 矩阵改写为
+//! Owner 正向矩阵 + owner-transfer 404；成员角色查询改 core.team_member。
+//! 新增覆盖：member 自助退出（leave 成功 + 可再入团）、任命第二 Owner 后原
+//! Owner 可降级、移除/退出级联撤销 project_member、项目 owner 依赖
+//! （PROJECT_OWNER_DEPENDENCY 拦截移除与退出）。
 //!
-//! 用例名前缀 = 用例 ID（`qa_b03_02_*` ↔ TEAM-QA-B03-02）。标 `#[ignore]` 的是
-//! **待产品裁决项**：断言按设计稿口径书写，现状与之不符但尚未裁定为缺陷，
-//! 用 `cargo test -- --ignored` 单独复核。
+//! 与 `team_onboarding.rs`（16 例）、`team_members.rs` 互补，只覆盖既有用例
+//! 未触达的面：并发（TDM-011/认领竞争/同邀请竞争）、错误契约未覆盖分支、
+//! member 权限矩阵、跨租户写面、被移除成员的残留访问、DB 终态（token 只存
+//! 哈希、TTL、名额计数）。
 //!
+//! 用例名前缀 = 用例 ID（`qa_b03_02_*` ↔ TEAM-QA-B03-02）。
 //! harness 与 `team_onboarding.rs` 同款（自签 JWT + `router_with_auth_config`）。
 
 use axum::body::{to_bytes, Body};
@@ -102,8 +111,9 @@ fn uuid_of(v: &Value) -> Uuid {
     Uuid::parse_str(v.as_str().expect("uuid string")).unwrap()
 }
 
-/// 已治理租户（owner=usr-owner），同 `team_onboarding.rs` 口径。
-async fn governed_world(pool: PgPool) -> (Router, PgPool, Uuid, String) {
+/// 已治理租户（owner=usr-owner 经建团认领产生），同 `team_onboarding.rs` 口径。
+/// 返回 tenant_id 与 team_id（= /me memberships[0].team_id）。
+async fn governed_world(pool: PgPool) -> (Router, PgPool, Uuid, Uuid, String) {
     std::env::set_var("AI_PM_SECRET_KEY", "team-onboarding-test-secret");
     let config = AuthConfig {
         first_admin_tenant: Some("1".to_string()),
@@ -111,21 +121,41 @@ async fn governed_world(pool: PgPool) -> (Router, PgPool, Uuid, String) {
     };
     let app = router_with_auth_config(pool.clone(), test_jwks(), config);
     let owner_token = token_for("usr-owner", 1);
+    let _ = me(&app, &owner_token).await; // provision（inactive，无 Team）
+    let (status, team) = call(
+        &app,
+        "POST",
+        "/v1/pm/teams",
+        &owner_token,
+        Some(json!({ "name": "Acme Team" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{team}");
+    let team_id = Uuid::parse_str(team["id"].as_str().unwrap()).unwrap();
     let owner = me(&app, &owner_token).await;
     let tenant_id = uuid_of(&owner["tenant_id"]);
-    (app, pool, tenant_id, owner_token)
+    (app, pool, tenant_id, team_id, owner_token)
 }
 
-/// 以 owner 激活 `sub` 并（可选）设为 admin；返回其 token 与 principal_id。
-async fn activate(
+/// 「加成员并激活」两步（Phase 2）：POST members（owner）→ PATCH principals
+/// 激活（owner）。返回成员 token 与 principal_id。
+async fn add_active_member(
     app: &Router,
-    tenant_id: Uuid,
+    team_id: Uuid,
     owner_token: &str,
     sub: &str,
-    role: &str,
 ) -> (String, Uuid) {
     let token = token_for(sub, 1);
     let id = uuid_of(&me(app, &token).await["principal_id"]);
+    let (status, body) = call(
+        app,
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/members"),
+        owner_token,
+        Some(json!({ "principal_id": id, "role": "member" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "add {sub}: {body}");
     let (status, body) = call(
         app,
         "PATCH",
@@ -135,42 +165,38 @@ async fn activate(
     )
     .await;
     assert_eq!(status, StatusCode::OK, "activate {sub}: {body}");
-    if role != "member" {
-        let (status, body) = call(
-            app,
-            "PATCH",
-            &format!("/v1/pm/tenants/{tenant_id}/members/{id}/role"),
-            owner_token,
-            Some(json!({ "role": role })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK, "set role {sub}: {body}");
-    }
     (token, id)
 }
 
-async fn invite(
-    app: &Router,
-    tenant_id: Uuid,
-    token: &str,
-    email: &str,
-    role: &str,
-) -> (StatusCode, Value) {
+/// 任命 Owner（PATCH members/{pid}/role = owner，多 Owner 任命制）。
+async fn promote_owner(app: &Router, team_id: Uuid, owner_token: &str, principal_id: Uuid) {
+    let (status, body) = call(
+        app,
+        "PATCH",
+        &format!("/v1/pm/teams/{team_id}/members/{principal_id}/role"),
+        owner_token,
+        Some(json!({ "role": "owner" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "promote {principal_id}: {body}");
+}
+
+async fn invite(app: &Router, team_id: Uuid, token: &str, email: &str) -> (StatusCode, Value) {
     call(
         app,
         "POST",
-        &format!("/v1/pm/tenants/{tenant_id}/invitations"),
+        &format!("/v1/pm/teams/{team_id}/invitations"),
         token,
-        Some(json!({ "email": email, "role": role })),
+        Some(json!({ "email": email, "role": "member" })),
     )
     .await
 }
 
-async fn db_role(db: &PgPool, tenant_id: Uuid, principal_id: Uuid) -> Option<String> {
+async fn db_role(db: &PgPool, team_id: Uuid, principal_id: Uuid) -> Option<String> {
     sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+        "SELECT role FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .bind(principal_id)
     .fetch_optional(db)
     .await
@@ -216,7 +242,9 @@ async fn qa_b01_07_concurrent_claim_has_exactly_one_winner(pool: PgPool) {
 
     let tenant_id = uuid_of(&me(&app, &ta).await["tenant_id"]);
     let owners: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'",
+        "SELECT count(*) FROM core.team_member tm \
+           JOIN core.team t ON t.id = tm.team_id \
+          WHERE t.tenant_id = $1 AND tm.role = 'owner'",
     )
     .bind(tenant_id)
     .fetch_one(&db)
@@ -323,7 +351,7 @@ async fn qa_b01_09_create_team_requires_bearer(pool: PgPool) {
 /// TEAM-QA-B02-09：邮箱格式校验。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_09_invalid_email_rejected(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
     for email in [
         "no-at-sign",
         "a@nodot",
@@ -331,7 +359,7 @@ async fn qa_b02_09_invalid_email_rejected(pool: PgPool) {
         "has space@example.com",
         "",
     ] {
-        let (status, body) = invite(&app, tenant_id, &owner, email, "member").await;
+        let (status, body) = invite(&app, team_id, &owner, email).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "email={email:?} {body}");
     }
 }
@@ -339,8 +367,8 @@ async fn qa_b02_09_invalid_email_rejected(pool: PgPool) {
 /// TEAM-QA-B02-10：明文 token 不落库（只存 SHA-256），默认有效期 7 天。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_10_token_hashed_and_default_ttl(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (status, inv) = invite(&app, tenant_id, &owner, "hash@example.com", "member").await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (status, inv) = invite(&app, team_id, &owner, "hash@example.com").await;
     assert_eq!(status, StatusCode::CREATED, "{inv}");
     let token = inv["token"].as_str().unwrap();
     assert_eq!(token.len(), 64, "256-bit hex token");
@@ -367,7 +395,7 @@ async fn qa_b02_10_token_hashed_and_default_ttl(pool: PgPool) {
     let (_, list) = call(
         &app,
         "GET",
-        &format!("/v1/pm/tenants/{tenant_id}/invitations"),
+        &format!("/v1/pm/teams/{team_id}/invitations"),
         &owner,
         None,
     )
@@ -378,7 +406,7 @@ async fn qa_b02_10_token_hashed_and_default_ttl(pool: PgPool) {
 /// TEAM-QA-B02-11：未知 token 的 preview / accept → 404 invitation_not_found。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_11_unknown_token_is_404(pool: PgPool) {
-    let (app, _db, _tenant, _owner) = governed_world(pool).await;
+    let (app, _db, _tenant, _team, _owner) = governed_world(pool).await;
     let t = token_for("usr-stranger", 1);
     let (status, body) = call(
         &app,
@@ -401,11 +429,14 @@ async fn qa_b02_11_unknown_token_is_404(pool: PgPool) {
     assert_eq!(body["message"], json!("invitation_not_found"));
 }
 
-/// TEAM-QA-B02-12：owner 发 admin 邀请 → 接受后库内角色 = admin，邀请单 ACCEPTED。
+/// TEAM-QA-B02-12（Phase 2 改写，原 admin 邀请面随 admin 角色取消）：
+/// owner 邀请 member → 接受后落 core.team_member member 行，邀请单
+/// ACCEPTED + accepted_principal_id，审计 team_member.activated
+/// （target_type="principal"）。
 #[sqlx::test(migrations = "../../migrations")]
-async fn qa_b02_12_owner_invites_admin(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (status, inv) = invite(&app, tenant_id, &owner, "ada@example.com", "admin").await;
+async fn qa_b02_12_owner_invites_member_lands_team_member_row(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (status, inv) = invite(&app, team_id, &owner, "ada@example.com").await;
     assert_eq!(status, StatusCode::CREATED, "{inv}");
     let ada = token_for("usr-ada", 1);
     let (status, body) = call(
@@ -418,26 +449,37 @@ async fn qa_b02_12_owner_invites_admin(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let ada_id = uuid_of(&me(&app, &ada).await["principal_id"]);
-    assert_eq!(
-        db_role(&db, tenant_id, ada_id).await.as_deref(),
-        Some("admin")
-    );
+    assert_eq!(db_role(&db, team_id, ada_id).await.as_deref(), Some("member"));
     let (st, accepted_by): (String, Option<Uuid>) = sqlx::query_as(
-        "SELECT status, accepted_principal_id FROM core.tenant_invitation WHERE email_normalized = 'ada@example.com'",
+        "SELECT status, accepted_principal_id FROM core.tenant_invitation \
+          WHERE email_normalized = 'ada@example.com'",
     )
     .fetch_one(&db)
     .await
     .unwrap();
     assert_eq!(st, "ACCEPTED");
     assert_eq!(accepted_by, Some(ada_id));
+
+    // 审计：接受 = team_member.activated，target = principal 行。
+    let (action, target_type): (String, String) = sqlx::query_as(
+        "SELECT action, target_type FROM governance.tenant_audit_log \
+          WHERE action = 'team_member.activated' AND target_id = $1",
+    )
+    .bind(ada_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(action, "team_member.activated");
+    assert_eq!(target_type, "principal");
 }
 
-/// TEAM-QA-B02-13：已是成员者接受更高角色的邀请 → already_member，**库内角色不变**（不得静默提权）。
+/// TEAM-QA-B02-13（Phase 2 改写：角色值域收敛 member，无「更高角色邀请」面）：
+/// 已是成员者接受新邀请 → already_member，不产生第二行（无重复成员关系）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_13_already_member_accept_does_not_change_role(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, mem_id) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "mem@example.com", "admin").await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, mem_id) = add_active_member(&app, team_id, &owner, "usr-mem").await;
+    let (_, inv) = invite(&app, team_id, &owner, "mem@example.com").await;
     let (status, body) = call(
         &app,
         "POST",
@@ -448,21 +490,27 @@ async fn qa_b02_13_already_member_accept_does_not_change_role(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["outcome"], json!("already_member"));
-    assert_eq!(
-        db_role(&db, tenant_id, mem_id).await.as_deref(),
-        Some("member")
-    );
+    assert_eq!(db_role(&db, team_id, mem_id).await.as_deref(), Some("member"));
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
+    )
+    .bind(team_id)
+    .bind(mem_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(rows, 1, "不重复建成员关系");
 }
 
-/// TEAM-QA-B02-14：响应体 role 应反映调用者实际角色（already_member 分支）。
-/// 待裁决：现状回显的是邀请单角色（admin），与库内实际角色（member）不一致。
+/// TEAM-QA-B02-14（Phase 2 改写为常规断言：角色值域单值 member，邀请单角色
+/// 恒等于库内实际角色，原「回显不一致」待裁决项失效）：already_member 分支
+/// 响应 role = member。
 #[sqlx::test(migrations = "../../migrations")]
-#[ignore = "待裁决 OBS：already_member 响应 role 回显邀请单角色而非实际角色"]
 async fn qa_b02_14_already_member_response_role_reflects_actual_role(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, _) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "mem@example.com", "admin").await;
-    let (_, body) = call(
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, _) = add_active_member(&app, team_id, &owner, "usr-mem").await;
+    let (_, inv) = invite(&app, team_id, &owner, "mem@example.com").await;
+    let (status, body) = call(
         &app,
         "POST",
         "/v1/pm/invitations/accept",
@@ -470,14 +518,15 @@ async fn qa_b02_14_already_member_response_role_reflects_actual_role(pool: PgPoo
         Some(json!({ "token": inv["token"] })),
     )
     .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["role"], json!("member"), "{body}");
 }
 
 /// TEAM-QA-B02-15：团队休眠（is_active=false）时接受邀请 → 403 team_suspended。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_15_suspended_team_rejects_accept(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "sus@example.com", "member").await;
+    let (app, db, tenant_id, _team, owner) = governed_world(pool).await;
+    let (_, inv) = invite(&app, _team, &owner, "sus@example.com").await;
     sqlx::query("UPDATE core.tenant SET is_active = false WHERE id = $1")
         .bind(tenant_id)
         .execute(&db)
@@ -495,11 +544,11 @@ async fn qa_b02_15_suspended_team_rejects_accept(pool: PgPool) {
     assert_eq!(body["message"], json!("team_suspended"));
 }
 
-/// TEAM-QA-B02-16：撤销面——未知 id 404、member 403。
+/// TEAM-QA-B02-16：撤销面——未知 id 404、member 403（Owner 独占）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_16_revoke_guards(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let base = format!("/v1/pm/tenants/{tenant_id}/invitations");
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let base = format!("/v1/pm/teams/{team_id}/invitations");
     let (status, _) = call(
         &app,
         "POST",
@@ -509,9 +558,9 @@ async fn qa_b02_16_revoke_guards(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    let (_, inv) = invite(&app, tenant_id, &owner, "rv@example.com", "member").await;
-    let (mem, _) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let (status, _) = call(
+    let (_, inv) = invite(&app, team_id, &owner, "rv@example.com").await;
+    let (mem, _) = add_active_member(&app, team_id, &owner, "usr-mem").await;
+    let (status, body) = call(
         &app,
         "POST",
         &format!("{base}/{}/revoke", inv["id"].as_str().unwrap()),
@@ -519,14 +568,15 @@ async fn qa_b02_16_revoke_guards(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["message"], json!("team owner required"));
 }
 
 /// TEAM-QA-B02-17：同一张邀请两人并发接受 → 恰好一人 joined，另一人 409。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b02_17_concurrent_accept_same_invitation(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "dup@example.com", "member").await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, inv) = invite(&app, team_id, &owner, "dup@example.com").await;
     let (t1, t2) = (token_for("usr-dup1", 1), token_for("usr-dup2", 1));
     me(&app, &t1).await;
     me(&app, &t2).await;
@@ -555,36 +605,83 @@ async fn qa_b02_17_concurrent_accept_same_invitation(pool: PgPool) {
         "b1={b1} b2={b2}"
     );
     let active: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.tenant_member tm \
+        "SELECT count(*) FROM core.team_member tm \
            JOIN core.principal p ON p.id = tm.principal_id \
            JOIN core.principal_identity pi ON pi.principal_id = p.id \
-          WHERE tm.tenant_id = $1 AND pi.subject IN ('usr-dup1','usr-dup2') AND p.is_active",
+          WHERE tm.team_id = $1 AND pi.subject IN ('usr-dup1','usr-dup2') AND p.is_active",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_one(&db)
     .await
     .unwrap();
     assert_eq!(active, 1, "一张邀请只能激活一人");
 }
 
-/// TEAM-QA-B02-18：admin 不得经邀请授予 admin（设计稿 §6.1 + tenant_members「admin cannot grant admin」）。
-/// 待裁决：现状 admin 可创建 role=admin 邀请（201）。
+/// TEAM-QA-B02-18（Phase 2 改写，原「admin 不得授 admin」随 admin 角色取消）：
+/// Owner 经 PATCH role=owner 任命第二 Owner（role_changed 审计 before/after），
+/// 第二 Owner 同享管理面（可邀请、可撤销）。
 #[sqlx::test(migrations = "../../migrations")]
-#[ignore = "待裁决：admin 经邀请授予 admin 与直接授权口径不一致"]
-async fn qa_b02_18_admin_cannot_invite_admin(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (adm, _) = activate(&app, tenant_id, &owner, "usr-adm", "admin").await;
-    let (status, body) = invite(&app, tenant_id, &adm, "peer@example.com", "admin").await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+async fn qa_b02_18_second_owner_appointment_shares_owner_surface(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (co_token, co_id) = add_active_member(&app, team_id, &owner, "usr-co").await;
+
+    // 任命第二 Owner（member → owner 同端点）。
+    promote_owner(&app, team_id, &owner, co_id).await;
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND role = 'owner'",
+    )
+    .bind(team_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(owners, 2, "任命后应有两位 Owner");
+
+    // 审计：role_changed（before=member / after=owner）。
+    let (before, after): (Value, Value) = sqlx::query_as(
+        "SELECT before_data, after_data FROM governance.tenant_audit_log \
+          WHERE action = 'team_member.role_changed' AND target_principal_id = $1 \
+          ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(co_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(before["role"], json!("member"));
+    assert_eq!(after["role"], json!("owner"));
+
+    // 第二 Owner 同享管理面。
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/teams/{team_id}/invitations"),
+        &co_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, inv) = invite(&app, team_id, &co_token, "peer@example.com").await;
+    assert_eq!(status, StatusCode::CREATED, "{inv}");
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!(
+            "/v1/pm/teams/{team_id}/invitations/{}/revoke",
+            inv["id"].as_str().unwrap()
+        ),
+        &co_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
 }
 
-/// TEAM-QA-B02-19：已持久化为 EXPIRED 的邀请再次接受 → 仍报 invitation_expired。
-/// 待裁决：现状返回 invitation_already_accepted（前端会渲染成「已接受」）。
+/// TEAM-QA-B02-19（Phase 2 改写为现状契约）：EXPIRED 邀请首次接受报
+/// invitation_expired，二次接受命中状态闸（EXPIRED 与 ACCEPTED 同路终结）
+/// → 409 invitation_already_accepted。
 #[sqlx::test(migrations = "../../migrations")]
-#[ignore = "待裁决：EXPIRED 二次接受返回 invitation_already_accepted"]
-async fn qa_b02_19_expired_reaccept_still_reports_expired(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "late@example.com", "member").await;
+async fn qa_b02_19_expired_reaccept_reports_already_accepted(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, inv) = invite(&app, team_id, &owner, "late@example.com").await;
     sqlx::query(
         "UPDATE core.tenant_invitation SET expires_at = now() - interval '1 hour', \
                 created_at = now() - interval '25 hours'",
@@ -594,7 +691,7 @@ async fn qa_b02_19_expired_reaccept_still_reports_expired(pool: PgPool) {
     .unwrap();
     let t = token_for("usr-late", 1);
     let body = json!({ "token": inv["token"] });
-    let (_, first) = call(
+    let (status, first) = call(
         &app,
         "POST",
         "/v1/pm/invitations/accept",
@@ -602,23 +699,20 @@ async fn qa_b02_19_expired_reaccept_still_reports_expired(pool: PgPool) {
         Some(body.clone()),
     )
     .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{first}");
     assert_eq!(first["message"], json!("invitation_expired"));
-    let (_, second) = call(&app, "POST", "/v1/pm/invitations/accept", &t, Some(body)).await;
-    assert_eq!(second["message"], json!("invitation_expired"), "{second}");
+    let (status, second) = call(&app, "POST", "/v1/pm/invitations/accept", &t, Some(body)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{second}");
+    assert_eq!(second["message"], json!("invitation_already_accepted"));
 }
 
 // ═══════════════════════════════════════════════════════════ B03 邀请链接
 
-async fn create_link(
-    app: &Router,
-    tenant_id: Uuid,
-    token: &str,
-    body: Value,
-) -> (StatusCode, Value) {
+async fn create_link(app: &Router, team_id: Uuid, token: &str, body: Value) -> (StatusCode, Value) {
     call(
         app,
         "POST",
-        &format!("/v1/pm/tenants/{tenant_id}/invitation-links"),
+        &format!("/v1/pm/teams/{team_id}/invitation-links"),
         token,
         Some(body),
     )
@@ -628,8 +722,8 @@ async fn create_link(
 /// TEAM-QA-B03-06（TDM-011）：max_uses=3，10 人并发领用 → 恰好 3 joined、7 exhausted，计数 = 3。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_06_concurrent_redeem_never_exceeds_quota(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (status, link) = create_link(&app, tenant_id, &owner, json!({ "max_uses": 3 })).await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (status, link) = create_link(&app, team_id, &owner, json!({ "max_uses": 3 })).await;
     assert_eq!(status, StatusCode::CREATED, "{link}");
     let tokens: Vec<String> = (0..10)
         .map(|i| token_for(&format!("usr-rush-{i}"), 1))
@@ -666,9 +760,9 @@ async fn qa_b03_06_concurrent_redeem_never_exceeds_quota(pool: PgPool) {
     let (used, st, redemptions): (i32, String, i64) = sqlx::query_as(
         "SELECT used_count, status, (SELECT count(*) FROM core.tenant_invitation_link_redemption r \
                                        WHERE r.link_id = l.id) \
-           FROM core.tenant_invitation_link l WHERE tenant_id = $1",
+           FROM core.tenant_invitation_link l WHERE team_id = $1",
     )
-    .bind(tenant_id)
+    .bind(team_id)
     .fetch_one(&db)
     .await
     .unwrap();
@@ -678,14 +772,14 @@ async fn qa_b03_06_concurrent_redeem_never_exceeds_quota(pool: PgPool) {
 /// TEAM-QA-B03-07：链接参数校验（max_uses ≤0、过去的 expires_at）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_07_link_validation(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
     for body in [
         json!({ "max_uses": 0 }),
         json!({ "max_uses": -1 }),
         json!({ "expires_at": "2000-01-01T00:00:00Z" }),
         json!({ "default_role": "owner" }),
     ] {
-        let (status, resp) = create_link(&app, tenant_id, &owner, body.clone()).await;
+        let (status, resp) = create_link(&app, team_id, &owner, body.clone()).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body} → {resp}");
     }
 }
@@ -693,8 +787,8 @@ async fn qa_b03_07_link_validation(pool: PgPool) {
 /// TEAM-QA-B03-08：链接过期惰性翻转 → 409 invitation_expired，库内 EXPIRED。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_08_link_expiry_is_lazy(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({})).await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, link) = create_link(&app, team_id, &owner, json!({})).await;
     sqlx::query(
         "UPDATE core.tenant_invitation_link SET expires_at = now() - interval '1 hour', \
                 created_at = now() - interval '25 hours'",
@@ -722,8 +816,8 @@ async fn qa_b03_08_link_expiry_is_lazy(pool: PgPool) {
 /// TEAM-QA-B03-09：不限次数链接 + preview 余量。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_09_unlimited_link_and_preview(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (_, unlimited) = create_link(&app, tenant_id, &owner, json!({})).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, unlimited) = create_link(&app, team_id, &owner, json!({})).await;
     for i in 0..5 {
         let (status, body) = call(
             &app,
@@ -735,7 +829,7 @@ async fn qa_b03_09_unlimited_link_and_preview(pool: PgPool) {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
-    let (_, capped) = create_link(&app, tenant_id, &owner, json!({ "max_uses": 2 })).await;
+    let (_, capped) = create_link(&app, team_id, &owner, json!({ "max_uses": 2 })).await;
     let viewer = token_for("usr-viewer", 1);
     let preview_uri = format!(
         "/v1/pm/invitation-links/preview?token={}",
@@ -768,11 +862,11 @@ async fn qa_b03_09_unlimited_link_and_preview(pool: PgPool) {
 /// TEAM-QA-B03-10：链接撤销守卫——二次撤销 409 link_not_active、member 403。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_10_link_revoke_guards(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let base = format!("/v1/pm/tenants/{tenant_id}/invitation-links");
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({})).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let base = format!("/v1/pm/teams/{team_id}/invitation-links");
+    let (_, link) = create_link(&app, team_id, &owner, json!({})).await;
     let id = link["id"].as_str().unwrap();
-    let (mem, _) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
+    let (mem, _) = add_active_member(&app, team_id, &owner, "usr-mem").await;
     let (status, _) = call(&app, "POST", &format!("{base}/{id}/revoke"), &mem, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     let (status, _) = call(&app, "POST", &format!("{base}/{id}/revoke"), &owner, None).await;
@@ -785,8 +879,8 @@ async fn qa_b03_10_link_revoke_guards(pool: PgPool) {
 /// TEAM-QA-B03-11：跨租户领用链接 → 403 invitation_tenant_mismatch。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_11_cross_tenant_link_redeem_is_403(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({})).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, link) = create_link(&app, team_id, &owner, json!({})).await;
     let (status, body) = call(
         &app,
         "POST",
@@ -802,9 +896,9 @@ async fn qa_b03_11_cross_tenant_link_redeem_is_403(pool: PgPool) {
 /// TEAM-QA-B03-12：owner 领用自己团队的链接 → already_member，库内仍 owner，名额不消耗。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b03_12_owner_redeeming_link_keeps_owner(pool: PgPool) {
-    let (app, db, tenant_id, owner) = governed_world(pool).await;
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
     let owner_id = uuid_of(&me(&app, &owner).await["principal_id"]);
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({ "max_uses": 1 })).await;
+    let (_, link) = create_link(&app, team_id, &owner, json!({ "max_uses": 1 })).await;
     let (status, body) = call(
         &app,
         "POST",
@@ -816,7 +910,7 @@ async fn qa_b03_12_owner_redeeming_link_keeps_owner(pool: PgPool) {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["outcome"], json!("already_member"));
     assert_eq!(
-        db_role(&db, tenant_id, owner_id).await.as_deref(),
+        db_role(&db, team_id, owner_id).await.as_deref(),
         Some("owner")
     );
     let used: i32 = sqlx::query_scalar("SELECT used_count FROM core.tenant_invitation_link")
@@ -828,19 +922,19 @@ async fn qa_b03_12_owner_redeeming_link_keeps_owner(pool: PgPool) {
 
 // ═══════════════════════════════════════════════════════════ B04 权限矩阵
 
-/// TEAM-QA-B04-01：admin 可管理团队面（档案/邀请/链接），不可解散、不可转让。
+/// TEAM-QA-B04-01（Phase 2 改写，原 admin 矩阵随 admin 角色取消）：Team Owner
+/// 管理面全绿（档案/邀请/链接/名册/详情）；owner-transfer 路由已删除 → 404。
 #[sqlx::test(migrations = "../../migrations")]
-async fn qa_b04_01_admin_matrix(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (adm, _) = activate(&app, tenant_id, &owner, "usr-adm", "admin").await;
-    let (_, mem_id) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let t = format!("/v1/pm/tenants/{tenant_id}");
+async fn qa_b04_01_owner_management_surface(pool: PgPool) {
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, mem_id) = add_active_member(&app, team_id, &owner, "usr-mem").await;
+    let t = format!("/v1/pm/teams/{team_id}");
 
     let allowed: Vec<(&str, String, Option<Value>, StatusCode)> = vec![
         (
             "PATCH",
             t.clone(),
-            Some(json!({ "description": "by admin" })),
+            Some(json!({ "description": "by owner" })),
             StatusCode::OK,
         ),
         ("GET", format!("{t}/invitations"), None, StatusCode::OK),
@@ -861,29 +955,27 @@ async fn qa_b04_01_admin_matrix(pool: PgPool) {
         ("GET", format!("{t}/members/{mem_id}"), None, StatusCode::OK),
     ];
     for (m, uri, body, expected) in allowed {
-        let (status, resp) = call(&app, m, &uri, &adm, body).await;
-        assert_eq!(status, expected, "admin {m} {uri}: {resp}");
+        let (status, resp) = call(&app, m, &uri, &owner, body).await;
+        assert_eq!(status, expected, "owner {m} {uri}: {resp}");
     }
-    let (status, _) = call(&app, "POST", &format!("{t}/dissolve"), &adm, None).await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "admin 不可解散");
     let (status, _) = call(
         &app,
         "POST",
         &format!("{t}/owner-transfer"),
-        &adm,
+        &owner,
         Some(json!({ "new_owner_principal_id": mem_id })),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "admin 不可转让 owner");
+    assert_eq!(status, StatusCode::NOT_FOUND, "owner-transfer 已取消");
 }
 
 /// TEAM-QA-B04-02：member 只读——名册/档案可读，其余管理面一律 403。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b04_02_member_matrix(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, _) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let (_, other_id) = activate(&app, tenant_id, &owner, "usr-other", "member").await;
-    let t = format!("/v1/pm/tenants/{tenant_id}");
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, _) = add_active_member(&app, team_id, &owner, "usr-mem").await;
+    let (_, other_id) = add_active_member(&app, team_id, &owner, "usr-other").await;
+    let t = format!("/v1/pm/teams/{team_id}");
 
     for uri in [t.clone(), format!("{t}/members")] {
         let (status, _) = call(&app, "GET", &uri, &mem, None).await;
@@ -891,13 +983,19 @@ async fn qa_b04_02_member_matrix(pool: PgPool) {
     }
     let denied: Vec<(&str, String, Option<Value>)> = vec![
         ("GET", format!("{t}/members/{other_id}"), None),
+        ("GET", format!("{t}/invitations"), None),
+        (
+            "POST",
+            format!("{t}/invitations"),
+            Some(json!({ "email": "n@example.com", "role": "member" })),
+        ),
         ("GET", format!("{t}/invitation-links"), None),
         ("POST", format!("{t}/invitation-links"), Some(json!({}))),
         ("DELETE", format!("{t}/members/{other_id}"), None),
         (
             "PATCH",
             format!("{t}/members/{other_id}/role"),
-            Some(json!({ "role": "admin" })),
+            Some(json!({ "role": "owner" })),
         ),
         (
             "POST",
@@ -909,18 +1007,29 @@ async fn qa_b04_02_member_matrix(pool: PgPool) {
         let (status, resp) = call(&app, m, &uri, &mem, body).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "member {m} {uri}: {resp}");
     }
+    // 角色值域校验先于权限闸：member PATCH role="admin" → 400。
+    let (status, body) = call(
+        &app,
+        "PATCH",
+        &format!("{t}/members/{other_id}/role"),
+        &mem,
+        Some(json!({ "role": "admin" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["message"], json!("team role must be owner or member"));
 }
 
 /// TEAM-QA-B04-03：未激活主体只能走自助路径；团队面 403。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b04_03_inactive_principal_limited_to_self_service(pool: PgPool) {
-    let (app, _db, tenant_id, _owner) = governed_world(pool).await;
+    let (app, _db, _tenant, team_id, _owner) = governed_world(pool).await;
     let idle = token_for("usr-idle", 1);
     let m = me(&app, &idle).await;
     assert_eq!(m["is_active"], json!(false));
     for uri in [
-        format!("/v1/pm/tenants/{tenant_id}"),
-        format!("/v1/pm/tenants/{tenant_id}/members"),
+        format!("/v1/pm/teams/{team_id}"),
+        format!("/v1/pm/teams/{team_id}/members"),
     ] {
         let (status, body) = call(&app, "GET", &uri, &idle, None).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{uri}: {body}");
@@ -929,31 +1038,75 @@ async fn qa_b04_03_inactive_principal_limited_to_self_service(pool: PgPool) {
 
 // ═══════════════════════════════════════════════════════════ B05 名册与成员
 
-/// TEAM-QA-B05-01：唯一 owner 不能把自己移出团队（须先转让）。
+/// TEAM-QA-B05-01：唯一 owner 不可被移除/降级/退出（OWNER_LAST 三闸），
+/// 自我任命 → ALREADY_OWNER。
 #[sqlx::test(migrations = "../../migrations")]
-async fn qa_b05_01_sole_owner_cannot_remove_self(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
+async fn qa_b05_01_sole_owner_cannot_be_removed_demoted_or_leave(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
     let owner_id = uuid_of(&me(&app, &owner).await["principal_id"]);
+    let mbase = format!("/v1/pm/teams/{team_id}/members/{owner_id}");
+
+    let (status, body) = call(&app, "DELETE", &mbase, &owner, None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("OWNER_LAST"));
+    assert_eq!(body["message"], json!("the last owner cannot be removed"));
+
     let (status, body) = call(
         &app,
-        "DELETE",
-        &format!("/v1/pm/tenants/{tenant_id}/members/{owner_id}"),
+        "PATCH",
+        &format!("{mbase}/role"),
+        &owner,
+        Some(json!({ "role": "member" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("OWNER_LAST"));
+    assert_eq!(body["message"], json!("the last owner cannot be demoted"));
+
+    // 自助退出同样被 OWNER_LAST 拦截。
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/leave"),
         &owner,
         None,
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("OWNER_LAST"));
+    assert_eq!(body["message"], json!("the last owner cannot leave"));
+
+    // 给自己升 owner → 409 ALREADY_OWNER（已是 owner，无意义）。
+    let (status, body) = call(
+        &app,
+        "PATCH",
+        &format!("{mbase}/role"),
+        &owner,
+        Some(json!({ "role": "owner" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("ALREADY_OWNER"));
+
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND role = 'owner'",
+    )
+    .bind(team_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(owners, 1, "库内必须仍有 owner");
 }
 
 /// TEAM-QA-B05-02：被移除的成员必须失去团队可见性（设计稿 §6.3 Verify Active Membership）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b05_02_removed_member_loses_team_visibility(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, mem_id) = activate(&app, tenant_id, &owner, "usr-gone", "member").await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, mem_id) = add_active_member(&app, team_id, &owner, "usr-gone").await;
     let (status, _) = call(
         &app,
         "DELETE",
-        &format!("/v1/pm/tenants/{tenant_id}/members/{mem_id}"),
+        &format!("/v1/pm/teams/{team_id}/members/{mem_id}"),
         &owner,
         None,
     )
@@ -963,26 +1116,24 @@ async fn qa_b05_02_removed_member_loses_team_visibility(pool: PgPool) {
     let (status, body) = call(
         &app,
         "GET",
-        &format!("/v1/pm/tenants/{tenant_id}/members"),
+        &format!("/v1/pm/teams/{team_id}/members"),
         &mem,
         None,
     )
     .await;
-    assert!(
-        status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND,
-        "被移除者仍可读名册：{status} {body}"
-    );
+    assert_eq!(status, StatusCode::FORBIDDEN, "被移除者仍可读名册：{status} {body}");
+    assert_eq!(body["message"], json!("not an active member"));
 }
 
 /// TEAM-QA-B05-03：被移除成员的 /me 必须自洽——无 membership 时应回到 onboarding 门。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b05_03_removed_member_me_is_consistent(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, mem_id) = activate(&app, tenant_id, &owner, "usr-gone", "member").await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, mem_id) = add_active_member(&app, team_id, &owner, "usr-gone").await;
     call(
         &app,
         "DELETE",
-        &format!("/v1/pm/tenants/{tenant_id}/members/{mem_id}"),
+        &format!("/v1/pm/teams/{team_id}/members/{mem_id}"),
         &owner,
         None,
     )
@@ -996,107 +1147,221 @@ async fn qa_b05_03_removed_member_me_is_consistent(pool: PgPool) {
     );
 }
 
-// ═══════════════════════════════════════════════════════════ B06 解散与重建
-
-/// TEAM-QA-B06-01：解散后旧邀请/链接 token 全部失效（404），前成员回到 onboarding 门。
+/// TEAM-QA-B05-04（Phase 2 新增）：member 自助退出 → 200 left=true，回到
+/// onboarding 门，审计 team_member.left；之后可被 owner 再次添加。
 #[sqlx::test(migrations = "../../migrations")]
-async fn qa_b06_01_dissolve_kills_outstanding_tokens(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, _) = activate(&app, tenant_id, &owner, "usr-mem", "member").await;
-    let (_, inv) = invite(&app, tenant_id, &owner, "pending@example.com", "member").await;
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({})).await;
+async fn qa_b05_04_member_leave_succeeds_and_can_be_readded(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, mem_id) = add_active_member(&app, team_id, &owner, "usr-leaver").await;
 
     let (status, body) = call(
         &app,
         "POST",
-        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
-        &owner,
+        &format!("/v1/pm/teams/{team_id}/leave"),
+        &mem,
         None,
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["members_removed"], json!(2), "{body}");
-
-    let newcomer = token_for("usr-after", 1);
-    let (status, _) = call(
-        &app,
-        "POST",
-        "/v1/pm/invitations/accept",
-        &newcomer,
-        Some(json!({ "token": inv["token"] })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    let (status, _) = call(
-        &app,
-        "POST",
-        "/v1/pm/invitation-links/accept",
-        &newcomer,
-        Some(json!({ "token": link["token"] })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["left"], json!(true));
 
     let m = me(&app, &mem).await;
-    assert_eq!(m["onboarding_required"], json!(true), "{m}");
-    assert_eq!(m["team"], Value::Null);
-}
+    assert_eq!(m["memberships"], json!([]), "{m}");
+    assert_eq!(m["onboarding_required"], json!(true));
+    assert_eq!(m["team_role"], json!("member"));
 
-/// TEAM-QA-B06-02：解散释放 slug——重建可复用**同一** slug。
-#[sqlx::test(migrations = "../../migrations")]
-async fn qa_b06_02_reclaim_reuses_same_slug(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
+    )
+    .bind(team_id)
+    .bind(mem_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(rows, 0, "退出即删 team_member 行");
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.tenant_audit_log \
+          WHERE action = 'team_member.left' AND target_principal_id = $1",
+    )
+    .bind(mem_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1, "退出落 team_member.left 审计");
+
+    // owner 可再次添加（自助路径重新入团）。
     let (status, _) = call(
         &app,
-        "PATCH",
-        &format!("/v1/pm/tenants/{tenant_id}"),
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/members"),
         &owner,
-        Some(json!({ "slug": "phoenix" })),
+        Some(json!({ "principal_id": mem_id, "role": "member" })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    call(
+}
+
+/// TEAM-QA-B05-05（Phase 2 新增，owner-transfer 的多 Owner 任命制替代）：
+/// 任命第二 Owner 后，原 Owner 可被降级为 member；降权即时生效（旧 JWT 下一次
+/// 请求即失管理面），第二 Owner 保持完整管理面。
+#[sqlx::test(migrations = "../../migrations")]
+async fn qa_b05_05_original_owner_demotable_after_second_owner_appointed(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let owner_id = uuid_of(&me(&app, &owner).await["principal_id"]);
+    let (co_token, co_id) = add_active_member(&app, team_id, &owner, "usr-co").await;
+
+    // 任命第二 Owner。
+    promote_owner(&app, team_id, &owner, co_id).await;
+
+    // 原 Owner 自降为 member（另一位 Owner 在场）→ 200。
+    let (status, body) = call(
         &app,
-        "POST",
-        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        "PATCH",
+        &format!("/v1/pm/teams/{team_id}/members/{owner_id}/role"),
+        &owner,
+        Some(json!({ "role": "member" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND role = 'owner'",
+    )
+    .bind(team_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(owners, 1, "降级后剩一位 Owner");
+
+    // 撤权即时生效：原 Owner 旧 JWT 下一次请求即失管理面。
+    let now = me(&app, &owner).await;
+    assert_eq!(now["is_admin"], json!(false));
+    assert_eq!(now["team_role"], json!("member"));
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/teams/{team_id}/invitations"),
         &owner,
         None,
     )
     .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // 第二 Owner 保持完整管理面。
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/teams/{team_id}/invitations"),
+        &co_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+/// TEAM-QA-B05-06（Phase 2 新增）：移除成员级联撤销其本租户 project_member 行
+/// （审计 after_data 并入 project_memberships_revoked 计数）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn qa_b05_06_remove_member_cascades_project_memberships(pool: PgPool) {
+    let (app, db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, mem_id) = add_active_member(&app, team_id, &owner, "usr-cascade").await;
+
+    // 项目经 bootstrap 建成（T-022：调用者自动占 owner 槽）。
+    let (status, project) = call(
+        &app,
+        "POST",
+        "/v1/pm/projects",
+        &owner,
+        Some(json!({ "code": "CASCADE", "name": "Cascade" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{project}");
+    let pid = Uuid::parse_str(project["id"].as_str().unwrap()).unwrap();
     let (status, body) = call(
         &app,
         "POST",
-        "/v1/pm/teams",
+        &format!("/v1/pm/projects/{pid}/members"),
         &owner,
-        Some(json!({ "name": "Phoenix", "slug": "phoenix" })),
+        Some(json!({ "principal_id": mem_id })),
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "{body}");
-    assert_eq!(me(&app, &owner).await["tenant_role"], json!("owner"));
-}
+    assert_eq!(status, StatusCode::OK, "{body}");
 
-/// TEAM-QA-B06-03：解散其他租户 → 404（不泄露存在性）。
-#[sqlx::test(migrations = "../../migrations")]
-async fn qa_b06_03_dissolve_foreign_tenant_is_404(pool: PgPool) {
-    let (app, _db, tenant_id, _owner) = governed_world(pool).await;
-    let foreign = token_for("usr-foreign", 2);
-    call(
-        &app,
-        "POST",
-        "/v1/pm/teams",
-        &foreign,
-        Some(json!({ "name": "Foreign" })),
-    )
-    .await;
     let (status, _) = call(
         &app,
-        "POST",
-        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
-        &foreign,
+        "DELETE",
+        &format!("/v1/pm/teams/{team_id}/members/{mem_id}"),
+        &owner,
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(status, StatusCode::OK);
+
+    let pms: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.project_member \
+          WHERE tenant_id = (SELECT tenant_id FROM core.team WHERE id = $1) \
+            AND principal_id = $2",
+    )
+    .bind(team_id)
+    .bind(mem_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(pms, 0, "真人项目成员关系必须级联撤销");
+
+    let after: Value = sqlx::query_scalar(
+        "SELECT after_data FROM governance.tenant_audit_log \
+          WHERE action = 'team_member.removed' AND target_principal_id = $1",
+    )
+    .bind(mem_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(after["project_memberships_revoked"], json!(1), "{after}");
+}
+
+/// TEAM-QA-B05-07（Phase 2 新增）：成员是某项目 owner 时，移除/退出被
+/// PROJECT_OWNER_DEPENDENCY 拦截（须先转移项目所有权）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn qa_b05_07_project_owner_cannot_be_removed_or_leave(pool: PgPool) {
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let owner_id = uuid_of(&me(&app, &owner).await["principal_id"]);
+    let (status, project) = call(
+        &app,
+        "POST",
+        "/v1/pm/projects",
+        &owner,
+        Some(json!({ "code": "OWNED", "name": "Owned" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{project}");
+    let _pid = project["id"].as_str().unwrap().to_string();
+
+    // 任命第二 Owner，避免 OWNER_LAST 先拦。
+    let (_, co_id) = add_active_member(&app, team_id, &owner, "usr-co").await;
+    promote_owner(&app, team_id, &owner, co_id).await;
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/v1/pm/teams/{team_id}/members/{owner_id}"),
+        &owner,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("PROJECT_OWNER_DEPENDENCY"));
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/leave"),
+        &owner,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], json!("PROJECT_OWNER_DEPENDENCY"));
 }
 
 // ═══════════════════════════════════════════════════════════ B07 跨租户
@@ -1104,9 +1369,9 @@ async fn qa_b06_03_dissolve_foreign_tenant_is_404(pool: PgPool) {
 /// TEAM-QA-B07-01：跨租户读写团队面一律 404，且对方数据不变。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b07_01_cross_tenant_team_surface_is_404(pool: PgPool) {
-    let (app, db, tenant_id, _owner) = governed_world(pool).await;
+    let (app, db, tenant_id, team_id, _owner) = governed_world(pool).await;
     let foreign = token_for("usr-foreign", 2);
-    call(
+    let (status, _) = call(
         &app,
         "POST",
         "/v1/pm/teams",
@@ -1114,24 +1379,31 @@ async fn qa_b07_01_cross_tenant_team_surface_is_404(pool: PgPool) {
         Some(json!({ "name": "Foreign" })),
     )
     .await;
-    let t = format!("/v1/pm/tenants/{tenant_id}");
+    assert_eq!(status, StatusCode::CREATED);
+    let t = format!("/v1/pm/teams/{team_id}");
     let probes: Vec<(&str, String, Option<Value>)> = vec![
         ("GET", t.clone(), None),
         ("PATCH", t.clone(), Some(json!({ "name": "Pwned" }))),
         ("GET", format!("{t}/members"), None),
         (
             "POST",
+            format!("{t}/members"),
+            Some(json!({ "principal_id": Uuid::new_v4(), "role": "member" })),
+        ),
+        (
+            "POST",
             format!("{t}/invitations"),
-            Some(json!({ "email": "x@example.com", "role": "admin" })),
+            Some(json!({ "email": "x@example.com", "role": "member" })),
         ),
         ("POST", format!("{t}/invitation-links"), Some(json!({}))),
+        ("POST", format!("{t}/leave"), None),
     ];
     for (m, uri, body) in probes {
         let (status, resp) = call(&app, m, &uri, &foreign, body).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{m} {uri}: {resp}");
     }
-    let name: String = sqlx::query_scalar("SELECT display_name FROM core.tenant WHERE id = $1")
-        .bind(tenant_id)
+    let name: String = sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
+        .bind(team_id)
         .fetch_one(&db)
         .await
         .unwrap();
@@ -1147,11 +1419,12 @@ async fn qa_b07_01_cross_tenant_team_surface_is_404(pool: PgPool) {
 
 // ═══════════════════════════════════════════════════════════ B08 /me
 
-/// TEAM-QA-B08-01：/me 契约 shape（team/onboarding_required/memberships[]）随入团跃迁。
+/// TEAM-QA-B08-01：/me 契约 shape（team/onboarding_required/memberships[]）随入团跃迁；
+/// team.id 与 memberships[].team_id = core.team.id（不再是 tenant_id）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b08_01_me_contract_after_joining_by_link(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (_, link) = create_link(&app, tenant_id, &owner, json!({})).await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (_, link) = create_link(&app, team_id, &owner, json!({})).await;
     let t = token_for("usr-joiner", 1);
     let before = me(&app, &t).await;
     assert_eq!(before["onboarding_required"], json!(true));
@@ -1165,10 +1438,10 @@ async fn qa_b08_01_me_contract_after_joining_by_link(pool: PgPool) {
     .await;
     let after = me(&app, &t).await;
     assert_eq!(after["onboarding_required"], json!(false), "{after}");
-    assert_eq!(after["team"]["id"], json!(tenant_id.to_string()));
+    assert_eq!(after["team"]["id"], json!(team_id.to_string()));
     let ms = after["memberships"].as_array().unwrap();
     assert_eq!(ms.len(), 1);
-    assert_eq!(ms[0]["team_id"], json!(tenant_id.to_string()));
+    assert_eq!(ms[0]["team_id"], json!(team_id.to_string()));
     assert_eq!(ms[0]["role"], json!("member"));
     assert_eq!(ms[0]["status"], json!("active"));
 }
@@ -1176,8 +1449,8 @@ async fn qa_b08_01_me_contract_after_joining_by_link(pool: PgPool) {
 /// TEAM-QA-B08-02：被停用（is_active=false）的成员回到 onboarding 门，管理面失效。
 #[sqlx::test(migrations = "../../migrations")]
 async fn qa_b08_02_deactivated_member_returns_to_onboarding(pool: PgPool) {
-    let (app, _db, tenant_id, owner) = governed_world(pool).await;
-    let (mem, mem_id) = activate(&app, tenant_id, &owner, "usr-paused", "member").await;
+    let (app, _db, _tenant, team_id, owner) = governed_world(pool).await;
+    let (mem, mem_id) = add_active_member(&app, team_id, &owner, "usr-paused").await;
     let (status, _) = call(
         &app,
         "PATCH",
@@ -1193,7 +1466,7 @@ async fn qa_b08_02_deactivated_member_returns_to_onboarding(pool: PgPool) {
     let (status, _) = call(
         &app,
         "GET",
-        &format!("/v1/pm/tenants/{tenant_id}/members"),
+        &format!("/v1/pm/teams/{team_id}/members"),
         &mem,
         None,
     )
