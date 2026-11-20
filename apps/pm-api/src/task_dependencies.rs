@@ -33,6 +33,10 @@ impl From<DependencyError> for ApiError {
             DependencyError::Duplicate => ApiError::Conflict("DUPLICATE_DEPENDENCY"),
             DependencyError::CrossProject => ApiError::Conflict("CROSS_PROJECT_DEPENDENCY"),
             DependencyError::Cycle => ApiError::Conflict("DEPENDENCY_CYCLE"),
+            // PA07-IMP-003：条件/交付物引用非法是调用方输入错误（400）。
+            DependencyError::InvalidCondition(message) => {
+                ApiError::Text(StatusCode::BAD_REQUEST, message)
+            }
             DependencyError::Db(err) => ApiError::Internal(err),
         }
     }
@@ -41,6 +45,12 @@ impl From<DependencyError> for ApiError {
 #[derive(Debug, Deserialize)]
 pub(crate) struct AddDependencyBody {
     pub depends_on_task_id: Uuid,
+    /// PA07-IMP-003（审查75）：满足条件，缺省 completed；三值封闭枚举。
+    #[serde(default)]
+    pub required_condition: Option<String>,
+    /// deliverable_approved 必填：{id} 或 {path}。
+    #[serde(default)]
+    pub required_deliverable_ref: Option<serde_json::Value>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -94,19 +104,49 @@ async fn add_handler(
 ) -> ApiResult<Response> {
     require_task_project(&state, task_id, &principal).await?;
     let actor = principal.audit_actor();
-    let graph =
-        task_dependency::add_dependency(&state.pool, task_id, body.depends_on_task_id, &actor)
-            .await?;
+    let graph = task_dependency::add_dependency_with(
+        &state.pool,
+        task_id,
+        body.depends_on_task_id,
+        task_dependency::AddDependencyOptions {
+            required_condition: body.required_condition,
+            required_deliverable_ref: body.required_deliverable_ref,
+        },
+        &actor,
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(graph)).into_response())
 }
 
+/// 删边（审查82）：`?reason=` 必填——解除依赖必须记录原因，不是临时忽略门禁。
 async fn remove_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Path((task_id, depends_on_task_id)): Path<(Uuid, Uuid)>,
+    axum::extract::Query(params): axum::extract::Query<RemoveDependencyQuery>,
 ) -> ApiResult<Response> {
     require_task_project(&state, task_id, &principal).await?;
+    let reason = params
+        .reason
+        .map(|r| r.trim().to_string())
+        .filter(|r| !r.is_empty())
+        .ok_or(ApiError::Text(
+            StatusCode::BAD_REQUEST,
+            "reason query parameter is required to remove a dependency".to_string(),
+        ))?;
     let actor = principal.audit_actor();
-    task_dependency::remove_dependency(&state.pool, task_id, depends_on_task_id, &actor).await?;
+    task_dependency::remove_dependency_with_reason(
+        &state.pool,
+        task_id,
+        depends_on_task_id,
+        &reason,
+        &actor,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RemoveDependencyQuery {
+    reason: Option<String>,
 }

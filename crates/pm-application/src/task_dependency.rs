@@ -23,17 +23,20 @@ use crate::actor::AuditActor;
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts, Tx};
 use crate::outbox::{event_is_enabled, OutboxAppend, OutboxEvent, PgOutboxAppend};
 
-/// D5：前置「已满足」的终态集合。
+/// PA07-IMP-003（审查75）：依赖边满足条件的封闭三值。
 ///
-/// `failed` 不在其中——失败的上游需要重试或被取消/取代，否则下游保持阻塞，
-/// 不能因为一次临时失败就放行下游。
-pub const SATISFIED_STATUSES: [&str; 3] = ["completed", "cancelled", "superseded"];
-
-/// `SQL IN (...)` 片段，供判定与解锁共用（集合只能有一处定义）。
-pub const SATISFIED_STATUSES_SQL: &str = "'completed', 'cancelled', 'superseded'";
+/// 语义变更说明：原 D5「终态集合 = completed/cancelled/superseded 即满足」已被
+/// PA-07 §9.5 取代——cancelled/superseded 前置**不**满足任何条件，后继保持阻塞
+/// 等待 AI-PM 恢复或调整依赖；满足判定改为按边条件逐条求值
+/// （[`dependencies_satisfied`]）。
+pub const DEPENDENCY_CONDITIONS: [&str; 3] =
+    ["completed", "accepted", "deliverable_approved"];
 
 /// 一次解锁迁移允许的下游状态：只有 `blocked` 需要被解锁；`ready` 及之后的状态
 /// 已有自己的事件与 Run，重复投递只会制造第二个语义键（设计稿 §5.3）。
+///
+/// cancelled/superseded 仍在触发集合：终态变化后重新求值是「重评估」不是「放行」
+/// ——条件谓词不会因前置取消而满足，重跑只会得到更阻塞的正确结论。
 pub fn unlocks_downstream(status: TaskStatus) -> bool {
     matches!(
         status,
@@ -47,6 +50,10 @@ pub struct DependencyEdge {
     pub id: Uuid,
     pub title: String,
     pub status: String,
+    /// PA07-IMP-003：该边的满足条件（读面透出，审查75）。
+    pub required_condition: String,
+    /// deliverable_approved 边的交付物引用（其余条件为 null）。
+    pub required_deliverable_ref: Option<serde_json::Value>,
 }
 
 /// `GET /v1/pm/tasks/{task_id}/dependencies` 的响应体。
@@ -73,6 +80,9 @@ pub enum DependencyError {
     CrossProject,
     /// 新上游沿现有边能回到下游。
     Cycle,
+    /// PA07-IMP-003：条件非法（不在三值枚举、deliverable_approved 缺引用、
+    /// 引用缺 id/path 键）。
+    InvalidCondition(String),
     Db(sqlx::Error),
 }
 
@@ -108,19 +118,40 @@ pub(crate) async fn acquire_project_graph_lock(
     Ok(())
 }
 
-/// 依赖满足的唯一判定（D5）：全部前置状态 ∈ [`SATISFIED_STATUSES`]。
+/// 依赖满足的唯一判定（PA07-IMP-003，审查75/81）：按边条件逐条求值，全部
+/// 满足才放行。cancelled/superseded 前置不满足任何条件（PA-07 §9.5）。
+///
+/// - `completed`：前置 status = completed；
+/// - `accepted`：前置 completed 且存在获批审批行（governance.review_approval
+///   status='approved'，人工批准是验收事实源）；
+/// - `deliverable_approved`：accepted 且引用的交付物（id/path）包含于前置
+///   **当前 Revision 冻结**的 execution_contract.deliverables——不隐式跟随
+///   最新版本（审查81）。
 pub(crate) async fn dependencies_satisfied(
     tx: &mut Tx,
     project_id: Uuid,
     task_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(
         "SELECT NOT EXISTS ( \
              SELECT 1 FROM delivery.task_dependency d \
                JOIN delivery.task u ON u.project_id = d.project_id AND u.id = d.depends_on_task_id \
               WHERE d.project_id = $1 AND d.task_id = $2 \
-                AND u.status NOT IN ({SATISFIED_STATUSES_SQL}))",
-    ))
+                AND NOT ( \
+                     (d.required_condition = 'completed' AND u.status = 'completed') \
+                  OR (d.required_condition = 'accepted' \
+                      AND u.status = 'completed' \
+                      AND EXISTS (SELECT 1 FROM governance.review_approval ra \
+                                   WHERE ra.task_id = u.id AND ra.status = 'approved')) \
+                  OR (d.required_condition = 'deliverable_approved' \
+                      AND u.status = 'completed' \
+                      AND EXISTS (SELECT 1 FROM governance.review_approval ra \
+                                   WHERE ra.task_id = u.id AND ra.status = 'approved') \
+                      AND EXISTS (SELECT 1 FROM delivery.task_revision tr \
+                                   WHERE tr.id = u.current_task_revision_id \
+                                     AND (tr.execution_contract->'deliverables') \
+                                         @> jsonb_build_array(d.required_deliverable_ref)))))",
+    )
     .bind(project_id)
     .bind(task_id)
     .fetch_one(&mut **tx)
@@ -169,8 +200,9 @@ pub async fn list_dependencies(
 
     // 边表行与任务同租户（tenant_id NOT NULL + 组合外键，I1/I5）；边查询同样
     // 按 tenant 锚定，保证返回的相邻任务都属于本租户。
+    // PA07-IMP-003：读面透出边条件与交付物引用（审查75/81）。
     let upstream = sqlx::query(
-        "SELECT t.id, t.title, t.status \
+        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.depends_on_task_id \
           WHERE d.task_id = $1 AND d.tenant_id = $2 \
@@ -181,7 +213,7 @@ pub async fn list_dependencies(
     .fetch_all(pool)
     .await?;
     let downstream = sqlx::query(
-        "SELECT t.id, t.title, t.status \
+        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.task_id \
           WHERE d.depends_on_task_id = $1 AND d.tenant_id = $2 \
@@ -204,7 +236,48 @@ fn edge_of(row: &sqlx::postgres::PgRow) -> DependencyEdge {
         id: row.get("id"),
         title: row.get("title"),
         status: row.get("status"),
+        required_condition: row.get("required_condition"),
+        required_deliverable_ref: row.get("required_deliverable_ref"),
     }
+}
+
+/// 建边选项（PA07-IMP-003）：`None` 条件 = 默认 `completed`（与既有行为一致）。
+#[derive(Debug, Default)]
+pub struct AddDependencyOptions {
+    pub required_condition: Option<String>,
+    pub required_deliverable_ref: Option<serde_json::Value>,
+}
+
+fn validate_condition(options: &AddDependencyOptions) -> Result<(String, Option<serde_json::Value>), DependencyError> {
+    let condition = options
+        .required_condition
+        .clone()
+        .unwrap_or_else(|| "completed".to_string());
+    if !DEPENDENCY_CONDITIONS.contains(&condition.as_str()) {
+        return Err(DependencyError::InvalidCondition(format!(
+            "required_condition must be one of {DEPENDENCY_CONDITIONS:?}"
+        )));
+    }
+    let deliverable_ref = options.required_deliverable_ref.clone();
+    if deliverable_ref.is_some() && condition == "completed" {
+        return Err(DependencyError::InvalidCondition(
+            "required_deliverable_ref only applies to deliverable_approved edges".to_string(),
+        ));
+    }
+    if condition == "deliverable_approved" {
+        let Some(reference) = &deliverable_ref else {
+            return Err(DependencyError::InvalidCondition(
+                "deliverable_approved requires required_deliverable_ref".to_string(),
+            ));
+        };
+        let has_key = reference.get("id").is_some() || reference.get("path").is_some();
+        if !has_key {
+            return Err(DependencyError::InvalidCondition(
+                "required_deliverable_ref must contain id or path".to_string(),
+            ));
+        }
+    }
+    Ok((condition, deliverable_ref))
 }
 
 /// 建边（POST）：同一事务内完成校验 → 插边 → 审计 → 解锁判定（D7）。
@@ -214,6 +287,21 @@ pub async fn add_dependency(
     depends_on_task_id: Uuid,
     actor: &AuditActor,
 ) -> Result<DependencyGraph, DependencyError> {
+    add_dependency_with(pool, task_id, depends_on_task_id, AddDependencyOptions::default(), actor)
+        .await
+}
+
+/// 建边（POST，带条件选项）：同一事务内完成校验 → 插边 → 审计 → 解锁判定（D7；
+/// PA07-IMP-003 增加条件/交付物引用校验与落库）。
+pub async fn add_dependency_with(
+    pool: &PgPool,
+    task_id: Uuid,
+    depends_on_task_id: Uuid,
+    options: AddDependencyOptions,
+    actor: &AuditActor,
+) -> Result<DependencyGraph, DependencyError> {
+    // 条件与交付物引用的封闭校验先于任何锁（纯输入校验）。
+    let (required_condition, required_deliverable_ref) = validate_condition(&options)?;
     let mut tx = pool.begin().await?;
 
     // ⓪ 无锁预读项目（图锁键）：取锁必须先于任何行锁（T-025 P0）。预读后行
@@ -302,14 +390,17 @@ pub async fn add_dependency(
 
     let inserted = sqlx::query(
         "INSERT INTO delivery.task_dependency \
-         (tenant_id, project_id, task_id, depends_on_task_id, created_by) \
-         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, $3, $4) \
+         (tenant_id, project_id, task_id, depends_on_task_id, created_by, \
+          required_condition, required_deliverable_ref, updated_by) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, $3, $4, $5, $6, $4) \
          ON CONFLICT (task_id, depends_on_task_id) DO NOTHING",
     )
     .bind(project_id)
     .bind(task_id)
     .bind(depends_on_task_id)
     .bind(actor.principal_id)
+    .bind(&required_condition)
+    .bind(&required_deliverable_ref)
     .execute(&mut *tx)
     .await?;
     if inserted.rows_affected() == 0 {
@@ -323,7 +414,11 @@ pub async fn add_dependency(
         "task.dependency.add",
         "task",
         Some(task_id),
-        json!({ "depends_on_task_id": depends_on_task_id }),
+        json!({
+            "depends_on_task_id": depends_on_task_id,
+            "required_condition": required_condition,
+            "required_deliverable_ref": required_deliverable_ref,
+        }),
     )
     .await?;
 
@@ -336,10 +431,26 @@ pub async fn add_dependency(
 }
 
 /// 删边（DELETE）：幂等；删除成功后做一次解锁判定（D8）。
+/// 删边（DELETE）：幂等；删除成功后做一次解锁判定（D8）。
+///
+/// PA07-IMP-003（审查82）：解除依赖必须记录原因——API 层强制必填；本入口为
+/// 内部/测试便捷通道，`reason` 缺省记 `"unspecified"`。
 pub async fn remove_dependency(
     pool: &PgPool,
     task_id: Uuid,
     depends_on_task_id: Uuid,
+    actor: &AuditActor,
+) -> Result<bool, DependencyError> {
+    remove_dependency_with_reason(pool, task_id, depends_on_task_id, "unspecified", actor).await
+}
+
+/// 删边（DELETE，带解除原因）：审计载荷含原因与边条件（审查82：解除不是
+/// 临时忽略门禁）。
+pub async fn remove_dependency_with_reason(
+    pool: &PgPool,
+    task_id: Uuid,
+    depends_on_task_id: Uuid,
+    reason: &str,
     actor: &AuditActor,
 ) -> Result<bool, DependencyError> {
     let mut tx = pool.begin().await?;
@@ -379,7 +490,10 @@ pub async fn remove_dependency(
             "task.dependency.remove",
             "task",
             Some(task_id),
-            json!({ "depends_on_task_id": depends_on_task_id }),
+            json!({
+                "depends_on_task_id": depends_on_task_id,
+                "reason": reason,
+            }),
         )
         .await?;
         unlock_task_if_ready(&mut tx, project_id, task_id).await?;

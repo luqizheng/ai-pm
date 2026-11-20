@@ -372,8 +372,10 @@ async fn c52_one_of_two_upstreams_completed_keeps_downstream_blocked(pool: PgPoo
 
 // --------------------------------------------------------------------- C53
 
+/// PA07-IMP-003（PA-07 §9.5 语义翻转）：前置取消**不再**满足依赖——后继保持
+/// `blocked` 等待恢复或调整；取消触发的是重评估而非放行。
 #[sqlx::test(migrations = "../../migrations")]
-async fn c53_cancelled_upstream_also_unlocks(pool: PgPool) {
+async fn c53_cancelled_upstream_keeps_downstream_blocked(pool: PgPool) {
     let fx = seed_project(&pool, "TD-C53").await;
     let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
@@ -383,8 +385,8 @@ async fn c53_cancelled_upstream_also_unlocks(pool: PgPool) {
 
     transition(&pool, &fx, upstream, TaskStatus::Cancelled).await;
 
-    assert_eq!(task_status(&pool, downstream).await, "ready");
-    assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 1);
+    assert_eq!(task_status(&pool, downstream).await, "blocked");
+    assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 0);
 }
 
 // --------------------------------------------------------------------- C54
@@ -719,11 +721,11 @@ async fn c63_failed_upstream_keeps_the_downstream_blocked(pool: PgPool) {
     assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 1);
 }
 
-/// D5 的终态集合：`failed` 必须排除在「已满足」之外（失败上游需重试/取消/取代）。
+/// 解锁触发的终态集合：`failed` 不触发；取消/取代仍触发**重评估**（结果只会
+/// 更阻塞——PA07-IMP-003 后条件谓词不因前置取消而满足）。
 #[test]
-fn d5_satisfied_set_excludes_failed() {
-    use pm_application::task_dependency::{unlocks_downstream, SATISFIED_STATUSES};
-    assert!(!SATISFIED_STATUSES.contains(&"failed"));
+fn d5_unlock_trigger_set_excludes_failed() {
+    use pm_application::task_dependency::unlocks_downstream;
     assert!(unlocks_downstream(TaskStatus::Completed));
     assert!(unlocks_downstream(TaskStatus::Cancelled));
     assert!(unlocks_downstream(TaskStatus::Superseded));
@@ -781,4 +783,231 @@ async fn t025_list_dependencies_is_tenant_scoped(pool: PgPool) {
         .await
         .unwrap_err();
     assert!(matches!(err, DependencyError::TaskNotFound), "got {err:?}");
+}
+
+// ---------------------------------------------- PA07-IMP-003（审查75/81/82）
+
+/// 直种一条获批交付事实：delivery run + review run + approved 审批行
+/// （`governance.review_approval` 是 accepted/deliverable_approved 的验收事实源）。
+async fn seed_approved_delivery(pool: &PgPool, project_id: Uuid, task_id: Uuid, decider: Uuid) {
+    let delivery_run: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_run \
+         (project_id, task_id, attempt_no, status, stage, run_kind, tenant_id) \
+         SELECT $2, $1, 1, 'succeeded', 'delivery', 'delivery', tenant_id \
+           FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let review_run: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_run \
+         (project_id, task_id, attempt_no, status, run_kind, role_id, review_policy_version, tenant_id) \
+         SELECT $2, $1, 1, 'succeeded', 'review', 'reviewer', 'test', tenant_id \
+           FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let approval: Uuid = sqlx::query_scalar(
+        "INSERT INTO governance.review_approval \
+         (tenant_id, project_id, task_id, review_run_id, delivery_run_id, \
+          delivery_manifest_hash, kind, status) \
+         SELECT tenant_id, $2, $1, $4, $3, 'hash-test', 'manual_review', 'pending' \
+           FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .bind(delivery_run)
+    .bind(review_run)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE governance.review_approval \
+            SET status = 'approved', decided_by = $2, decided_at = now() WHERE id = $1",
+    )
+    .bind(approval)
+    .bind(decider)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// 直种任务的交付物并刷新当前 Revision 快照（deliverable_approved 的匹配依据
+/// 是前置当前 Revision 冻结的 execution_contract.deliverables，审查81；种子
+/// 任务已带 revision_no=1 快照，此处原位改写其 execution_contract）。
+async fn seed_deliverable_in_revision(pool: &PgPool, task_id: Uuid, deliverable_id: &str) {
+    sqlx::query("UPDATE delivery.task SET deliverables = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(serde_json::json!([{
+            "id": deliverable_id,
+            "path": format!("{deliverable_id}.md"),
+        }]))
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_revision tr \
+            SET execution_contract = jsonb_set( \
+                    tr.execution_contract, \
+                    '{deliverables}', \
+                    (SELECT t.deliverables FROM delivery.task t WHERE t.id = tr.task_id)) \
+          WHERE tr.id = (SELECT current_task_revision_id FROM delivery.task WHERE id = $1)",
+    )
+    .bind(task_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// 审查75：条件枚举外 / deliverable_approved 缺引用 / 引用缺 id|path → 拒绝。
+#[sqlx::test(migrations = "../../migrations")]
+async fn imp3_invalid_condition_inputs_are_rejected(pool: PgPool) {
+    use pm_application::task_dependency::{add_dependency_with, AddDependencyOptions};
+    let fx = seed_project(&pool, "TD-IMP3-V").await;
+    let upstream = seed_task(&pool, fx.project_id, "draft").await;
+    let downstream = seed_task(&pool, fx.project_id, "draft").await;
+
+    let err = add_dependency_with(
+        &pool,
+        downstream,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("deliverable_approved".into()),
+            required_deliverable_ref: None,
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        "got {err:?}"
+    );
+
+    let err = add_dependency_with(
+        &pool,
+        downstream,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("deliverable_approved".into()),
+            required_deliverable_ref: Some(serde_json::json!({ "nope": 1 })),
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        "got {err:?}"
+    );
+
+    let err = add_dependency_with(
+        &pool,
+        downstream,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("or_anything".into()),
+            required_deliverable_ref: None,
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        "got {err:?}"
+    );
+}
+
+/// 审查75 `accepted`：前置仅 completed（无获批审批）不满足；获批后建边即解锁。
+#[sqlx::test(migrations = "../../migrations")]
+async fn imp3_accepted_requires_approval_then_unlocks(pool: PgPool) {
+    use pm_application::task_dependency::{add_dependency_with, AddDependencyOptions};
+    let fx = seed_project(&pool, "TD-IMP3-A").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+    add_dependency_with(
+        &pool,
+        downstream,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("accepted".into()),
+            required_deliverable_ref: None,
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap();
+
+    // completed 但未获批：保持 blocked（completed ≠ accepted）。
+    transition(&pool, &fx, upstream, TaskStatus::Completed).await;
+    assert_eq!(task_status(&pool, downstream).await, "blocked");
+    assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 0);
+
+    // 获批后（新边建立即判定 D7）：满足 → ready。
+    seed_approved_delivery(&pool, fx.project_id, upstream, fx.actor_id).await;
+    let downstream2 = seed_task(&pool, fx.project_id, "blocked").await;
+    add_dependency_with(
+        &pool,
+        downstream2,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("accepted".into()),
+            required_deliverable_ref: None,
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap();
+    assert_eq!(task_status(&pool, downstream2).await, "ready");
+    assert_eq!(task_ready_events(&pool, fx.project_id, downstream2).await, 1);
+}
+
+/// 审查75/81 `deliverable_approved`：引用命中前置当前 Revision 冻结的
+/// deliverables 且获批 → 满足；引用不存在 → 阻塞（不隐式跟随最新）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn imp3_deliverable_approved_matches_frozen_revision(pool: PgPool) {
+    use pm_application::task_dependency::{add_dependency_with, AddDependencyOptions};
+    let fx = seed_project(&pool, "TD-IMP3-D").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let matched = seed_task(&pool, fx.project_id, "blocked").await;
+    let unmatched = seed_task(&pool, fx.project_id, "blocked").await;
+    seed_deliverable_in_revision(&pool, upstream, "DEL-1").await;
+    transition(&pool, &fx, upstream, TaskStatus::Completed).await;
+    seed_approved_delivery(&pool, fx.project_id, upstream, fx.actor_id).await;
+
+    // 引用命中冻结快照：建边即判定（D7）→ ready。
+    add_dependency_with(
+        &pool,
+        matched,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("deliverable_approved".into()),
+            required_deliverable_ref: Some(serde_json::json!({ "id": "DEL-1" })),
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap();
+    assert_eq!(task_status(&pool, matched).await, "ready");
+
+    // 引用不在快照内：保持 blocked。
+    add_dependency_with(
+        &pool,
+        unmatched,
+        upstream,
+        AddDependencyOptions {
+            required_condition: Some("deliverable_approved".into()),
+            required_deliverable_ref: Some(serde_json::json!({ "id": "DEL-404" })),
+        },
+        &actor(&fx),
+    )
+    .await
+    .unwrap();
+    assert_eq!(task_status(&pool, unmatched).await, "blocked");
 }

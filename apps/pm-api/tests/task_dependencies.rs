@@ -161,7 +161,7 @@ fn deps_uri(task_id: Uuid) -> String {
 }
 
 fn edge_uri(task_id: Uuid, upstream_id: Uuid) -> String {
-    format!("/v1/pm/tasks/{task_id}/dependencies/{upstream_id}")
+    format!("/v1/pm/tasks/{task_id}/dependencies/{upstream_id}?reason=test-cleanup")
 }
 
 async fn audit_count(pool: &PgPool, action: &str, task_id: Uuid) -> i64 {

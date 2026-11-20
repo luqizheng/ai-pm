@@ -449,9 +449,14 @@ async fn ui_complete(pool: &PgPool, task_id: Uuid, actor_id: Uuid, revision: i64
     .expect("the UI direct write must succeed");
 }
 
-/// C68（T-025 §五）：UI 直写终态必须触发与命令通道一致的依赖解锁副作用。
+/// C68（T-025 §五）：UI 直写终态必须触发与命令通道一致的依赖**重评估**副作用。
+///
+/// PA07-IMP-003（PA-07 §9.5）语义翻转：直写 `cancelled` 触发的是下游重评估，
+/// 而 cancelled 前置不满足任何条件——下游保持 `blocked`、零 TaskReady。
+/// 「cancelled 直写 → 解锁 ready」的旧断言已失效；completed 边的解锁由
+/// task_dependency 测试的 c50/c53 族覆盖。
 #[sqlx::test(migrations = "../../migrations")]
-async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
+async fn c68_ui_direct_write_to_terminal_reevaluates_downstream(pool: PgPool) {
     let fx = seed_project(&pool, "TDC68").await;
     let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
@@ -467,11 +472,11 @@ async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
     ui_complete(&pool, upstream, fx.actor_id, 1).await;
 
     assert_eq!(task_status(&pool, upstream).await, "cancelled");
-    assert_eq!(task_status(&pool, downstream).await, "ready");
+    assert_eq!(task_status(&pool, downstream).await, "blocked");
     assert_eq!(
         task_ready_events(&pool, fx.project_id, downstream).await,
-        1,
-        "the UI path must produce exactly one TaskReady"
+        0,
+        "a cancelled upstream must not satisfy the dependency"
     );
 }
 
@@ -538,11 +543,11 @@ async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     writer.await.unwrap();
 
     assert_eq!(task_status(&pool, upstream).await, "cancelled");
-    assert_eq!(task_status(&pool, downstream).await, "ready");
+    assert_eq!(task_status(&pool, downstream).await, "blocked");
     assert_eq!(
         task_ready_events(&pool, fx.project_id, downstream).await,
-        1,
-        "exactly one TaskReady after the lock is released"
+        0,
+        "zero TaskReady after the lock is released (cancelled upstream never satisfies)"
     );
 }
 // ------------------------- T-025 §10.9 遗留收口（2026-11-03） -------------------------
