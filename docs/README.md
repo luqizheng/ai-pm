@@ -55,6 +55,7 @@
 | `architecture/knowledge-services/` | 知识服务（文档处理 td01–td05、知识 v2 实现、Markdown 知识空间、t060 知识索引） |
 | `architecture/product-cognition/` | 产品认知架构设计 |
 | `architecture/smark-pm-architecture-decisions/` | smark-pm 架构决策文档集 V1.2（00 设计原则 + PA-03~PA-06 + PA-07 V1.0 及其开发实施规范：信息路由/共享 Project 协作/统一事项与信息流/Agent 协作边界/Task 执行编排与跨 Product 协作，基线 2026-11-20） |
+| `architecture/pa-07-implementation/` | PA-07 开发实施产物（IMP-001 schema 映射报告等） |
 
 ## 维护提示
 
