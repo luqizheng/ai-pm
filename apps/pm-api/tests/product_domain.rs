@@ -536,7 +536,7 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], json!("abandoned"));
+    assert_eq!(body["status"], json!("archived"));
     let (st, _) = call(
         &w.app,
         "POST",
@@ -568,7 +568,7 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], json!("active"));
+    assert_eq!(body["status"], json!("normal"));
 
     // active 建 Link 需要项目存在；bogus project → 404。
     let (st, _) = call(

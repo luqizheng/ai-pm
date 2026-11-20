@@ -737,6 +737,41 @@ async fn claim_core_in_project(
         }));
     }
 
+    // ⑤¾ Product 执行门禁（PA07-IMP-004，PA-07 §5.1 门禁 2）：任一有效关联
+    // Product 处于 suspended/archived 时该工作范围不得执行；FOR UPDATE 与
+    // lifecycle 写路径串行化（暂停 vs 领取竞态由行锁解决，§16）。deny 处理
+    // 与依赖门禁同款：退避回队、不判失败、不写 failure。
+    if let Some((blocked_product, deny_reason)) =
+        crate::task_products::product_gate_denied(&mut tx, task_id).await?
+    {
+        if opts.task_filter.is_some() {
+            tx.rollback().await?;
+            return Err(RunDispatchError::TaskNotReady(deny_reason.into()));
+        }
+        requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, deny_reason).await?;
+        audit_run(
+            &mut tx,
+            project_id,
+            "skip_task_run",
+            run_id,
+            serde_json::json!({
+                "release_reason": deny_reason,
+                "blocked_product_id": blocked_product,
+                "dispatch_attempts": dispatch_attempts + 1,
+            }),
+        )
+        .await?;
+        tx.commit().await?;
+        return Ok(Some(ClaimOutcome {
+            run_id,
+            task_id,
+            kind: ClaimKind::Skipped,
+            lease_token: None,
+            lease_generation: 0,
+            lease_owner: String::new(),
+        }));
+    }
+
     // ⑥ 执行策略门（G5）：读取失败不得默认放行，且拒绝路径审计要留下失败快照。
     match policy.execution_enabled() {
         Ok(true) => {}
@@ -965,6 +1000,11 @@ async fn claim_core_in_project(
     .bind(crate::repo_access::access_snapshot_json(&repo_access))
     .execute(&mut *tx)
     .await?;
+
+    // PA07-IMP-004：门禁证据快照（审查81）——依赖逐边快照（前置 Revision/
+    // 条件/交付物引用/结论）+ Product 门禁快照（各关联 Product 执行状态）。
+    // 与 policy_snapshot 同事务、只在成功领取路径写（deny/skip 分支早已 return）。
+    crate::task_products::write_run_gate_snapshots(&mut tx, project_id, task_id, run_id).await?;
 
     // Probe 模式：立即释放回 queued（不启动执行器）。
     if opts.mode == DispatchMode::Probe {

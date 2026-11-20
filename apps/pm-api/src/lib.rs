@@ -58,6 +58,7 @@ pub mod setup;
 pub mod skills_package;
 pub mod support;
 pub mod task_dependencies;
+pub mod task_products;
 pub mod task_repositories;
 pub mod team_llm;
 pub mod team_llm_catalog;

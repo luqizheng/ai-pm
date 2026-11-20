@@ -248,7 +248,7 @@ pub async fn create_product(
         team_id,
         name: name.to_string(),
         description: description.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        status: "active".to_string(),
+        status: "normal".to_string(),
     })
 }
 
@@ -698,12 +698,17 @@ pub async fn set_product_lifecycle(
     product_id: Uuid,
     action: &str,
 ) -> Result<ProductProfile, ProductError> {
+    // PA07-IMP-004（0044 四值化）：abandon→archived 终态（PA-07 §12 不提供
+    // 常规恢复）；suspend/resume/complete_resume 承接 §11 的暂停-评估-恢复
+    // 三段；restart 语义收敛为 suspended/resuming → normal 的再激活。
     let target_status = match action {
-        "abandon" => "abandoned",
-        "restart" => "active",
+        "abandon" => "archived",
+        "suspend" => "suspended",
+        "resume" => "resuming",
+        "restart" | "complete_resume" => "normal",
         _ => {
             return Err(ProductError::Validation(
-                "action must be abandon or restart",
+                "action must be abandon, suspend, resume, complete_resume or restart",
             ))
         }
     };
@@ -764,9 +769,11 @@ pub async fn set_product_lifecycle(
 
 // ─────────────────────────────────────────────────────────── 写入门禁
 
-/// Product 业务写入闸（DR-PA-03④，对齐 project_gate 模式）：abandoned 时
+/// Product 业务写入闸（DR-PA-03④，对齐 project_gate 模式）：业务不活跃时
 /// fail-closed。第一轮消费点 = Product-Project Link 建立与 Product 域业务
-/// 写入（新需求/业务决策任务入口随业务域迁移接入）。
+/// 写入。PA07-IMP-004 四值化后业务活跃 = `normal`（resuming 逐步开放、
+/// suspended/archived 一律拒新关联）；对外错误码沿用 `product_abandoned`
+/// （含义泛化为「Product 不在可承接业务活动的状态」）。
 pub async fn assert_product_active(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     product_id: Uuid,
@@ -778,7 +785,7 @@ pub async fn assert_product_active(
     .fetch_optional(&mut **tx)
     .await?;
     match status.as_deref() {
-        Some("active") => Ok(()),
+        Some("normal") => Ok(()),
         Some(_) => Err(ProductError::Conflict("product_abandoned")),
         None => Err(ProductError::NotFound),
     }
@@ -791,7 +798,7 @@ pub async fn product_is_active(pool: &PgPool, product_id: Uuid) -> Result<bool, 
             .bind(product_id)
             .fetch_optional(pool)
             .await?;
-    Ok(status.as_deref() == Some("active"))
+    Ok(status.as_deref() == Some("normal"))
 }
 
 // ─────────────────────────────────────────────────────────── Product↔Project Link
@@ -816,7 +823,9 @@ pub async fn create_product_link(
     let Some((tenant_id, status)) = product else {
         return Err(ProductError::NotFound);
     };
-    if status != "active" {
+    // PA07-IMP-004 四值化：新 Link 只在 normal 态可建（与 assert_product_active
+    // 同口径；错误码沿用 product_abandoned）。
+    if status != "normal" {
         return Err(ProductError::Conflict("product_abandoned"));
     }
 
