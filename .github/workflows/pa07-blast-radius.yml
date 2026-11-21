@@ -1,0 +1,41 @@
+name: PA-07 Blast Radius Regression
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/pm-domain/**"
+      - "crates/pm-ai/**"
+      - ".github/workflows/pa07-blast-radius.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/pm-domain/**"
+      - "crates/pm-ai/**"
+      - ".github/workflows/pa07-blast-radius.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  blast-radius-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test command impact cardinality
+        run: cargo test -p pm-domain impact_count_uses_batch_cardinality_and_single_commands_count_one
+
+      - name: Test batch threshold boundary
+        run: cargo test -p pm-ai create_tasks_batch_cardinality_drives_blast_radius_threshold
+
+      - name: Test aggregate impact across proposals
+        run: cargo test -p pm-ai blast_radius_sums_batch_items_across_multiple_proposals
