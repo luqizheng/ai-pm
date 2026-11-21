@@ -517,6 +517,32 @@ pub async fn create_requirement(
         Some(requirement_id),
     )
     .await?;
+    // PA-05-01/05（注册表）：创建即注册统一事项 + Timeline `created` 活动。
+    let work_item_id = crate::work_item::ensure_work_item(
+        &mut tx,
+        tenant_id,
+        "requirement",
+        requirement_id,
+        Some(project_id),
+        &title,
+        crate::work_item::requirement_status_semantic("active"),
+        Some(actor.principal_id),
+    )
+    .await?;
+    crate::work_item::record_activity(
+        &mut tx,
+        tenant_id,
+        work_item_id,
+        Some(project_id),
+        None,
+        "created",
+        "human",
+        Some(actor.principal_id),
+        &format!("Requirement created: {title}"),
+        None,
+        None,
+    )
+    .await?;
     tx.commit().await?;
 
     fetch_entry(pool, tenant_id, requirement_id).await

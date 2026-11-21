@@ -110,6 +110,20 @@ impl From<sqlx::Error> for PmWriteError {
     }
 }
 
+// PA-05 接线：统一事项服务错误并入 pm_write 错误面（Validation 保持静态
+// 文案口径；NotFound 挂统一事项语义）。
+impl From<crate::work_item::WorkItemError> for PmWriteError {
+    fn from(err: crate::work_item::WorkItemError) -> Self {
+        match err {
+            crate::work_item::WorkItemError::Db(e) => PmWriteError::Db(e),
+            crate::work_item::WorkItemError::NotFound => {
+                PmWriteError::NotFound("work item not found")
+            }
+            crate::work_item::WorkItemError::Validation(m) => PmWriteError::Validation(m),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
     #[serde(default)]

@@ -114,6 +114,39 @@ pub async fn create_task(
         Some(task_id),
     )
     .await?;
+    // PA-05-01/05（注册表）：创建即注册统一事项 + Timeline `created` 活动
+    // （同事务，与审计管线同一致性级别）。
+    let work_tenant: Uuid = sqlx::query_scalar(
+        "SELECT tenant_id FROM core.project WHERE id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let work_item_id = crate::work_item::ensure_work_item(
+        &mut tx,
+        work_tenant,
+        "task",
+        task_id,
+        Some(project_id),
+        &title,
+        crate::work_item::task_status_semantic("draft"),
+        Some(actor.principal_id),
+    )
+    .await?;
+    crate::work_item::record_activity(
+        &mut tx,
+        work_tenant,
+        work_item_id,
+        Some(project_id),
+        None,
+        "created",
+        "human",
+        Some(actor.principal_id),
+        &format!("Task created: {title}"),
+        None,
+        None,
+    )
+    .await?;
     tx.commit().await?;
 
     task_row(pool, task_id).await
@@ -698,6 +731,40 @@ pub async fn link_task_requirement(
             "revision_id": revision_id,
             "knowledge_anchor_document_id": anchored,
         }),
+    )
+    .await?;
+    // PA-05-03/04（注册表）：钉版定稿需求 → 统一关联 `implements`
+    // （source=task，target=requirement；不改变对象归属）；来源 human +
+    // 理由记录（PA-05-04）。双方事项自愈注册（存量兼容）。
+    let task_item = crate::work_item::ensure_work_item_for_target(
+        &mut tx,
+        tenant_id,
+        "task",
+        task_id,
+        Some(project_id),
+        crate::work_item::task_status_semantic("draft"),
+        Some(actor.principal_id),
+    )
+    .await?;
+    let requirement_item = crate::work_item::ensure_work_item_for_target(
+        &mut tx,
+        tenant_id,
+        "requirement",
+        requirement_id,
+        Some(project_id),
+        crate::work_item::requirement_status_semantic("active"),
+        Some(actor.principal_id),
+    )
+    .await?;
+    crate::work_item::add_relation(
+        &mut tx,
+        tenant_id,
+        task_item,
+        requirement_item,
+        "implements",
+        "human",
+        Some("pinned approved requirement revision"),
+        Some(actor.principal_id),
     )
     .await?;
     tx.commit().await?;

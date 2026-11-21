@@ -237,3 +237,20 @@ My Feed 根据 Product Membership 和事项路由生成。同一事件涉及多�
 5.  不把 Feed 实现为三套重复消息系统。
 6.  不把已读、通知、处理和批准合并成同一状态。
 7.  不引入全员已读或强制阅读回执。
+
+## 12. 落地记录（2026-11-21，批次 A+B）
+
+用户裁决：PA-05-01 采用**注册表形态**（新建 `core.work_item` 注册表，领域对象保留独立表与状态机；映射式不建表方案否决）。
+
+已实施（migration 0050 + `pm-application/src/work_item.rs`）：
+
+- **PA-05-01/02**：`core.work_item`（统一事项 ID=主键、tenant/target_type/target_id 唯一、title、统一状态 8 值、project 归属）；Task/Requirement/ADR 三类显式注册；状态语义映射在服务层逐域显式声明（task 13 值 / requirement 3 值 / adr 6 值），同名状态不默认同义。
+- **PA-05-03/04**：`core.work_item_relation`（V1 六关系类型 + origin human|agent + reason；唯一 (source,target,type)；self 拒绝）；解除通道仅服务人类操作面（PA-05-04 Agent 不得覆盖人类修改）。
+- **PA-05-05/06/07**：`core.work_item_activity` 追加式 Timeline（无 UPDATE 路径，纠错=追加 correction；human|agent 来源区分；事项/Project/Product/时间四维索引）。Execution Logs 不入 Timeline（归 `delivery.task_run_event`）；正式知识正文权威=Markdown+Git，Timeline 仅存 revision_ref（ADR 首版已挂）。
+- **PA-05-09**：`core.work_item_read_state` per-user（read_at/notified_at 两列；Processed/Approved 留在领域对象，四概念不分混）。
+
+接线（批次 B，五个写入点）：create_task（创建即注册+created 活动）→ `apply_task_transition` 单点（自愈注册+状态同步+语义变化记 status_changed，§8.3 合并规则=语义未变不记）→ create_requirement / create_adr（创建即注册，ADR 挂 revision_ref）→ link_task_requirement（钉版定稿需求 → implements 关联，human 来源+理由）。接线与既有审计同事务（同一致性级别）。
+
+验收：`pm-application/tests/work_item.rs` 6/6 绿（注册幂等不覆盖状态/迁移语义变化/钉版 implements+幂等/四维查询/关系校验与解除/创建接线）；受影响面回归 48 例绿（command_executor 10 + task_dependency 9 + requirement_basis 8 + design_s03 4 + state_transition_guard 17）。
+
+后续批次（未实施）：批次 C = 三 Feed API + 前端页 + 已读状态读写面；Issue/Risk/Blocker 实体（PA-05-01 遗留领域对象）随后续批次显式加入；产品维度活动（product_id 列已预留，接线随 Task-Product 链路补）。

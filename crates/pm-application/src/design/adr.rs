@@ -230,6 +230,33 @@ pub async fn create_adr(
         Some(adr_id),
     )
     .await?;
+    // PA-05-01/05（注册表）：创建即注册统一事项 + Timeline `created` 活动；
+    // 首版修订引用挂 revision_ref（正式知识正文权威 = Markdown + Git）。
+    let work_item_id = crate::work_item::ensure_work_item(
+        &mut tx,
+        tenant_id,
+        "adr",
+        adr_id,
+        Some(project_id),
+        &title,
+        crate::work_item::adr_status_semantic("proposed"),
+        Some(actor.principal_id),
+    )
+    .await?;
+    crate::work_item::record_activity(
+        &mut tx,
+        tenant_id,
+        work_item_id,
+        Some(project_id),
+        None,
+        "created",
+        "human",
+        Some(actor.principal_id),
+        &format!("ADR created: {title}"),
+        None,
+        Some(&json!({ "adr_revision_id": revision_id, "version": 1 })),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     adr_detail(pool, tenant_id, adr_id).await
 }

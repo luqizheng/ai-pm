@@ -144,6 +144,45 @@ pub(crate) async fn apply_task_transition(
         audit_source(ctx),
     )
     .await?;
+    // PA-05-02/05/07：状态迁移接线（统一事项自愈注册 + 统一状态同步 +
+    // 语义变化记 Timeline `status_changed`；语义未变不记 = §8.3 合并规则）。
+    // 来源区分（PA-05-05）：Human=human，其余（ai_pm/dev_agent/service）=agent。
+    let work_actor_type = match ctx.actor_kind {
+        ActorKind::Human => "human",
+        ActorKind::AiPm | ActorKind::DevAgent | ActorKind::Service => "agent",
+    };
+    let work_tenant = crate::work_item::project_tenant(tx, ctx.project_id)
+        .await
+        .map_err(|err| match err {
+            crate::work_item::WorkItemError::Db(e) => CommandError::Db(e),
+            crate::work_item::WorkItemError::NotFound => CommandError::Validation(format!(
+                "project {} not found for work item wiring",
+                ctx.project_id
+            )),
+            crate::work_item::WorkItemError::Validation(m) => {
+                CommandError::Validation(m.to_string())
+            }
+        })?;
+    crate::work_item::on_task_transition(
+        tx,
+        work_tenant,
+        ctx.project_id,
+        task_id,
+        &status_before,
+        to.as_str(),
+        work_actor_type,
+        Some(ctx.actor.principal_id),
+    )
+    .await
+    .map_err(|err| match err {
+        crate::work_item::WorkItemError::Db(e) => CommandError::Db(e),
+        crate::work_item::WorkItemError::NotFound => CommandError::Validation(format!(
+            "task {task_id} work item target not found"
+        )),
+        crate::work_item::WorkItemError::Validation(m) => {
+            CommandError::Validation(m.to_string())
+        }
+    })?;
     // D4（T-024）：上游进入终态时，在**同一事务**里解锁满足依赖的 blocked 下游。
     // `unlock_downstream` 会反过来调用本函数（`blocked → ready`），因此必须用
     // `Box::pin` 打断 async 递归的类型尺寸计算，否则无法求出 future 大小。
