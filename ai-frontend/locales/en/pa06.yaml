@@ -183,3 +183,62 @@ authorization:
   ctxControlText: Narrow or pause authorization at any time. AI-PM reevaluates affected work; unrelated authorized work continues.
   reviewLimits: Review current limits
   ctxFooter: Requests never take effect until an authorized human confirms them.
+
+knowledge:
+  loadingEyebrow: Loading knowledge changes · preserve context
+  emptyEyebrow: No pending knowledge proposals
+  emptyHint: AI maintains draft knowledge autonomously; only proposals that change formal meaning need human confirmation.
+  confirmBadge: Formal confirmation required
+  headline: Review the meaning, not just the wording
+  headlineMeta: "AI proposal · {summary}"
+  baselineEyebrow: Confirmed baseline · v{rev}
+  baselineFallback: No baseline excerpt available; open the document for an exact diff.
+  baselineMeta: "Current v{rev} · updated {time}"
+  baselineMissing: Document not in the list (may be retired)
+  proposalEyebrow: AI proposal · Not approved
+  proposalMeta: "Proposal status · {status}"
+  whyLabel: Why this change
+  whyFallback: The proposal carries no change summary.
+  impactRecords: Affected records · {key}
+  impactRevision: "Target revision · {rev}"
+  confirmAction: Confirm baseline
+  vetoAction: Veto revision
+  actionNote: Confirmation records your identity, rationale and exact version. AI-PM then replans affected work.
+  confirmedToast: Proposal confirmed; baseline updated
+  vetoedToast: Revision vetoed and rolled back
+  vetoReason: Vetoed from the knowledge review page; the proposal was never human-confirmed
+  ctxTitle: AI-PM explanation
+  ctxIntro: I can maintain working notes, but I cannot change a formal requirement on your behalf.
+  ctxNext: What happens next
+  ctxNextText: Confirm → the proposal becomes baseline. Reject → the current baseline stays in effect. Revise → the proposal stays a draft.
+  ctxWorking: Working knowledge
+  ctxWorkingText: Draft notes are updated autonomously. No formal meaning changed; no approval needed.
+  ctxNote: For an exact line-by-line diff, open the document and compare baseline vs proposal revisions.
+
+plan:
+  loadingEyebrow: Loading planning · preserve context
+  eyebrow: AI-PM maintained plan
+  scopeBadge: Scope unchanged
+  headline: Parallel work, with explicit dependencies
+  summary: "{total} nodes · {parallel} parallel groups · critical path {critical} steps"
+  graphEyebrow: Dependency map (longest-path layers)
+  layerLabel: "Layer {layer}"
+  historyEyebrow: Plan adjustment activity (project activity stream)
+  noHistory: No recent activity
+  escalationNote: Formal meaning changes are escalated, not treated as routine replanning.
+  startAction: Start authorized execution ({count} draft → ready)
+  startNone: Start authorized execution (no tasks awaiting confirmation)
+  readyToast: "Batched to ready · {count} tasks"
+  reviewScope: Review scope change
+  emptyEyebrow: No task nodes
+  emptyHint: AI-PM generates the plan within the authorized boundary; decomposed tasks appear here.
+  ctxTitle: Plan rationale
+  ctxBadge: Autonomous planning
+  ctxRules: Dependency rules
+  ctxRulesText: Downstream unlocks when upstream completes; tasks without dependency edges run in parallel without blocking each other.
+  ctxParallel: Parallel, not independent
+  ctxParallelText: AI-PM shares confirmed context and reviews Agent outputs. You do not assign or coordinate individual Agents.
+  ctxEscalation: Escalation boundary
+  ctxEscalationText: Changing the goal, delivery scope or acceptance criteria requires a human decision before affected work starts.
+  ctxInspect: Inspect authorization
+  ctxNote: "Status and reason are separate: a waiting task shows the exact dependency or decision holding it."

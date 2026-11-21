@@ -313,9 +313,9 @@ export function buildRoutes(): RouteRecordRaw[] {
   // ─── AI 协作工作区（PA-06 · Figma 258:14081，2026-11-21）───
   // 八页签「人与 AI 交互中心」：/project/collaboration 本身由导航树派生
   // （CollaborationOverviewView = Overview 页签），其余七页签独立路由不占
-  // 导航（同 S05/Tasks 手工段组织）。UI-1 落 Overview 与 Decisions；UI-2 落
-  // Execution 与 Authorization；Knowledge/Plan/Delivery/Recovery 仍为占位
-  // （PLANNED，不得用演示数据伪装），随 UI-3~4 批次替换。
+  // 导航（同 S05/Tasks 手工段组织）。UI-1~3 已落 Overview/Decisions/
+  // Execution/Authorization/Knowledge/Plan 六屏；Delivery/Recovery 仍为
+  // 占位（PLANNED，不得用演示数据伪装），随 UI-4 替换。
   routes.push(
     {
       path: "/project/collaboration/execution",
@@ -331,12 +331,13 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     {
       path: "/project/collaboration/knowledge",
-      component: PlaceholderView,
+      component: () =>
+        import("@/views/project/collaboration/KnowledgeReviewView.vue"),
       meta: { title: "pa06.tabs.knowledge" }
     },
     {
       path: "/project/collaboration/plan",
-      component: PlaceholderView,
+      component: () => import("@/views/project/collaboration/PlanningView.vue"),
       meta: { title: "pa06.tabs.plan" }
     },
     {

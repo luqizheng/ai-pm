@@ -183,3 +183,62 @@ authorization:
   ctxControlText: 你可以随时收紧或暂停授权；AI-PM 会重估受影响工作，无关的授权工作继续。
   reviewLimits: 查看当前限制
   ctxFooter: 请求在获得授权人类确认之前从不生效。
+
+knowledge:
+  loadingEyebrow: 加载知识变更 · 保留上下文
+  emptyEyebrow: 无待决知识提案
+  emptyHint: AI 自主维护知识草稿；只有改变正式含义的提案需要人类确认。
+  confirmBadge: 正式确认所需
+  headline: 审语义，而非仅审措辞
+  headlineMeta: "AI 提案 · {summary}"
+  baselineEyebrow: 已确认基线 · v{rev}
+  baselineFallback: 暂无可呈现的基线摘录；精确对照请打开文档。
+  baselineMeta: "当前 v{rev} · 更新 {time}"
+  baselineMissing: 文档不在列表中（可能已下线）
+  proposalEyebrow: AI 提案 · 未批准
+  proposalMeta: "提案状态 · {status}"
+  whyLabel: 为什么有这项变更
+  whyFallback: 提案未附变更说明。
+  impactRecords: 受影响记录 · {key}
+  impactRevision: "目标修订 · {rev}"
+  confirmAction: 确认基线
+  vetoAction: 否决修订
+  actionNote: 确认将记录你的身份、理由与确切版本；AI-PM 随后重排受影响工作。
+  confirmedToast: 提案已确认，基线已更新
+  vetoedToast: 修订已否决回滚
+  vetoReason: 知识审阅页否决：提案未获人类确认
+  ctxTitle: AI-PM 说明
+  ctxIntro: 我可以维护工作笔记，但不能代替你变更正式需求。
+  ctxNext: 接下来会发生什么
+  ctxNextText: 确认 → 提案成为基线；否决 → 现行基线保持生效；要求修改 → 提案保持草稿。
+  ctxWorking: 工作知识
+  ctxWorkingText: 草稿笔记由 AI 自主更新；未改变正式含义，无需批准。
+  ctxNote: 精确的逐行对照请打开文档查看基线与提案修订。
+
+plan:
+  loadingEyebrow: 加载任务规划 · 保留上下文
+  eyebrow: AI-PM 维护的计划
+  scopeBadge: 范围未变更
+  headline: 并行工作，显式依赖
+  summary: "共 {total} 个节点 · {parallel} 个并行组 · 关键路径 {critical} 步"
+  graphEyebrow: 依赖分层图（最长路径分层）
+  layerLabel: "第 {layer} 层"
+  historyEyebrow: 计划调整活动（项目活动流）
+  noHistory: 暂无最近活动
+  escalationNote: 正式含义的变更走升级通道，不作为常规重排处理。
+  startAction: 启动授权执行（{count} 项 draft → ready）
+  startNone: 启动授权执行（无待确认任务）
+  readyToast: "已批量置 ready：{count} 项"
+  reviewScope: 审查范围变更
+  emptyEyebrow: 暂无任务节点
+  emptyHint: 计划由 AI-PM 在授权范围内自主生成；任务分解后会出现在这里。
+  ctxTitle: 计划依据
+  ctxBadge: 自主规划
+  ctxRules: 依赖规则
+  ctxRulesText: 上游完成即解锁下游；无依赖关系的任务并行推进，互不阻塞。
+  ctxParallel: 并行，而非各自为政
+  ctxParallelText: AI-PM 共享已确认上下文并复核 Agent 产出；你无需逐个指派或协调 Agent。
+  ctxEscalation: 升级边界
+  ctxEscalationText: 变更目标、交付范围或验收标准，须在受影响工作开始前获得人类决策。
+  ctxInspect: 查看授权边界
+  ctxNote: 状态与原因分离：等待中的任务会显示确切的依赖或决策阻塞源。
