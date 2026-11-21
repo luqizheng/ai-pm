@@ -308,3 +308,18 @@ PA-06 确立的协作模式是：
 - **批次 A（已落地，2026-11-21）**：①`record_product_acceptance` 服务层守卫=人类 principal（查库）+ 目标 Product Membership（DR-PA-06 第一轮守卫；资格项维持台账号 6 OPEN）②`pm_reviews` 审批裁决端点修复被 `.ok()` 吞掉的项目可见性检查+补人类门③Issue/Risk/Blocker 服务层人类门（REST=人类面显式执法，为 C2 的 MCP agent 通道分流做准备）④consultation start/decide/cancel/supersede 补项目可见性，decide/cancel/supersede 补人类门。
 - **裁决 G-01（CLOSED，2026-11-21 用户裁决）**：按 PA-06-02/04 放开 decompose 链正式建 Task（落 draft，`draft→ready` E2 真人闸不变）；红线单摘除 `create_tasks`（导入提案 owner 确认流不受影响）；PA-07 §11 BLOCKED_HUMAN_DECISION 同步注记 CLOSED。
 - **待办批次**：B=升级链打通（五要素决策上下文 §8.5、决策回读 §8.6）；C2=MCP Issue/Risk/Blocker 工具（agent 自主管理）；C3=agent 普通关联建立通道（`remove_relation` 维持不暴露）。
+
+## 13. UI 落地记录（Figma 258:14081，2026-11-21）
+
+八页签「人与 AI 交互中心」前端落地完成（`/project/collaboration` 独立工作区，侧栏「AI 协作」，批次 UI-1~4：0ce42fa / 3cedbed / f3501d3 / d366a4c / 391db2e）：
+
+- **A 总览**：注意队列摘要+自主执行表（任务×agent×状态×进度）+重要风险+最近结果；右栏 AI-PM Project context（方向/边界/进展）。
+- **B 执行详情**：任务级状态机链（PA-06 执行状态 7 态，真实状态定位）+依赖分解+产物与验证+活动记录；右栏 Why AI is doing this。Pause 能力缺口如实标注 PLANNED。
+- **C 人工决策中心**：consultation+红线审批双队列+详情（WHY/recommendation/OPTIONS）+ decide/cancel/approve/reject 真端点；底注「已确认决策保留在决策登记；提案不自动生效」。
+- **D 知识变更审阅**：提案队列+基线 vs 提案双列（诚实摘录不伪造全文 diff）+ confirm/veto。
+- **E 任务规划**：依赖分层图（真实最长路径分层）+ 启动授权执行（E2 批量 ready 真端点）。
+- **F 验收与交付**：口径×裁决×证据表（未覆盖≠通过——完成判定经冒烟修正）+交付阻塞卡+产物清单。
+- **G 异常与恢复**：重大风险升级卡（→决策中心）+常规恢复段（waiting 真实原因，不编造重试计数）+恢复上限语义。
+- **H 授权与自主**：已确认目标+AI 可自主/须人类确认两列清单（本决策基线文案的 UI 呈现）+待决授权请求+审批历史。
+
+行为规范组件化（Screen feedback：loading 保留上下文/empty 明确下一步/error 不伪成功）；测试 37/37；真栈浏览器冒烟 8/8 屏通过（含空态+PM-001 真实任务非空态）。冒烟实测修复两缺陷：空项目依赖图 panic（task_read.rs:563）、Delivery 完成判定把「未覆盖」当通过。诚实缺位项：Pause/通用 retry 端点（PLANNED）、Run 级步骤计数、计划版本史、版本化授权实体。
