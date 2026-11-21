@@ -449,3 +449,152 @@ pub async fn on_task_transition(
     .await?;
     Ok(())
 }
+
+// ─────────────────────────────────────────── 三 Feed 视角（PA-05-08 批次 C）
+
+/// Feed 行：活动 + 所属事项定位 + 调用者已读状态。同一活动在 My Feed 中
+/// 只出现一次（按活动行去重——活动行的 project/product 本就单一）。
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct FeedRow {
+    pub id: Uuid,
+    pub item_id: Uuid,
+    pub target_type: String,
+    pub target_id: Uuid,
+    pub item_title: String,
+    pub activity_type: String,
+    pub actor_type: String,
+    pub actor_id: Option<Uuid>,
+    pub summary: String,
+    pub detail: Option<Value>,
+    pub project_id: Option<Uuid>,
+    pub product_id: Option<Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub read_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+const FEED_SELECT: &str = "\
+SELECT a.id, a.item_id, w.target_type, w.target_id, w.title AS item_title, \
+       a.activity_type, a.actor_type, a.actor_id, a.summary, a.detail, \
+       a.project_id, a.product_id, a.created_at, r.read_at \
+  FROM core.work_item_activity a \
+  JOIN core.work_item w ON w.id = a.item_id \
+  LEFT JOIN core.work_item_read_state r \
+         ON r.item_id = a.item_id AND r.principal_id = $2 AND r.tenant_id = a.tenant_id";
+
+/// My Feed（PA-05-08）：调用者 Project Membership（项目活动）∪ Product
+/// Membership（产品维度活动）的去重集合，时间倒序。已读状态按调用者。
+pub async fn my_feed(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FeedRow>, WorkItemError> {
+    let rows = sqlx::query_as::<_, FeedRow>(
+        &format!(
+            "{FEED_SELECT} \
+          WHERE a.tenant_id = $1 \
+            AND (a.project_id IN (SELECT project_id FROM core.project_member WHERE tenant_id = $1 AND principal_id = $2) \
+              OR a.product_id IN (SELECT product_id FROM core.product_member WHERE tenant_id = $1 AND principal_id = $2)) \
+          ORDER BY a.created_at DESC, a.id DESC LIMIT $3 OFFSET $4"
+        ),
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Project Feed：项目全部活动（成员资格由 API 层守卫校验）。
+pub async fn project_feed(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+    project_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FeedRow>, WorkItemError> {
+    let rows = sqlx::query_as::<_, FeedRow>(
+        &format!(
+            "{FEED_SELECT} \
+          WHERE a.tenant_id = $1 AND a.project_id = $3 \
+          ORDER BY a.created_at DESC, a.id DESC LIMIT $4 OFFSET $5"
+        ),
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .bind(project_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Product Feed：产品维度活动（成员资格由 API 层守卫校验）。
+pub async fn product_feed(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+    product_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<FeedRow>, WorkItemError> {
+    let rows = sqlx::query_as::<_, FeedRow>(
+        &format!(
+            "{FEED_SELECT} \
+          WHERE a.tenant_id = $1 AND a.product_id = $3 \
+          ORDER BY a.created_at DESC, a.id DESC LIMIT $4 OFFSET $5"
+        ),
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .bind(product_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// 已读状态写面（PA-05-09）：批量标记/清除 Read；只动 read_at，不碰
+/// Notified/Processed/Approved（四概念互不等同）。
+pub async fn mark_read_state(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+    item_ids: &[Uuid],
+    read: bool,
+) -> Result<u64, WorkItemError> {
+    if item_ids.is_empty() {
+        return Err(WorkItemError::Validation("item_ids must not be empty"));
+    }
+    let result = if read {
+        sqlx::query(
+            "INSERT INTO core.work_item_read_state (tenant_id, principal_id, item_id, read_at) \
+             SELECT $1, $2, x.item_id, now() \
+               FROM unnest($3::uuid[]) AS x(item_id) \
+             ON CONFLICT (principal_id, item_id) \
+               DO UPDATE SET read_at = now()",
+        )
+        .bind(tenant_id)
+        .bind(principal_id)
+        .bind(item_ids)
+        .execute(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "UPDATE core.work_item_read_state SET read_at = NULL \
+              WHERE tenant_id = $1 AND principal_id = $2 AND item_id = ANY($3)",
+        )
+        .bind(tenant_id)
+        .bind(principal_id)
+        .bind(item_ids)
+        .execute(pool)
+        .await?
+    };
+    Ok(result.rows_affected())
+}

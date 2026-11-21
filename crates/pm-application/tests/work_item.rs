@@ -442,3 +442,154 @@ async fn relation_validation_and_removal(pool: PgPool) {
     assert_eq!(remaining, 0);
     assert_eq!(activity_count(&pool, item_a, "relation_changed").await, 2);
 }
+
+// ─────────────────────────────────────────── 三 Feed 视角（批次 C）
+
+use pm_application::work_item::{mark_read_state, my_feed, product_feed, project_feed};
+
+async fn seed_task_with_activity(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    principal_id: Uuid,
+    title: &str,
+) -> Uuid {
+    let target_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO delivery.task (id, project_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, $3, 'draft', 1, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
+    )
+    .bind(target_id)
+    .bind(project_id)
+    .bind(title)
+    .execute(pool)
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    let tenant = project_tenant(&mut tx, project_id).await.unwrap();
+    let item = pm_application::work_item::ensure_work_item_for_target(
+        &mut tx,
+        tenant,
+        "task",
+        target_id,
+        Some(project_id),
+        "open",
+        Some(principal_id),
+    )
+    .await
+    .unwrap();
+    record_activity(
+        &mut tx,
+        tenant,
+        item,
+        Some(project_id),
+        None,
+        "created",
+        "human",
+        Some(principal_id),
+        "seeded feed task",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let (_, _, _) = (tenant_id, title, target_id);
+    item
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
+    let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
+    seed_task_with_activity(&pool, tenant_id, project_id, principal_id, "Feed A").await;
+
+    // 非成员视角：什么都看不到（既非 project_member 也非 product_member）。
+    let outsider = Uuid::new_v4();
+    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Out')")
+        .bind(outsider)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let empty = my_feed(&pool, tenant_id, outsider, 50, 0).await.unwrap();
+    assert!(empty.is_empty());
+
+    // 项目成员视角：可见。
+    sqlx::query(
+        "INSERT INTO core.project_member (project_id, principal_id, tenant_id, role) \
+         VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(project_id)
+    .bind(principal_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    assert_eq!(feed.len(), 1);
+    assert!(feed[0].read_at.is_none());
+
+    // 标记已读 → my_feed 带 read_at；未读清除后回 None（PA-05-09 Read 可逆）。
+    let item_id = feed[0].item_id;
+    mark_read_state(&pool, tenant_id, principal_id, &[item_id], true)
+        .await
+        .unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    assert!(feed[0].read_at.is_some());
+    mark_read_state(&pool, tenant_id, principal_id, &[item_id], false)
+        .await
+        .unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    assert!(feed[0].read_at.is_none());
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn project_and_product_feeds_scope_correctly(pool: PgPool) {
+    let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
+    seed_task_with_activity(&pool, tenant_id, project_id, principal_id, "P Task").await;
+
+    let project_rows =
+        project_feed(&pool, tenant_id, principal_id, project_id, 50, 0).await.unwrap();
+    assert_eq!(project_rows.len(), 1);
+    assert_eq!(project_rows[0].target_type, "task");
+
+    // Product Feed：活动未挂产品 → 空；挂上后可见（team 先建满足外键）。
+    let team_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.team (id, tenant_id, name) VALUES ($1, $2, 'Feed Team')",
+    )
+    .bind(team_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let product_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.product (id, team_id, tenant_id, key, name) \
+         VALUES ($1, $2, $3, 'FEED', 'Feed Product')",
+    )
+    .bind(product_id)
+    .bind(team_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let empty = product_feed(&pool, tenant_id, principal_id, product_id, 50, 0)
+        .await
+        .unwrap();
+    assert!(empty.is_empty());
+    let item_id: Uuid = sqlx::query_scalar("SELECT id FROM core.work_item LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE core.work_item_activity SET product_id = $1 WHERE item_id = $2")
+        .bind(product_id)
+        .bind(item_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rows = product_feed(&pool, tenant_id, principal_id, product_id, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+}

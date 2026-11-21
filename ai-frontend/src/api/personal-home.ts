@@ -1,12 +1,7 @@
 import { http } from "@/api/base";
-import {
-  listAuditLogs,
-  listDecisions,
-  listPrincipals,
-  listProjects,
-  listTasks
-} from "./pm";
-import type { AuditLog, ListResponse, Principal, Project } from "./types";
+import { fetchMyFeed } from "./feeds";
+import { listDecisions, listProjects, listTasks } from "./pm";
+import type { ListResponse, Principal, Project } from "./types";
 import type { DecisionRecord } from "./workspace-view";
 
 /**
@@ -428,35 +423,31 @@ export async function loadPersonalProjects(
   };
 }
 
-/** 活动区块：近期审计事件 */
+/**
+ * 活动区块：统一信息流 My Feed（PA-05-08）。
+ *
+ * 2026-11-21 起数据源从「全量审计日志前 12 条」切换为
+ * `GET /v1/pm/feeds/my`——按 Project ∪ Product Membership 路由的去重活动，
+ * 语义对齐「Feed 是统一 Activity 数据的视图，不另起数据源」。
+ */
 export async function loadPersonalActivity(
   ctx: PersonalContext
 ): Promise<ActivityEntry[]> {
-  const [auditRes, principalsRes] = await Promise.all([
-    listAuditLogs({ page: 1, size: 50 }),
-    listPrincipals({ page: 1, size: 200 })
-  ]);
-  const audits = auditRes.items ?? [];
-  const principals = principalsRes.items ?? [];
-
-  const principalById = new Map<string, Principal>();
-  for (const principal of principals)
-    principalById.set(principal.id, principal);
-
-  return audits.slice(0, 12).map((log: AuditLog) => {
-    const actor = principalById.get(log.actor_id);
-    const actorKind = actorKindOf(actor);
+  const feed = await fetchMyFeed(12, 0);
+  return feed.map(row => {
+    const actorKind: ActivityActorKind =
+      row.actor_type === "agent" ? "ai" : "human";
     return {
-      id: log.id,
+      id: row.id,
       actorKind,
-      actorName: actor?.display_name ?? "",
-      eventKind: classifyEvent(log.action, actorKind),
-      action: log.action,
-      targetType: log.target_type,
-      projectId: log.project_id,
-      projectName: ctx.projectById.get(log.project_id)?.name ?? "",
-      objectRef: shortRef(log.target_id),
-      occurredAt: log.created_at
+      actorName: "",
+      eventKind: classifyEvent(row.activity_type, actorKind),
+      action: row.activity_type,
+      targetType: row.target_type,
+      projectId: row.project_id ?? "",
+      projectName: ctx.projectById.get(row.project_id ?? "")?.name ?? "",
+      objectRef: row.item_title,
+      occurredAt: row.created_at
     };
   });
 }

@@ -291,6 +291,8 @@ fn build_router(
         // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
         .merge(crate::task_dependencies::router())
         .merge(crate::task_products::router())
+        // 统一信息流三视角 + 已读状态（PA-05-08/09 批次 C）。
+        .merge(crate::feeds::router())
         .merge(crate::human_consultations::router())
         .merge(crate::pm_tasks::router())
         .merge(crate::pm_execution::router())

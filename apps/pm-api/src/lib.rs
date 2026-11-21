@@ -66,5 +66,6 @@ pub mod team_llm_catalog;
 pub mod team_llm_guard;
 pub mod team_onboarding;
 pub mod products;
+pub mod feeds;
 pub mod team_members;
 pub mod viz_handlers;
