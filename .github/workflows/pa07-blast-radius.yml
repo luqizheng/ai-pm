@@ -24,6 +24,10 @@ permissions:
 jobs:
   blast-radius-regression:
     runs-on: ubuntu-latest
+    # The repository's local .cargo/config.toml defaults to sccache;
+    # hosted runners do not install it, so use env as a transparent wrapper.
+    env:
+      RUSTC_WRAPPER: env
     steps:
       - name: Checkout
         uses: actions/checkout@v4
