@@ -4,7 +4,8 @@
 - **复核日期：** 2026-11-22
 - **仓库：** `luqizheng/ai-pm`
 - **分支：** `master`
-- **复核 HEAD：** `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb`
+- **原始差异复核 HEAD：** `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb`
+- **本次修复后 HEAD：** `e0986bebcd617918c4ee4b343954034b58b891f7`
 - **原始审计基准：** `75094e1c2b88719d34364373b338609ed3805b32`
 - **复核方式：** Git compare、提交 diff、当前源码、测试源码和相关规范交叉核对
 - **范围限制：** 本报告只核验原始 IMP-002 之后的提交差异及其中可确认的门禁问题；不是对 IMP-001~019 的全量重新实跑。
@@ -14,7 +15,7 @@
 | 项目 | 当前判定 | 证据 |
 |---|---|---|
 | E2：AI 经命令通道将 Task 置为 Ready | **RESOLVED** | `6ed0f1a` 单点守卫 + AiPm/DevAgent 拒绝、Human 放行测试 |
-| P2：批量 Task 的 blast radius 低估 | **OPEN** | 当前编排器按 proposal 数量计数；单条 CreateTasks 可承载多条 Task |
+| P2：批量 Task 的 blast radius 低估 | **IMPLEMENTED — TESTS NOT EXECUTED HERE** | `impact_count()` + 编排器按整轮实际影响工作项数量饱和求和；新增 10/11 条目阈值测试源码 |
 | IMP-001~019 其余状态 | **INHERITED — NOT RE-VERIFIED** | 继续引用 IMP-002 的原始 `75094e1` 核对结果，不声称本报告重新核验 |
 
 ## 2. 原始审计与提交差异
@@ -56,43 +57,42 @@ Git compare `75094e1...6ed0f1a` 显示：
 
 ## 4. P2：批量 Task 的 blast radius 低估
 
-**判定：OPEN — current source confirms the gap.**
+**判定：IMPLEMENTED — static source review passed; test execution pending.**
 
-### 当前代码证据
+### 修复提交与代码证据
 
-- `crates/pm-ai/src/orchestrator.rs`：当前以 `result.proposals.len()` 计算 `blast_radius`，再将同一个值传给每条提案的 self-review。
-- `crates/pm-ai/src/self_review.rs`：风险判断按 proposal 级别应用阈值；当前自审函数不读取命令的批量项目数量。
-- `crates/pm-domain/src/command.rs`：`ProjectCommand::CreateTasks` 持有 `tasks: Vec<TaskDraft>`。
-- `crates/pm-application/src/command_executor/guards.rs`：单条批量命令上限为 `MAX_BATCH_ITEMS = 200`。
-- `crates/pm-application/src/project_import/proposal.rs`：导入路径按 200 条分块；这只能限制单条命令大小，不能解决 AI 提案的 proposal 数量与实际影响 Task 数量不一致的问题。
-- `crates/pm-application/src/policy_engine.rs`：`create_tasks` 不属于红线命令；策略注释将大影响面升级与 `blast_radius > 10` 联系起来。
+- `626c6e41bd1e1012964efe7b82ec17b7527e25bb`：新增 `ProjectCommand::impact_count()`，批量命令按集合长度计数，普通单对象命令计为 1；增加领域单测覆盖 11 个 Task、批量里程碑/需求和单对象命令。
+- `a69297284b75262cb75c8ae04bb6843073f1d985`：编排器对整轮 proposals 的 `impact_count()` 做饱和求和，并继续将聚合值传给 self-review。
+- `e0986bebcd617918c4ee4b343954034b58b891f7`：增加 self-review 回归测试，验证单条 CreateTasks 提案含 10 个 Task 不因 blast radius 升级，含 11 个 Task 会升级。
+- `crates/pm-ai/src/self_review.rs`：风险判断顺序保持不变，red line 仍优先于低置信度和 blast radius；函数只接收聚合整数，不读取命令内容。
+- `crates/pm-application/src/policy_engine.rs`、`policies/ai-pm-ai-lead-v2.yaml` 和 policy 测试副本的注释已同步，明确阈值按整轮实际影响工作项数量计算。
 
-### 具体影响
+### 当前语义
 
-当一条高置信度 `CreateTasks` 提案包含 11–200 个 Task 时，当前 proposal 数量仍为 1。若其他升级条件均未命中，proposal 数量型 blast radius 不会触发阈值 10 的升级判断。
-
-这与策略注释中“大批量应通过 blast-radius 升级”的预期不一致。
-
-### 推荐修复
-
-将 blast radius 定义为**提案所代表的受影响工作项数量**，而不是提案记录条数：
+`blast_radius = saturating_sum(proposal.command.impact_count())`。
 
 - 普通单对象命令计为 1。
-- `CreateTasks` 按 `tasks.len()` 计数。
-- 其他批量命令按其项目数量计数。
-- 对一轮 proposals 求和，使用饱和加法避免整数溢出。
-- 仍保持现有阈值 `> 10`，不改变 `create_tasks` 的授权类别，也不把它重新加入红线。
-- 自审只读取批量集合的 cardinality，不读取模型控制的任务标题、描述或其他内容，不扩大 prompt-injection 输入面。
+- CreateTasks / CreateRequirements / CreateMilestones / WriteDocuments 按条目数计数。
+- 阈值仍是严格大于 10；10 不升级，11 升级。
+- 不改变 `create_tasks` 的授权类别，不把它重新加入红线，也不改变 PA-06 的 AI Task 创建授权。
+- 不读取模型控制的标题、描述等内容，避免扩大 prompt-injection 输入面。
 
-应补充阈值边界测试：10 个受影响 Task 不因 blast radius 单独升级；11 个受影响 Task 必须升级。还应覆盖多条提案合计影响数量超过阈值的情况。
+### 测试执行状态
 
-**本报告不声称该修复已经完成。** 在代码和测试提交完成前，该项保持 OPEN。
+测试源码已补充，但本次会话没有成功运行 Cargo 测试；GitHub 对相关提交返回的 commit status 为 `pending` 且没有状态检查记录。因此本报告只确认代码和测试源码已提交，并完成静态交叉核对；**不宣称测试已通过**。合并/发布前仍需在可运行 Rust 工具链和 PostgreSQL 测试环境中执行：
+
+- `cargo test -p pm-domain impact_count_uses_batch_cardinality_and_single_commands_count_one`
+- `cargo test -p pm-ai create_tasks_batch_cardinality_drives_blast_radius_threshold`
+- `cargo test -p pm-ai`
+- `cargo test -p pm-application`
+
+**结论：** 原 P2 代码缺陷已实施修复，静态审查通过；测试执行仍是发布前验证项。
 
 ## 5. PA-06 / PA-07 授权一致性
 
 E2 修复落实了 PA-06 的授权边界：AI 可以分析、拆解和创建授权范围内的 Draft Task，但不能自行完成 Draft → Ready 的人工确认门。
 
-推荐的 P2 修复只调整风险规模的计算，不改变 AI 创建执行性 Task 的授权原则：
+P2 修复只调整风险规模的计算，不改变 AI 创建执行性 Task 的授权原则：
 
 - 不恢复 `create_tasks` 红线。
 - 不把普通任务拆解改成逐条人工审批。
@@ -101,7 +101,7 @@ E2 修复落实了 PA-06 的授权边界：AI 可以分析、拆解和创建授�
 
 ## 6. 后续核验边界
 
-IMP-002 的 IMP-001~019 统计（9 已完成、5 部分完成、5 未完成）仍是原始 HEAD `75094e1` 的审计快照。本报告确认原始审计之后的 E2 修复，并复核了 P2 问题仍存在；它没有重新运行其余 19 项的全部代码、迁移和测试核验。
+IMP-002 的 IMP-001~019 统计（9 已完成、5 部分完成、5 未完成）仍是原始 HEAD `75094e1` 的审计快照。本报告确认原始审计之后的 E2 修复，并记录 P2 修复代码和测试源码已提交；但未在本次会话重新运行 Rust 测试，也没有重新核验其余 19 项的全部代码、迁移和测试。
 
 后续如需对全部 IMP-001~019 出具当前 HEAD 的正式状态，应逐项重新核对对应实现、migration、专项测试和运行结果，并为每项记录最新证据 commit。
 
