@@ -6,7 +6,7 @@ import {
   type RouterHistory
 } from "vue-router";
 
-import { globalNavConfig, projectNavConfig, type NavItem } from "./navigation";
+import { auxiliaryNavItems, mainNavGroups, type NavItem } from "./navigation";
 import { AUTH_PATHS, authRoutes } from "./auth";
 import { getAccessToken, getRefreshToken } from "@/api/base/token-storage";
 import SettingsLandingView from "@/views/settings/SettingsLandingView.vue";
@@ -80,16 +80,22 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
   return routes;
 }
 
-/** 全部路由记录（导航树 → 路由；多配置源派生，见 navigation.ts 三源说明） */
+/** 全部路由记录（导航树 → 路由；mainNavGroups + auxiliaryNavItems 派生） */
 export function buildRoutes(): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [];
 
-  // 导航派生路由：全局 + 项目两源。settingsNavConfig 仅供侧栏渲染（C3 接线），
-  // 其路由由下方手工段注册，不在此派生——避免重复注册触发重复路径守卫。
-  for (const group of [...globalNavConfig, ...projectNavConfig]) {
+  // 导航派生路由：L2 主菜单组 + 撤出主菜单但路由保留的 auxiliary 源
+  // （Figma「三层」IA，见 navigation.ts）。manualRoute 条目（仓库/开发环境，
+  // 路径在 /project/settings 前缀下）由下方手工段注册，不在此派生——
+  // 避免重复注册触发重复路径守卫。
+  for (const group of mainNavGroups) {
     for (const item of group.items) {
+      if (item.manualRoute) continue;
       routes.push(...navItemRoutes(item));
     }
+  }
+  for (const item of auxiliaryNavItems) {
+    routes.push(...navItemRoutes(item));
   }
 
   // 认证路由在兜底之前注册，避免被 404 捕获
@@ -99,9 +105,9 @@ export function buildRoutes(): RouteRecordRaw[] {
   // 与顶栏 Project Switcher 的 Create New Project（canCreate）。
   // 创建成功即工作：携带 project_id 直接进入项目总控台（2026-11-05 用户裁决，
   // 原「跳初始化总览」页已删除）。
-  // 项目认知（/project/cognition）已迁入导航树（projectNavConfig，C3），
-  // 路由由导航配置派生；项目基线（/project/baseline）保持手工注册——
-  // 入口 = 总控台 Baseline 卡片（NAV-0202，Phase 2 接线）。
+  // 项目认知（/project/cognition）在 auxiliaryNavItems（撤出主菜单、路由
+  // 保留），路由仍由导航配置派生；项目基线（/project/baseline）保持手工
+  // 注册——入口 = 总控台 Baseline 卡片（NAV-0202，Phase 2 接线）。
   routes.push({
     path: "/project/baseline",
     component: BaselinePage,
@@ -123,9 +129,9 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "shell.app.side.item.assistant" }
   });
 
-  // 项目总控台（/project/command-center）已迁入导航树（projectHomeGroup，
-  // Current Project 区域置顶单条，C3）；其 mock-preview 分支仍受
-  // release-guard 约束（AGENTS 规则 4），不得视作已完成业务能力。
+  // 项目总控台（/project/command-center）在导航树（projectOverview 组）；
+  // 其 mock-preview 分支仍受 release-guard 约束（AGENTS 规则 4），
+  // 不得视作已完成业务能力。
 
   // ─── 执行与协作（S05 · docs/scenarios/s05/ui，2026-11-10）───
   // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /

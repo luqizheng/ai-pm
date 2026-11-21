@@ -197,44 +197,40 @@ shell:
       expand: 展开导航
       plannedBadge: 规划
       group:
-        personal: 个人
-        workspace: 工作区
-        project: 当前项目
-        modules: 项目模块
-        admin: 管理
+        global: 全局
+        projectOverview: 项目总览
+        development: 开发
+        knowledge: 知识
+        environment: 环境
+        administration: 管理
       item:
         personalWorkspace: 个人工作区
-        personalHome: 我的主页
         dashboard: 团队总览
         projects: 项目
-        repository: 代码仓库
+        globalSearch: 全局搜索
+        repository: 仓库
         discovery: 代码发现
         requirements: 需求
         taskManagement: 任务管理
         technicalDesign: 技术设计
-        execution: AI 执行中心
+        execution: AI 执行
         assistant: AI 助手
         knowledge: 知识库
+        knowledgeReview: 知识评审
         devenv: 开发环境
         devenvDevices: 设备
         devenvExecutors: 执行器
         devenvRunners: Runners
-        commandCenter: 项目总控台
+        commandCenter: 项目总览
         analysis: 分析
         productCognition: 产品认知
         projectCognition: 项目认知
-        environments: 执行环境
         adminSettings: 设置
         aiProviders: AI Provider
-        adminMembers: 成员
         adminAnnouncements: 公告管理
-        notifications: 通知中心
+        notifications: 收件箱
         teamSettings: 团队设置
         gitCredentials: Git 凭证（SSH Keys）
-      sub:
-        overview: 概览
-        branches: 分支
-      projectMarker: 当前项目
       shortcuts: 键盘快捷键
       shortcutsHint: 按 ? 查看全部快捷键
     project:

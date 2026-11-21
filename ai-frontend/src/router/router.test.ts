@@ -2,13 +2,14 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 
-import { flatNavItems } from "./navigation";
+import { flatNavItems, mainNavGroups } from "./navigation";
 import { AUTH_PATHS } from "./auth";
 import { buildRoutes } from "./index";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
- * 路由表契约：**由导航树派生**，不允许二者漂移。
+ * 路由表契约：**由导航树派生**（mainNavGroups + auxiliaryNavItems，
+ * manualRoute 条目走手工段），不允许二者漂移。
  */
 describe("router", () => {
   it("每个导航项都有对应路由", () => {
@@ -18,6 +19,18 @@ describe("router", () => {
     for (const item of flatNavItems) {
       expect(paths.has(item.path)).toBe(true);
     }
+  });
+
+  it("manualRoute 条目（仓库/开发环境）路由由手工段注册且仅注册一次", () => {
+    const manualPaths = mainNavGroups
+      .flatMap(g => g.items)
+      .filter(i => i.manualRoute)
+      .map(i => i.path);
+    expect(manualPaths).toEqual([
+      "/project/settings/repositories",
+      "/project/settings/devenv"
+    ]);
+    // 路径唯一性由「路由表无重复路径」契约覆盖（重复派生会在此暴露）
   });
 
   it("每个子菜单项都有对应路由", () => {
@@ -96,7 +109,7 @@ describe("router", () => {
     expect(detail!.component).not.toBe(PlaceholderView);
   });
 
-  it("C3：项目认知与项目总控台由导航派生为真组件路由", () => {
+  it("项目认知（auxiliary 源）与项目总控台由导航派生为真组件路由", () => {
     const routes = buildRoutes();
     for (const path of ["/project/cognition", "/project/command-center"]) {
       const route = routes.find(r => r.path === path);

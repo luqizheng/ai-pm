@@ -6,54 +6,51 @@ import {
   ChevronRight,
   Keyboard,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Search
 } from "lucide-vue-next";
 import { useRoute } from "vue-router";
 
 import IconTooltip from "./IconTooltip.vue";
-import ProjectSwitcher from "./ProjectSwitcher.vue";
 
 import { NavigationGroup } from "@/components/ui/navigation-group";
 import { SidebarItem } from "@/components/ui/sidebar-item";
 import {
-  globalNavConfig,
   isNavChildActive,
   isNavItemActive,
-  projectNavConfig,
-  settingsNavConfig,
+  mainNavGroups,
   type NavGroup,
-  type NavItem,
-  type NavRegionId
+  type NavItem
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
-import { useAssistantStore } from "@/stores/assistant";
 import {
   useReviewCenterStore,
   REVIEW_CENTER_PATH
 } from "@/stores/reviewCenter";
 
 /**
- * 左导航（AI R&D Workspace Application Shell §2B + Figma「03/04/05」）。
+ * 左导航（Figma「三层」画布 157:3603 · Global Navigation — Level 3 Active）。
  *
- * 一级 = 三个导航上下文（不混成一张扁平菜单）：
- *   personal —— 个人
- *   team     —— 工作区
- *   project  —— 当前项目（有当前项目时渲染）
- * 遗留管理入口（NAV-0103 待核验）作为末尾一级组原样保留。
+ * L2 = 业务域分组扁平列表（mainNavGroups 单源，顺序即视觉顺序）：
+ *   全局 → 项目总览 → 开发 → 知识 → 环境 → 管理。
+ *   四个项目域组（projectScoped）仅在选中项目时渲染
+ *   （shell.currentProjectId 单源，R2-D4：无项目不渲染、不伪造上下文）；
+ *   管理组默认折叠（Figma ADMINISTRATION Collapsed 态）。
+ * 项目/团队上下文切换只在顶栏（"CONTEXT SELECTOR · NOT A NAVIGATION
+ * LEVEL"），侧栏不内嵌切换器；分组间分隔线按 Figma 位置：全局组后、
+ * 环境组与管理组之间。
  *
- * 层级统一由 DS 组件组合（NavigationGroup 13:33391 + SidebarItem 13:33329）：
- *   一级 NavigationGroup = 上下文；二级 NavigationGroup = 上下文内分区
- *   （项目总控台 / 项目业务模块 / 项目设置）。
- *
+ * 层级统一由 DS 组件组合（NavigationGroup 13:33391 + SidebarItem 13:33329）。
  * 两态（Figma 7-3454 展开 232px / 7:3724 折叠 60px）：
- *   - 展开：一级/二级分组可折叠、条目带文案、Repository 带上下文子菜单
- *   - 折叠：所有分组行隐藏为纯图标、组间加分隔线、未读项带圆点，悬停出 Tooltip
+ *   - 展开：分组可折叠、条目带文案、开发环境带子菜单
+ *   - 折叠：分组标题行隐藏为纯图标、组间分隔线、未读项圆点，悬停出 Tooltip
  */
+
+const emit = defineEmits<{ "open-search": [] }>();
 
 const { t } = useI18n();
 const route = useRoute();
 const shell = useShellStore();
-const assistant = useAssistantStore();
 const reviewCenter = useReviewCenterStore();
 
 // 徽标数据：随当前项目拉聚合（R09；静默进行，不阻塞导航渲染）
@@ -65,8 +62,14 @@ watch(
   { immediate: true }
 );
 
-/** 各分组（一级上下文与二级分区共用）的折叠状态，默认全部展开 */
-const collapsedGroups = ref<Record<string, boolean>>({});
+/** 各分组折叠状态；管理组默认折叠（Figma ADMINISTRATION Collapsed） */
+const collapsedGroups = ref<Record<string, boolean>>(
+  Object.fromEntries(
+    mainNavGroups
+      .filter(group => group.defaultCollapsed)
+      .map(group => [group.id, true])
+  )
+);
 
 const currentPath = computed(() => route.path);
 
@@ -89,67 +92,19 @@ function onGroupToggle(group: { id: string }, collapsed: boolean) {
   };
 }
 
-/** 一级导航上下文（对应 NAV_REGION_ORDER，渲染顺序即视觉顺序） */
-interface NavContextView {
-  id: NavRegionId;
-  labelKey: string;
-  badge?: number;
-  sections: NavGroup[];
-}
-
 /**
- * 渲染树：Personal → Team → Current Project（有当前项目时）→ 遗留管理入口。
- *
- * 每个上下文内部按分区拆列（二级 NavigationGroup）；无独立分区的上下文
- * （个人/工作区/管理）用 headerless 分区承载条目，避免出现重复的组标题。
+ * 渲染列表：项目域组按当前项目条件渲染（保持 mainNavGroups 顺序）。
  */
-const renderedContexts = computed<NavContextView[]>(() => {
-  const contexts: NavContextView[] = [];
+const renderedGroups = computed<NavGroup[]>(() =>
+  mainNavGroups.filter(
+    group => !group.projectScoped || shell.currentProjectId !== null
+  )
+);
 
-  const personal = globalNavConfig.find(group => group.id === "personal");
-  if (personal) {
-    contexts.push({
-      id: "personal",
-      labelKey: "shell.app.side.group.personal",
-      sections: [{ ...personal, id: "personalItems", headerless: true }]
-    });
-  }
-
-  const workspace = globalNavConfig.find(group => group.id === "workspace");
-  if (workspace) {
-    contexts.push({
-      id: "team",
-      labelKey: "shell.app.side.group.workspace",
-      sections: [{ ...workspace, id: "workspaceItems", headerless: true }]
-    });
-  }
-
-  // 无当前项目时整个项目区不渲染：不出现灰色禁用的空项目菜单、
-  // 不伪造默认项目上下文（R2-D4）。
-  if (shell.currentProjectId) {
-    const sections = projectNavConfig.map(group =>
-      group.id === "projectHome" ? { ...group, headerless: true } : group
-    );
-    sections.push(settingsNavConfig);
-    contexts.push({
-      id: "project",
-      labelKey: "shell.app.side.group.project",
-      sections
-    });
-  }
-
-  const admin = globalNavConfig.find(group => group.id === "admin");
-  if (admin) {
-    contexts.push({
-      id: "adminLegacy",
-      labelKey: admin.labelKey,
-      badge: admin.badge,
-      sections: [{ ...admin, id: "adminItems", headerless: true }]
-    });
-  }
-
-  return contexts;
-});
+/** 分组分隔线（Figma：全局组后、环境组与管理组之间） */
+function showDivider(index: number, group: NavGroup) {
+  return index > 0 && (index === 1 || group.id === "administration");
+}
 
 function isActive(item: NavItem) {
   if (isNavItemActive(item, currentPath.value)) return true;
@@ -165,8 +120,8 @@ function isActive(item: NavItem) {
 }
 
 /**
- * 动态徽标数：人工审核中心 = 项目级聚合待处理数（R09，与指挥中心面板同源）。
- * 聚合不可用或为 0 时不显示——不伪造数字（V1.1 §6.3）。
+ * 动态徽标数：知识评审（人工审核中心）= 项目级聚合待处理数（R09，
+ * 与指挥中心面板同源）。聚合不可用或为 0 时不显示——不伪造数字（V1.1 §6.3）。
  */
 function itemBadge(item: NavItem): number | undefined {
   if (item.path === REVIEW_CENTER_PATH) {
@@ -210,18 +165,6 @@ function itemBindings(item: NavItem): {
     badgeType: badge === undefined && planned ? "status" : "count"
   };
 }
-
-/**
- * 切换项目（Figma「07 — Project Switching」）。
- *
- * 两阶段：store 进入 switching 态（不显示旧项目数据），
- * 新上下文就绪后才落地新项目；目标目的地保持不变
- * （同一目的地在新项目下解析，不可达时回落到项目概览）。
- */
-async function onSelectProject(id: string) {
-  // 切项目守卫：有活跃会话时先确认（G12 · DR-C6）
-  shell.requestProjectSwitch(id, assistant.activeConversationId !== null);
-}
 </script>
 
 <template>
@@ -231,7 +174,7 @@ async function onSelectProject(id: string) {
     :aria-label="t('shell.app.side.label')"
     :data-state="shell.sidebarState"
   >
-    <!-- 导航控制行：折叠/展开开关（Figma：panel-left-close / panel-left-open） -->
+    <!-- 导航控制行：WORKSPACE 标识 + 折叠/展开开关（Figma：panel-left-close/open） -->
     <div class="shell-sidenav__control">
       <template v-if="!shell.sidebarCollapsed">
         <span class="shell-sidenav__control-label">WORKSPACE</span>
@@ -253,104 +196,102 @@ async function onSelectProject(id: string) {
     </div>
 
     <div class="shell-sidenav__groups">
-      <template v-for="(context, index) in renderedContexts" :key="context.id">
-        <!-- 上下文分隔线（V1.2 §6.1：区域边界） -->
+      <template v-for="(group, index) in renderedGroups" :key="group.id">
+        <!-- 分组分隔线（Figma：全局组后 / 管理组前） -->
         <div
-          v-if="index > 0"
+          v-if="showDivider(index, group)"
           class="shell-sidenav__divider"
           aria-hidden="true"
         />
 
-        <!-- 一级：导航上下文（个人 / 工作区 / 当前项目 / 管理） -->
         <NavigationGroup
-          :title="t(context.labelKey)"
-          :badge="context.badge"
+          :title="t(group.labelKey)"
           :headerless="shell.sidebarCollapsed"
-          :collapsed="groupCollapsed(context)"
-          @update:collapsed="value => onGroupToggle(context, value)"
+          :collapsed="groupCollapsed(group)"
+          @update:collapsed="value => onGroupToggle(group, value)"
         >
-          <!-- 紧凑 Project Switcher（R2-D3：复用现有切换守卫链
-               requestProjectSwitch；折叠态收紧为图标入口，项目名识别由
-               顶栏项目芯片承载。旧版大尺寸项目头不恢复——展开过大已裁撤） -->
-          <div v-if="context.id === 'project'" class="shell-sidenav__project">
-            <ProjectSwitcher
-              variant="header"
-              searchable
-              :projects="shell.projects"
-              :current-id="shell.currentProjectId"
-              :switching-to-id="shell.switchingProjectId"
-              @select="onSelectProject"
-            />
-          </div>
-
-          <!-- 二级：上下文内分区（项目总控台 / 项目业务模块 / 项目设置） -->
-          <NavigationGroup
-            v-for="section in context.sections"
-            :key="section.id"
-            :title="t(section.labelKey)"
-            :headerless="shell.sidebarCollapsed || section.headerless"
-            :collapsed="groupCollapsed(section)"
-            @update:collapsed="value => onGroupToggle(section, value)"
-          >
-            <template v-for="item in section.items" :key="item.path">
-              <IconTooltip
-                v-if="shell.sidebarCollapsed"
-                :content="itemLabel(item)"
-                side="right"
+          <template v-for="item in group.items" :key="item.path">
+            <IconTooltip
+              v-if="shell.sidebarCollapsed"
+              :content="itemLabel(item)"
+              side="right"
+            >
+              <SidebarItem
+                v-bind="itemBindings(item)"
+                :aria-label="itemLabel(item)"
               >
-                <SidebarItem
-                  v-bind="itemBindings(item)"
-                  :aria-label="itemLabel(item)"
-                >
-                  <template v-if="hasUnreadDot(item)" #trailing>
-                    <span class="shell-sidenav__dot" aria-hidden="true" />
-                  </template>
-                </SidebarItem>
-              </IconTooltip>
-
-              <SidebarItem v-else v-bind="itemBindings(item)">
-                <template v-if="item.expandable" #trailing>
-                  <ChevronDown
-                    v-if="item.children"
-                    :size="12"
-                    class="shell-sidenav__chevron"
-                    aria-hidden="true"
-                  />
-                  <ChevronRight
-                    v-else
-                    :size="12"
-                    class="shell-sidenav__chevron"
-                    aria-hidden="true"
-                  />
+                <template v-if="hasUnreadDot(item)" #trailing>
+                  <span class="shell-sidenav__dot" aria-hidden="true" />
                 </template>
               </SidebarItem>
+            </IconTooltip>
 
-              <!-- 上下文子菜单（Figma：Repository 下的 Overview / Branches） -->
-              <div
-                v-if="
-                  !shell.sidebarCollapsed &&
-                  item.children?.length &&
-                  isActive(item)
-                "
-                class="shell-sidenav__submenu"
+            <SidebarItem v-else v-bind="itemBindings(item)">
+              <template v-if="item.expandable" #trailing>
+                <ChevronDown
+                  v-if="item.children"
+                  :size="12"
+                  class="shell-sidenav__chevron"
+                  aria-hidden="true"
+                />
+                <ChevronRight
+                  v-else
+                  :size="12"
+                  class="shell-sidenav__chevron"
+                  aria-hidden="true"
+                />
+              </template>
+            </SidebarItem>
+
+            <!-- 开发环境子菜单（Devices/Executors/Runners），父项激活时呈现 -->
+            <div
+              v-if="
+                !shell.sidebarCollapsed &&
+                item.children?.length &&
+                isActive(item)
+              "
+              class="shell-sidenav__submenu"
+            >
+              <RouterLink
+                v-for="child in item.children"
+                :key="child.path"
+                class="shell-sidenav__subitem"
+                :class="{
+                  'is-active': isNavChildActive(child, currentPath)
+                }"
+                :to="child.path"
               >
-                <RouterLink
-                  v-for="child in item.children"
-                  :key="child.path"
-                  class="shell-sidenav__subitem"
-                  :class="{
-                    'is-active': isNavChildActive(child, currentPath)
-                  }"
-                  :to="child.path"
-                >
-                  {{ t(child.labelKey) }}
-                  <span v-if="child.planned" class="shell-sidenav__planned">{{
-                    t("shell.app.side.plannedBadge")
-                  }}</span>
-                </RouterLink>
-              </div>
-            </template>
-          </NavigationGroup>
+                {{ t(child.labelKey) }}
+                <span v-if="child.planned" class="shell-sidenav__planned">{{
+                  t("shell.app.side.plannedBadge")
+                }}</span>
+              </RouterLink>
+            </div>
+          </template>
+
+          <!-- 全局搜索动作项（Figma GLOBAL 组末条）：无路由，打开 ⌘K 命令面板。
+               仅全局组渲染——动作项挂在分组 v-for 内，缺组级守卫会在每组重复 -->
+          <template v-if="group.id === 'global'">
+            <IconTooltip
+              v-if="shell.sidebarCollapsed"
+              :content="t('shell.app.side.item.globalSearch')"
+              side="right"
+            >
+              <SidebarItem
+                :label="t('shell.app.side.item.globalSearch')"
+                :icon="Search"
+                collapsed
+                :aria-label="t('shell.app.side.item.globalSearch')"
+                @click="emit('open-search')"
+              />
+            </IconTooltip>
+            <SidebarItem
+              v-else
+              :label="t('shell.app.side.item.globalSearch')"
+              :icon="Search"
+              @click="emit('open-search')"
+            />
+          </template>
         </NavigationGroup>
       </template>
     </div>
@@ -442,15 +383,6 @@ async function onSelectProject(id: string) {
   padding-left: 0;
 }
 
-/* 项目标记行 */
-.shell-sidenav__project {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--size-control-sm);
-  padding: 0 var(--space-3);
-}
-
 .shell-sidenav__chevron {
   flex: none;
   color: var(--ws-text-secondary);
@@ -467,7 +399,7 @@ async function onSelectProject(id: string) {
   border-radius: var(--radius-full);
 }
 
-/* 组分隔线（上下文边界） */
+/* 组分隔线（Figma 分组边界） */
 .shell-sidenav__divider {
   height: var(--border-1);
   margin: 0 var(--space-3);
@@ -554,20 +486,5 @@ async function onSelectProject(id: string) {
   font-size: var(--font-size-micro);
   border: var(--border-1) solid var(--ws-border);
   border-radius: var(--radius-xs);
-}
-
-/* 折叠态：项目头收紧为图标入口 */
-.shell-sidenav.is-collapsed .shell-sidenav__project {
-  justify-content: center;
-  padding: 0;
-}
-
-.shell-sidenav.is-collapsed
-  .shell-sidenav__project
-  :deep(.shell-project-switcher__name),
-.shell-sidenav.is-collapsed
-  .shell-sidenav__project
-  :deep(.shell-project-switcher__chevron) {
-  display: none;
 }
 </style>

@@ -11,13 +11,13 @@ import { mountShell } from "@/components/shell/test-utils";
 describe("PlaceholderView", () => {
   it("渲染路由标题与建设中提示", async () => {
     const { wrapper, router } = mountShell(PlaceholderView);
-    // 仓库管理已迁入 Project Setting（原 /project/repository/overview 现为重定向），
-    // 改用仍是占位的导航项（AI 执行中心）验证标题渲染。
-    await router.push("/project/execution");
+    // /project/execution 已是实页（S05），用仍是占位的导航项
+    // （Product Cognition，auxiliary 源 PLANNED 占位路由）验证标题渲染。
+    await router.push("/project/product-cognition");
     await nextTick();
 
     expect(wrapper.find(".shell-page-header__title").text()).toBe(
-      "AI 执行中心"
+      "产品认知"
     );
     expect(wrapper.find(".shell-placeholder__empty-title").text()).toBe(
       "该页面正在建设中"

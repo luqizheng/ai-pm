@@ -8,4 +8,3 @@ export { default as CommandBar } from "./CommandBar.vue";
 export { default as PageHeader } from "./PageHeader.vue";
 export { default as PageFrame } from "./PageFrame.vue";
 export { default as IconTooltip } from "./IconTooltip.vue";
-export { default as ProjectSwitcher } from "./ProjectSwitcher.vue";

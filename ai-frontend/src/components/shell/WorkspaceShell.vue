@@ -7,6 +7,7 @@ import SearchPalette from "@/components/global/search/SearchPalette.vue";
 import type { SearchCommand, SearchFn } from "@/components/global/search/types";
 import { listProjects } from "@/api/projects";
 import { retrievalQuery } from "@/api/knowledge";
+import { auxiliaryNavItems } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 import { useShellChrome } from "./use-shell-chrome";
 import AssistantColumn from "./AssistantColumn.vue";
@@ -147,6 +148,13 @@ watch(urlProjectId, projectId => {
  */
 const searchCommands = computed<SearchCommand[]>(() => {
   return [
+    // 撤出主菜单但路由保留的页面（Figma「三层」IA auxiliary 源）经命令面板直达
+    ...auxiliaryNavItems.map(item => ({
+      id: `cmd-nav${item.path}`,
+      label: `${t("global.search.commands.navigateModule")} · ${t(item.labelKey)}`,
+      group: "navigate" as const,
+      target: item.path
+    })),
     {
       id: "cmd-open-project",
       label: `${t("global.search.commands.openProject")} · ${shell.currentProject?.name ?? ""}`,
@@ -218,7 +226,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   >
     <TopBar class="workspace-topbar" @search="searchOpen = true" />
 
-    <SideNav class="workspace-leftnav" />
+    <SideNav
+      class="workspace-leftnav"
+      @open-search="searchOpen = true"
+    />
 
     <main class="workspace-main">
       <div class="workspace-main-scroll">
