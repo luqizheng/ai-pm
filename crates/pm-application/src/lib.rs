@@ -57,6 +57,7 @@ pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
 pub mod projc;
+pub mod issue_risk;
 pub mod work_item;
 pub mod project_gate;
 pub mod project_goal;

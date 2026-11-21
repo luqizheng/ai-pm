@@ -293,6 +293,8 @@ fn build_router(
         .merge(crate::task_products::router())
         // 统一信息流三视角 + 已读状态（PA-05-08/09 批次 C）。
         .merge(crate::feeds::router())
+        // Issue / Risk / Blocker 领域对象（PA-05-01 收尾，0052）。
+        .merge(crate::issue_risk::router())
         .merge(crate::human_consultations::router())
         .merge(crate::pm_tasks::router())
         .merge(crate::pm_execution::router())

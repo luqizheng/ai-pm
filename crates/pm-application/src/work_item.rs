@@ -34,7 +34,14 @@ pub type Tx<'a> = sqlx::Transaction<'a, sqlx::Postgres>;
 
 /// V1 首批注册的领域对象（PA-05-01：其他有明确领域语义的对象随后续批次
 /// 显式加入，不强制转化普通文档/讨论）。
-pub const TARGET_TYPES: [&str; 3] = ["task", "requirement", "adr"];
+pub const TARGET_TYPES: [&str; 6] = [
+    "task",
+    "requirement",
+    "adr",
+    "issue",
+    "risk",
+    "blocker",
+];
 
 /// PA-05-03 V1 首批关系类型。
 pub const RELATION_TYPES: [&str; 6] = [
@@ -68,6 +75,32 @@ pub fn requirement_status_semantic(status: &str) -> &'static str {
         "withdrawn" => "cancelled",
         "archived" => "archived",
         _ => "open",
+    }
+}
+
+/// delivery.issue.status → 统一语义。
+pub fn issue_status_semantic(status: &str) -> &'static str {
+    match status {
+        "resolved" => "done",
+        "cancelled" => "cancelled",
+        _ => "open",
+    }
+}
+
+/// delivery.risk.status → 统一语义。
+pub fn risk_status_semantic(status: &str) -> &'static str {
+    match status {
+        "mitigating" => "in_progress",
+        "closed" => "done",
+        _ => "open",
+    }
+}
+
+/// delivery.blocker.status → 统一语义。
+pub fn blocker_status_semantic(status: &str) -> &'static str {
+    match status {
+        "cleared" => "done",
+        _ => "blocked",
     }
 }
 
@@ -105,6 +138,9 @@ async fn target_title(
         "task" => "SELECT title FROM delivery.task WHERE id = $1",
         "requirement" => "SELECT title FROM delivery.requirement WHERE id = $1",
         "adr" => "SELECT title FROM design.adr WHERE id = $1",
+        "issue" => "SELECT title FROM delivery.issue WHERE id = $1",
+        "risk" => "SELECT title FROM delivery.risk WHERE id = $1",
+        "blocker" => "SELECT title FROM delivery.blocker WHERE id = $1",
         _ => return Err(WorkItemError::Validation("unknown work item target type")),
     };
     let title: Option<String> = sqlx::query_scalar(sql)
