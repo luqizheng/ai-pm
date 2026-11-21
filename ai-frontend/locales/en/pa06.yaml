@@ -115,3 +115,71 @@ decisions:
   ctxContinuesText: Only tasks blocked by this decision are waiting; everything else within the boundary continues.
   ctxHistory: Decision history
   ctxWaitingNote: "waiting queue needs_decision count · {count} (may include sources outside this queue)"
+
+execution:
+  loadingEyebrow: Loading execution detail · preserve context
+  emptyTitle: No open execution
+  emptyHint: Tasks within the authorized boundary are claimed and run by agents autonomously; in-flight work appears here.
+  pickTask: Pick a task
+  planEyebrow: Execution plan · live state machine
+  nowLine: "Latest action · {action} · {time}"
+  chainLegend: Chain = PA-06 execution state model (no fabricated steps)
+  depsEyebrow: Plan & dependencies
+  decompositionTitle: Decomposition & dependencies
+  noDependencies: No dependency edges
+  artifactsTitle: Artifacts & verification
+  branch: "Branch · {branch}"
+  repos: "Repositories × {count}"
+  deliverables: "Deliverables × {count}"
+  criteriaCount: "Acceptance criteria × {count}"
+  activityEyebrow: Activity · project record
+  noActivity: No task history yet
+  openVerification: Open verification
+  inspectRecovery: Inspect recovery example
+  updated: updated {time}
+  ctxTitle: Why AI is doing this
+  ctxBadge: Within authorization
+  ctxObjective: Objective & inputs
+  ctxChanged: Why the plan changed
+  ctxChangedText: Plan adjustments serve the confirmed objective; changes to objective, scope or acceptance require human confirmation.
+  ctxSafe: Unaffected work
+  ctxSafeText: Waiting or adjusting this task does not stop other authorized work.
+  ctxControl: Human control
+  ctxControlText: You can tighten the boundary at any time; resuming requires the same authorization.
+  pauseGapNote: 'A generic pause-task endpoint is not shipped yet (PLANNED); use the Recovery tab and the run-cancel channel for now.'
+
+authorization:
+  loadingEyebrow: Loading authorization boundary · preserve context
+  eyebrow: Authorization policy · confirmed by humans
+  headline: Autonomy with a visible boundary
+  objectiveEyebrow: Confirmed objective · v{rev}
+  noObjective: No confirmed project objective yet
+  objectiveMeta: AI-PM and Agents inherit this boundary. The platform enforces permissions and records every authoritative change.
+  autonomousTitle: AI may act autonomously
+  autonomous1: Decompose, prioritize and assign tasks
+  autonomous2: Create and maintain issues, risks, blockers
+  autonomous3: Update working notes and draft knowledge
+  autonomous4: Implement and test in staging
+  autonomous5: Retry within bounded attempts to recover
+  autonomous6: Complete when all acceptance checks pass
+  confirmTitle: Human confirmation required
+  confirm1: Goal or delivery-scope changes
+  confirm2: Formal requirements and design constraints
+  confirm3: Changes to established decisions
+  confirm4: New vendors or external data transfer
+  confirm5: Production deployment or added spend
+  confirm6: Unresolved business conflicts / major risks
+  constraintsEyebrow: Operational constraints
+  constraintsText: "Staging only · Approved repositories · No customer data export\nThe acceptance baseline cannot be lowered by AI-PM or Agents (PA-06-05)."
+  pendingTitle: "{count} pending authorization requests"
+  pendingMeta: "Approval gate · {role} — requests never take effect before a human confirms"
+  reviewRequest: Review bounded request
+  ctxTitle: Human-owned authority
+  ctxBadge: Red-line policy active
+  ctxInheritText: AI-PM and Agents inherit these boundaries. The platform enforces permissions and records every authoritative change.
+  ctxHistory: Authorization & approval history
+  ctxNoHistory: No decided approvals yet
+  ctxControl: Control without micromanaging
+  ctxControlText: Narrow or pause authorization at any time. AI-PM reevaluates affected work; unrelated authorized work continues.
+  reviewLimits: Review current limits
+  ctxFooter: Requests never take effect until an authorized human confirms them.

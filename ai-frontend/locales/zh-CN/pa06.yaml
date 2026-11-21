@@ -115,3 +115,71 @@ decisions:
   ctxContinuesText: 只有受此决策阻塞的任务在等待；其余授权范围内的工作继续推进。
   ctxHistory: 决策历史
   ctxWaitingNote: "waiting 队列中 needs_decision 计数：{count}（可能含决策队列之外来源）"
+
+execution:
+  loadingEyebrow: 加载执行详情 · 保留上下文
+  emptyTitle: 暂无进行中的执行
+  emptyHint: 授权范围内的任务由 AI-PM 自主领取执行；进行中的任务会出现在这里。
+  pickTask: 选择任务
+  planEyebrow: 执行计划 · 状态机实况
+  nowLine: "最近动作 · {action} · {time}"
+  chainLegend: 状态链=PA-06 执行状态模型（非编造步骤）
+  depsEyebrow: 计划与依赖
+  decompositionTitle: 任务分解与依赖
+  noDependencies: 暂无依赖边
+  artifactsTitle: 产物与验证
+  branch: "分支 · {branch}"
+  repos: "绑定仓库 × {count}"
+  deliverables: "交付物 × {count}"
+  criteriaCount: "验收标准 × {count}"
+  activityEyebrow: 活动 · 项目记录
+  noActivity: 暂无任务历史
+  openVerification: 打开验证
+  inspectRecovery: 查看恢复示例
+  updated: 更新 {time}
+  ctxTitle: AI 为什么这样做
+  ctxBadge: 授权边界内
+  ctxObjective: 目标与输入
+  ctxChanged: 计划为何变化
+  ctxChangedText: 计划调整服务于既定目标；目标、范围与验收口径的变更须人类确认。
+  ctxSafe: 不受影响的工作
+  ctxSafeText: 该任务的等待或调整不影响其他授权范围内任务的继续执行。
+  ctxControl: 人类控制
+  ctxControlText: 你可以随时收紧授权边界；恢复执行需要同等授权。
+  pauseGapNote: 通用「暂停任务」端点尚未上线（PLANNED）；当前可经 Recovery 页签与 Run 取消通道操作。
+
+authorization:
+  loadingEyebrow: 加载授权边界 · 保留上下文
+  eyebrow: 授权策略 · 由人类确认
+  headline: 可见边界内的自主
+  objectiveEyebrow: 已确认目标 · v{rev}
+  noObjective: 尚未确认项目目标
+  objectiveMeta: AI-PM 与 Agents 继承此边界；平台执法并记录每次权威变更。
+  autonomousTitle: AI 可自主执行
+  autonomous1: 分解、排序并分配任务
+  autonomous2: 创建并维护 Issue、Risk、Blocker
+  autonomous3: 更新工作笔记与维护知识草稿
+  autonomous4: 在 staging 实现与测试
+  autonomous5: 限次重试后自主恢复
+  autonomous6: 全部验收口径通过后标记完成
+  confirmTitle: 须人类确认
+  confirm1: 目标或交付范围变更
+  confirm2: 正式需求与设计约束
+  confirm3: 既定决策的变更
+  confirm4: 新供应商或对外数据传输
+  confirm5: 生产部署或新增支出
+  confirm6: 未决业务冲突 / 重大风险
+  constraintsEyebrow: 运营约束
+  constraintsText: "仅 staging · 仅已批准仓库 · 不导出客户数据\n验收基线不可由 AI-PM 或 Agent 自行降低（PA-06-05）"
+  pendingTitle: "{count} 条待决授权请求"
+  pendingMeta: "审批门槛 · {role} —— 请求在人类确认前不生效"
+  reviewRequest: 审查受限请求
+  ctxTitle: 人类所有的权威
+  ctxBadge: 红线策略生效
+  ctxInheritText: AI-PM 与 Agents 继承这些边界；平台对权限执法，并记录每次权威变更。
+  ctxHistory: 授权与审批历史
+  ctxNoHistory: 暂无已决审批记录
+  ctxControl: 控制而非事事过问
+  ctxControlText: 你可以随时收紧或暂停授权；AI-PM 会重估受影响工作，无关的授权工作继续。
+  reviewLimits: 查看当前限制
+  ctxFooter: 请求在获得授权人类确认之前从不生效。
