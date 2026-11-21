@@ -33,9 +33,7 @@ describe("navigation", () => {
       "knowledge",
       "environment"
     ]);
-    const administration = mainNavGroups.find(
-      g => g.id === "administration"
-    )!;
+    const administration = mainNavGroups.find(g => g.id === "administration")!;
     expect(administration.defaultCollapsed).toBe(true);
     // 非项目域组不默认折叠
     expect(
@@ -54,19 +52,21 @@ describe("navigation", () => {
     ]);
   });
 
-  it("开发组 Figma 条目顺序：仓库（manualRoute）→ 代码发现 → 需求 → AI 执行", () => {
+  it("开发组 Figma 条目顺序：仓库（manualRoute）→ 代码发现 → 需求 → AI 执行 → AI 协作", () => {
     const development = mainNavGroups.find(g => g.id === "development")!;
     expect(development.items.map(i => i.path)).toEqual([
       "/project/settings/repositories",
       "/project/discovery",
       "/project/requirements",
-      "/project/execution"
+      "/project/execution",
+      // PA-06 人与 AI 交互中心（Figma 258:14081，独立工作区，2026-11-21）
+      "/project/collaboration"
     ]);
     // 仓库路径在 /project/settings 前缀下：路由手工注册，助手隐藏语义随路径
     expect(development.items[0].manualRoute).toBe(true);
-    expect(
-      development.items.slice(1).every(i => i.manualRoute !== true)
-    ).toBe(true);
+    expect(development.items.slice(1).every(i => i.manualRoute !== true)).toBe(
+      true
+    );
   });
 
   it("知识组：知识库 + 知识评审（原人工审核中心，动态徽标条目）", () => {
@@ -109,9 +109,7 @@ describe("navigation", () => {
       expect(mainPaths).not.toContain(path);
     }
     // PLANNED 占位项显式标记（Product Cognition；能力不得伪装已上线）
-    const planned = auxiliaryNavItems
-      .filter(i => i.planned)
-      .map(i => i.path);
+    const planned = auxiliaryNavItems.filter(i => i.planned).map(i => i.path);
     expect(planned).toEqual(["/project/product-cognition"]);
   });
 

@@ -1,0 +1,117 @@
+# PA-06 人与 AI 交互中心（Figma 258:14081）
+tabs:
+  overview: 总览
+  execution: 执行
+  decisions: 人工决策
+  decisionsCount: "{count} 条人工决策"
+  knowledge: 知识
+  plan: 规划
+  delivery: 交付
+  recovery: 恢复
+  authorization: 授权
+
+frame:
+  tabsLabel: AI 协作页签
+  scopeTag: "项目协作"
+  confirmHint: 正式变更需人类确认
+  promptPlaceholder: 向 AI-PM 提问、反馈，或说明一项决策…
+  send: 发送
+  footerNote: AI-PM 协调团队。决策与动作均记录在项目历史中。
+  noProject: 请先选择项目
+
+feedback:
+  loadingTitle: 加载中 · 保留上下文
+  loadingHint: 正在读取项目协作数据
+  emptyTitle: 暂无内容
+  emptyHeadline: 暂无待办
+  emptyHint: 空态不抹除历史，已完成记录仍可查
+  errorTitle: 出错了 · 不伪造成功
+  errorHint: 读取失败；重试不会扩大任何授权范围
+  retry: 安全重试
+
+attention:
+  informational: 信息
+  attention: 需要注意
+  human_decision: 需要人类决策
+
+executionState:
+  planned: 已规划
+  executing: 执行中
+  waiting: 等待中
+  blocked: 受阻
+  verifying: 验证中
+  completed: 已完成
+  failed: 失败
+
+overview:
+  attention: 需要你的注意
+  decisionsBadge: "{count} 条人工决策"
+  noDecisions: 无待决事项
+  noDecisionsHint: 常规 AI 工作无需批准继续进行；已确认的决策保留在历史中。
+  attentionHeadline: 需要人类判断；不受影响的工作继续推进。
+  reviewChange: 审查变更
+  moreDecisions: 还有 {count} 条待决 → 进入决策中心
+  execution: 自主执行
+  coordinating: AI-PM 协调中
+  noOpenTasks: 暂无进行中的任务
+  noOpenTasksHint: 授权范围内的新任务由 AI-PM 自主规划；此处只呈现进行中的工作。
+  colTask: 任务 / 执行主体
+  colStatus: 状态
+  colProgress: 进度
+  unassigned: 未分配
+  agentFallback: AI Agent
+  progressDeps: "依赖 {done}/{total}"
+  coordinatedBy: 由 AI-PM 协调
+  risk: 重要风险
+  riskOpen: 处理中 · 仍处于授权边界内
+  outcomes: 最近结果
+  noOutcomes: 暂无最近结果
+  ctxTitle: AI-PM · 项目上下文
+  ctxScope: 在授权范围内运行
+  ctxDirection: 当前方向
+  ctxNoGoal: 尚未确认项目目标
+  ctxDirectionMeta: "目标 v{rev} · 由人类确认"
+  ctxBoundary: 已授权边界
+  ctxBoundaryText: 在已确认目标与约束内，AI 自主实现、验证与交付；目标、范围与正式决策的变更须人类确认。
+  ctxInspect: 查看授权边界
+  ctxProgress: 进展，而非监督
+  ctxProgressText: "共 {total} 项任务：{completed} 已完成 · {executing} 执行中 · {verifying} 验证中 · {waiting} 受阻 · {planned} 已规划"
+  ctxNote: 只有重要异常才进入你的注意队列。
+
+decisions:
+  loadingEyebrow: 加载决策队列 · 保留上下文
+  emptyEyebrow: 无待决事项
+  emptyHint: 常规 AI 工作无需批准继续进行。已确认的决策保留在历史中。
+  queueEyebrow: "{count} 条待决 · 无常规审批"
+  decidedEyebrow: 无待决 · 已决记录保留如下
+  queueTitle: 等待你的判断
+  queueNote: 只有正式变更、重大风险、授权与业务冲突会进入此队列。
+  proposalBadge: AI 提案 · 未批准
+  whyLabel: 为什么需要人类参与
+  recommendationLabel: AI-PM 建议
+  optionsLabel: 备选与影响
+  decidedLabel: 决策记录
+  decisionInputLabel: 决策说明（将记入决策登记）
+  decisionInputPlaceholder: 说明决策内容与理由…
+  confirmHint: 请先核对确切提案内容后再确认；确认即授权执行。
+  decide: 确认决策
+  approve: 批准提案
+  reject: 否决提案
+  cancelInputLabel: 撤回此咨询（必填理由）
+  cancelInputPlaceholder: 撤回理由…
+  cancelAction: 撤回
+  registerNote: 已确认的决策保留在项目决策登记中；任何提案都不会自动生效。
+  historyPending: 尚无人类确认记录
+  decidedToast: 决策已记录
+  approvedToast: 提案已批准并执行
+  rejectedToast: 提案已否决
+  cancelledToast: 咨询已撤回
+  ctxTitle: 决策上下文
+  ctxOwner: 负责人
+  ctxOwnerValue: 项目 Owner（当前调用者）
+  ctxEvidence: 来源证据
+  ctxAffected: 受影响工作
+  ctxContinues: 其他工作继续
+  ctxContinuesText: 只有受此决策阻塞的任务在等待；其余授权范围内的工作继续推进。
+  ctxHistory: 决策历史
+  ctxWaitingNote: "waiting 队列中 needs_decision 计数：{count}（可能含决策队列之外来源）"

@@ -217,6 +217,7 @@ shell:
         products: Products
         technicalDesign: Technical Design
         execution: AI Execution
+        collaboration: AI Collaboration
         assistant: AI Assistant
         knowledge: Knowledge Base
         knowledgeReview: Knowledge Review

@@ -1,0 +1,117 @@
+# PA-06 Human–AI collaboration center (Figma 258:14081)
+tabs:
+  overview: Overview
+  execution: Execution
+  decisions: Decisions
+  decisionsCount: "{count} human decisions"
+  knowledge: Knowledge
+  plan: Plan
+  delivery: Delivery
+  recovery: Recovery
+  authorization: Authorization
+
+frame:
+  tabsLabel: AI collaboration tabs
+  scopeTag: "Project collaboration"
+  confirmHint: Formal changes need confirmation
+  promptPlaceholder: Ask AI-PM, give feedback, or explain a decision…
+  send: Send
+  footerNote: AI-PM coordinates the team. Decisions and actions are recorded in project history.
+  noProject: Select a project first
+
+feedback:
+  loadingTitle: Loading · preserve context
+  loadingHint: Reading collaboration data
+  emptyTitle: Nothing here yet
+  emptyHeadline: No pending items
+  emptyHint: Empty states never erase history; confirmed records remain queryable.
+  errorTitle: Error · do not fake success
+  errorHint: Reading failed; retrying does not expand any authorization.
+  retry: Retry safely
+
+attention:
+  informational: Informational
+  attention: Attention required
+  human_decision: Human decision
+
+executionState:
+  planned: Planned
+  executing: Executing
+  waiting: Waiting
+  blocked: Blocked
+  verifying: Verifying
+  completed: Completed
+  failed: Failed
+
+overview:
+  attention: Your attention
+  decisionsBadge: "{count} human decisions"
+  noDecisions: No human decisions pending
+  noDecisionsHint: Ordinary AI work continues without approval. Confirmed decisions remain in history.
+  attentionHeadline: Human judgment needed. Unaffected work continues.
+  reviewChange: Review change
+  moreDecisions: "{count} more pending → open decision center"
+  execution: Autonomous execution
+  coordinating: AI-PM coordinating
+  noOpenTasks: No open execution
+  noOpenTasksHint: AI-PM plans new work within the authorized boundary; only in-flight work is shown here.
+  colTask: Task / Assigned agent
+  colStatus: Status
+  colProgress: Progress
+  unassigned: Unassigned
+  agentFallback: AI Agent
+  progressDeps: "Deps {done}/{total}"
+  coordinatedBy: coordinated by AI-PM
+  risk: Important risk
+  riskOpen: Being handled · within the authorized boundary
+  outcomes: Recent outcomes
+  noOutcomes: No recent outcomes
+  ctxTitle: AI-PM · Project context
+  ctxScope: Operating within scope
+  ctxDirection: Current direction
+  ctxNoGoal: No confirmed project objective yet
+  ctxDirectionMeta: "Objective v{rev} · confirmed by a human"
+  ctxBoundary: Authorized boundary
+  ctxBoundaryText: Within the confirmed objective and constraints, AI implements, verifies and delivers autonomously; changes to the objective, scope or formal decisions require human confirmation.
+  ctxInspect: Inspect authorization
+  ctxProgress: Progress, not supervision
+  ctxProgressText: "{total} tasks · {completed} completed · {executing} executing · {verifying} verifying · {waiting} blocked · {planned} planned"
+  ctxNote: Only meaningful exceptions enter your attention queue.
+
+decisions:
+  loadingEyebrow: Loading decisions · preserve context
+  emptyEyebrow: No pending decisions
+  emptyHint: Ordinary AI work continues without approval. Confirmed decisions remain in history.
+  queueEyebrow: "{count} decisions · no routine approvals"
+  decidedEyebrow: No pending decisions · decided records kept below
+  queueTitle: Awaiting your judgment
+  queueNote: Only formal changes, major risks, authorization and business conflicts reach this queue.
+  proposalBadge: AI proposal · Not approved
+  whyLabel: Why human involvement is required
+  recommendationLabel: AI-PM recommendation
+  optionsLabel: Options & impact
+  decidedLabel: Decision record
+  decisionInputLabel: Decision note (recorded in the decision register)
+  decisionInputPlaceholder: Explain the decision and its rationale…
+  confirmHint: Confirm only after inspecting the exact proposed changes; confirmation authorizes execution.
+  decide: Confirm decision
+  approve: Approve proposal
+  reject: Reject proposal
+  cancelInputLabel: Withdraw this consultation (reason required)
+  cancelInputPlaceholder: Withdrawal reason…
+  cancelAction: Withdraw
+  registerNote: Confirmed decisions remain in the project decision register. No proposal is applied automatically.
+  historyPending: No human confirmation recorded
+  decidedToast: Decision recorded
+  approvedToast: Proposal approved and executed
+  rejectedToast: Proposal rejected
+  cancelledToast: Consultation withdrawn
+  ctxTitle: Decision context
+  ctxOwner: Owner
+  ctxOwnerValue: Project owner (current caller)
+  ctxEvidence: Source evidence
+  ctxAffected: Affected work
+  ctxContinues: Other work continues
+  ctxContinuesText: Only tasks blocked by this decision are waiting; everything else within the boundary continues.
+  ctxHistory: Decision history
+  ctxWaitingNote: "waiting queue needs_decision count · {count} (may include sources outside this queue)"

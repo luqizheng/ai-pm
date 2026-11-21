@@ -217,6 +217,7 @@ shell:
         products: 产品
         technicalDesign: 技术设计
         execution: AI 执行
+        collaboration: AI 协作
         assistant: AI 助手
         knowledge: 知识库
         knowledgeReview: 知识评审

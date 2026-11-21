@@ -203,6 +203,19 @@ const developmentGroup: NavGroup = {
         import("@/views/project/execution/ExecutionCenterView.vue").then(
           module => module.default
         )
+    },
+    // AI 协作（PA-06）：人与 AI 交互中心八页签工作区（Figma 258:14081）。
+    // 独立于 S05 执行域（用户裁决 2026-11-21）：页签 Overview/Execution/
+    // Decisions/Knowledge/Plan/Delivery/Recovery/Authorization，子路由见
+    // router/index.ts 手工段。
+    {
+      path: "/project/collaboration",
+      labelKey: "shell.app.side.item.collaboration",
+      icon: Network,
+      component: () =>
+        import(
+          "@/views/project/collaboration/CollaborationOverviewView.vue"
+        ).then(module => module.default)
     }
   ]
 };

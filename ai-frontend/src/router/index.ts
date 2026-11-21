@@ -232,15 +232,16 @@ export function buildRoutes(): RouteRecordRaw[] {
       // PA-07 任务列表（Figma 179:3603 A）：0050 读面 + 调度条件派生。
       // 静态段注册在 :taskId 前（本文件 L449 惯例）。
       path: "/project/tasks/list",
-      component: () =>
-        import("@/views/project/tasks/list/TasksListView.vue"),
+      component: () => import("@/views/project/tasks/list/TasksListView.vue"),
       meta: { title: "pa07.list.title" }
     },
     {
       // PA-07 依赖关系焦点视图（Figma 179:3603 C）。
       path: "/project/tasks/relationships",
       component: () =>
-        import("@/views/project/tasks/relationships/RelationshipsFocusView.vue"),
+        import(
+          "@/views/project/tasks/relationships/RelationshipsFocusView.vue"
+        ),
       meta: { title: "pa07.relationships.title" }
     },
     {
@@ -283,13 +284,17 @@ export function buildRoutes(): RouteRecordRaw[] {
       // 静态后缀段在 :taskId 单段之后，Vue Router 按 specificity 优先匹配。
       path: "/project/tasks/:taskId/dependencies",
       component: () =>
-        import("@/views/project/tasks/detail/dependencies/TaskDependenciesView.vue"),
+        import(
+          "@/views/project/tasks/detail/dependencies/TaskDependenciesView.vue"
+        ),
       meta: { title: "pa07.dependencies.title" }
     },
     {
       path: "/project/tasks/:taskId/history",
       component: () =>
-        import("@/views/project/tasks/detail/history/TaskRevisionHistoryView.vue"),
+        import(
+          "@/views/project/tasks/detail/history/TaskRevisionHistoryView.vue"
+        ),
       meta: { title: "pa07.history.title" }
     },
     {
@@ -305,13 +310,56 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
+  // ─── AI 协作工作区（PA-06 · Figma 258:14081，2026-11-21）───
+  // 八页签「人与 AI 交互中心」：/project/collaboration 本身由导航树派生
+  // （CollaborationOverviewView = Overview 页签），其余七页签独立路由不占
+  // 导航（同 S05/Tasks 手工段组织）。UI-1 落 Overview 与 Decisions 两屏；
+  // 其余页签暂指占位页（PLANNED，不得用演示数据伪装），随 UI-2~4 批次替换。
+  routes.push(
+    {
+      path: "/project/collaboration/execution",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.execution" }
+    },
+    {
+      path: "/project/collaboration/decisions",
+      component: () =>
+        import("@/views/project/collaboration/DecisionCenterView.vue"),
+      meta: { title: "pa06.tabs.decisions" }
+    },
+    {
+      path: "/project/collaboration/knowledge",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.knowledge" }
+    },
+    {
+      path: "/project/collaboration/plan",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.plan" }
+    },
+    {
+      path: "/project/collaboration/delivery",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.delivery" }
+    },
+    {
+      path: "/project/collaboration/recovery",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.recovery" }
+    },
+    {
+      path: "/project/collaboration/authorization",
+      component: PlaceholderView,
+      meta: { title: "pa06.tabs.authorization" }
+    }
+  );
+
   // ─── PA-07 产品详情（Figma 179:3603 E 系列）───
   // /project/dashboard 与 /project/products 由 navigation.ts auxiliary 条目
   // buildRoutes 派生（单源），此处只补不占导航的详情页。
   routes.push({
     path: "/project/products/:productId",
-    component: () =>
-      import("@/views/project/products/ProductDetailView.vue"),
+    component: () => import("@/views/project/products/ProductDetailView.vue"),
     meta: { title: "pa07.products.detailTitle" }
   });
 
@@ -483,14 +531,12 @@ export function buildRoutes(): RouteRecordRaw[] {
   routes.push(
     {
       path: "/feeds/work-items/:itemId",
-      component: () =>
-        import("@/views/feeds/WorkItemDetailView.vue"),
+      component: () => import("@/views/feeds/WorkItemDetailView.vue"),
       meta: { title: "pm.feeds.detailTitle" }
     },
     {
       path: "/feeds/activities/:activityId",
-      component: () =>
-        import("@/views/feeds/ActivityDetailView.vue"),
+      component: () => import("@/views/feeds/ActivityDetailView.vue"),
       meta: { title: "pm.feeds.detailActivityTitle" }
     }
   );
