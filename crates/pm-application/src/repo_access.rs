@@ -151,7 +151,7 @@ pub async fn execution_allows(
     // 现状 1：Project 归档 → 拒绝（I1）。
     match crate::project_gate::project_activity(pool, project_id).await {
         Ok(crate::project_gate::ProjectActivity::Active) => {}
-        Ok(crate::project_gate::ProjectActivity::Archived) => return Ok(false),
+        Ok(crate::project_gate::ProjectActivity::Closed) => return Ok(false),
         Err(crate::project_gate::GateError::NotFound) => return Ok(false),
         Err(err) => return Err(RepoAccessError::Db(err.to_string())),
     }

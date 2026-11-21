@@ -4,7 +4,7 @@
 //! Outbox 消费三类入口都不看项目状态，归档因此挡不住新工作。本模块提供
 //! **统一门禁**：所有会为新工作打开入口的路径先过这里。
 //!
-//! 锁序约束：本模块的读**不加锁**（防御纵深读）——归档事务（`archive.rs`）
+//! 锁序约束：本模块的读**不加锁**（防御纵深读）——关闭事务（`archive.rs`）
 //! 持有 project 行锁并以条件 UPDATE 收口 queued Run，claim 侧的
 //! `FOR UPDATE` 会与该 UPDATE 串行化，读到的必然是归档后的已提交状态；
 //! 这与 I1 的锁序 `project → run → task` 同向，不成环。
@@ -15,17 +15,17 @@ use uuid::Uuid;
 /// 门禁判定结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectActivity {
-    /// 项目活跃（planning / initializing / 任意非 archived 状态）——放行。
+    /// 项目活跃（active）——放行。
     Active,
-    /// 项目已归档——入口关闭。
-    Archived,
+    /// 项目已关闭（closed）——入口关闭。
+    Closed,
 }
 
-/// 门禁失败（归档项目不允许新工作）。
+/// 门禁失败（关闭项目不允许新工作）。
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GateError {
-    #[error("project is archived")]
-    Archived,
+    #[error("project is closed")]
+    Closed,
     #[error("project not found")]
     NotFound,
     #[error("database error: {0}")]
@@ -33,11 +33,11 @@ pub enum GateError {
 }
 
 impl ProjectActivity {
-    /// 门禁出口：Archived → Err。
+    /// 门禁出口：Closed → Err。
     pub fn ensure(self) -> Result<(), GateError> {
         match self {
             Self::Active => Ok(()),
-            Self::Archived => Err(GateError::Archived),
+            Self::Closed => Err(GateError::Closed),
         }
     }
 }
@@ -55,7 +55,7 @@ pub async fn project_activity(
             .map_err(|e| GateError::Db(e.to_string()))?;
     Ok(match status.as_deref() {
         None => return Err(GateError::NotFound),
-        Some("archived") => ProjectActivity::Archived,
+        Some("closed") => ProjectActivity::Closed,
         Some(_) => ProjectActivity::Active,
     })
 }
@@ -73,16 +73,16 @@ pub async fn project_activity_tx(
             .map_err(|e| GateError::Db(e.to_string()))?;
     Ok(match status.as_deref() {
         None => return Err(GateError::NotFound),
-        Some("archived") => ProjectActivity::Archived,
+        Some("closed") => ProjectActivity::Closed,
         Some(_) => ProjectActivity::Active,
     })
 }
 
-/// 事务版 + **行锁**：与归档事务共享 `core.project` 行锁 → 写入与归档线性化。
+/// 事务版 + **行锁**：与关闭事务共享 `core.project` 行锁 → 写入与关闭线性化。
 ///
-/// I4-F 用它给「正式知识提交」与「Project 归档」一个确定结论：
-/// 两者都先取同一把行锁，谁先拿到锁谁先完成——归档先落定 → 提交被拒；
-/// 提交先落定 → 该修订成为归档时的最终版本（I4 §11.3）。
+/// I4-F 用它给「正式知识提交」与「Project 关闭」一个确定结论：
+/// 两者都先取同一把行锁，谁先拿到锁谁先完成——关闭先落定 → 提交被拒；
+/// 提交先落定 → 该修订成为关闭时的最终版本（I4 §11.3）。
 ///
 /// 锁序：`core.project` → 其余业务行（与 I1 的 `project → run → task` 同向）。
 pub async fn lock_project_activity_tx(
@@ -97,7 +97,7 @@ pub async fn lock_project_activity_tx(
             .map_err(|e| GateError::Db(e.to_string()))?;
     Ok(match status.as_deref() {
         None => return Err(GateError::NotFound),
-        Some("archived") => ProjectActivity::Archived,
+        Some("closed") => ProjectActivity::Closed,
         Some(_) => ProjectActivity::Active,
     })
 }

@@ -26,7 +26,7 @@
 | Phase 2 Team 成员管理 | ✅ 实施完成（验证收尾中） | Team 面全量切 core.team_member；leave；Owner 管理管线；前端全量切换 |
 | Phase 3 Product 域 | ✅ 后端实施完成（2026-11-20，UI 下一批） | 0040 + product.rs/products.rs + product_domain 8 用例 |
 | Phase 4 Project 角色域 | ✅ 4a 实施完成（2026-11-20） | 0041 ai.project_agent_member + 解析链换源 + role CHECK 收敛 + legacy 映射删除 |
-| Phase 5 生命周期 | 🔁 拆分 | Product abandoned（入 Phase 3）；Project Closed（守卫 OPEN） |
+| Phase 5 生命周期 | ✅ 实施（2026-11-21） | 0042 + close/reopen（守卫=关联 Products Product Owner）+ gate 语义 closed |
 | Phase 6 人工处理中心 | 🔜 依赖 Phase 3 | 验收主体=Product Member |
 | Phase 7 清理回归 | 🔜 最后 | — |
 
@@ -76,7 +76,7 @@ Project（AI 员工执行上下文；不设人类角色）
 ## 五、Phase 5：Project Closed 收尾（守卫 OPEN）
 
 - Closed 全局写入拦截机制（project_gate）已在 Phase 1/2 确认可复用；状态域 {active, closed} CHECK 化。
-- **close/reopen API 不开放**（Project Owner 已废止，守卫主体待产品裁决——P4-PA-05②）；拦截先行为全部写入口就绪（fail-closed）。
+- **守卫裁决（2026-11-21）**：close/reopen 授权主体 = 关联 Products 的任意有效 Product Owner（P4-PA-05② OPEN 关闭）；`POST /v1/pm/projects/{id}/close|reopen` 已开放，0042 状态域 CHECK 收敛，在飞 Run/Import 收口复用 archive 管线。
 - 前端仅入口展示，后端唯一强制点。
 
 ## 六、Phase 6：人工处理中心与 Issue 验收（依赖 Phase 3）

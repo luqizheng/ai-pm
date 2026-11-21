@@ -41,14 +41,30 @@ async fn seed_task(pool: &PgPool, code: &str, status: &str, assigned: bool) -> S
     .await
     .unwrap();
     let assignee: Option<Uuid> = if assigned { Some(agent_id) } else { None };
+    // PA07-IMP-002：Run 建链要求 current_task_revision_id 非 NULL（fail-closed）
+    // ——seed 三步：task → revision → 指针回写。
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
-         VALUES ($1, 'seeded', $2, 1, $3, \
-                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id)          VALUES ($1, 'seeded', $2, 1, $3,                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(status.to_string())
     .bind(assignee)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no)          SELECT tenant_id, project_id, id, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
     .fetch_one(pool)
     .await
     .unwrap();
@@ -274,7 +290,7 @@ async fn replayed_event_after_terminal_run_creates_no_new_run(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn archived_project_suppresses_task_ready_run_creation(pool: PgPool) {
     let s = seed_task(&pool, "OH-I1B-1", "ready", true).await;
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(s.project_id)
         .execute(&pool)
         .await
@@ -308,7 +324,7 @@ async fn run_created_before_archive_gets_cancelled_by_archive(pool: PgPool) {
             .unwrap();
 
     // 归档（P1 条件取消 queued）。
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(s.project_id)
         .execute(&pool)
         .await

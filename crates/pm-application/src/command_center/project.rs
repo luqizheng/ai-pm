@@ -81,7 +81,7 @@ pub(super) async fn load_project_summary(
         project_id,
         code,
         name,
-        archived: lifecycle == "archived",
+        closed: lifecycle == "closed",
         lifecycle,
         customer_name,
         goal: GoalSummary {

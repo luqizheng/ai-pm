@@ -1,9 +1,11 @@
-//! `POST /v1/pm/projects/{project_id}/archive`（S01 · I1-D）与
-//! `POST /v1/pm/task-runs/{run_id}/cancel`（P2：cancel_run 外部入口）。
+//! `POST /v1/pm/projects/{project_id}/close`、`POST .../reopen`（P4-ORG Phase 5，
+//! DR-PA-05）与 `POST /v1/pm/task-runs/{run_id}/cancel`（P2：cancel_run 外部入口）。
 //!
-//! 归档：项目 owner 或租户 admin（`is_project_manager`）；单事务收口
-//! queued Run（P1 条件取消）+ 在飞 Import 终态化（N-2）+ 名额释放（P4），
-//! 事务外按取消协议处理活跃 Run（P2，reason=project_archived）。
+//! 关闭：**关联 Products 的任意有效 Product Owner**（DR-PA-05②，2026-11-21
+//! 裁决——Project Owner 已废止，Product 生命周期 Owner 延伸至 Project 生命周期）；
+//! 单事务收口 queued Run（P1 条件取消）+ 在飞 Import 终态化（N-2）+ 名额释放（P4），
+//! 事务外按取消协议处理活跃 Run（P2，reason=project_closed）。
+//! 重开：同一守卫；closed → active，恢复原有写入与 AI 执行能力（基线 §10.3）。
 //! Run 取消：项目成员可见即可取消自己的项目 Run；reason 透传审计。
 
 use axum::{
@@ -17,7 +19,7 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use pm_application::archive::archive_project;
+use pm_application::archive::{close_project, is_project_lifecycle_manager, reopen_project};
 use pm_application::run_executor;
 
 use crate::auth::AuthedPrincipal;
@@ -28,50 +30,41 @@ use crate::support::require_project_visible;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/v1/pm/projects/{project_id}/archive",
-            post(archive_handler),
-        )
+        .route("/v1/pm/projects/{project_id}/close", post(close_handler))
+        .route("/v1/pm/projects/{project_id}/reopen", post(reopen_handler))
         .route("/v1/pm/task-runs/{run_id}/cancel", post(cancel_run_handler))
 }
 
 #[derive(Debug, Deserialize)]
-struct ArchiveBody {
+struct CloseBody {
     #[serde(default)]
     reason: Option<String>,
 }
 
-/// `POST /v1/pm/projects/{project_id}/archive`。
-async fn archive_handler(
+/// `POST /v1/pm/projects/{project_id}/close`。
+async fn close_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
-    body: Option<Json<ArchiveBody>>,
+    body: Option<Json<CloseBody>>,
 ) -> Response {
-    // 管理面：owner / 租户 admin；其余 404（不可见即不存在）。
-    match pm_application::project_member::is_project_manager(
-        &state.pool,
-        caller.tenant_id,
-        project_id,
-        caller.principal_id,
-    )
-    .await
-    {
+    // 生命周期守卫：关联 Products 的任意有效 Product Owner；其余 404（不可见即不存在）。
+    match is_project_lifecycle_manager(&state.pool, caller.tenant_id, project_id, caller.principal_id).await {
         Ok(true) => {}
         Ok(false) => return not_found(),
         Err(err) => {
-            tracing::error!(error = %err, "archive manager check failed");
+            tracing::error!(error = %err, "close manager check failed");
             return internal_error();
         }
     }
 
     let reason = body
         .and_then(|Json(body)| body.reason)
-        .unwrap_or_else(|| "project_archived".to_string());
+        .unwrap_or_else(|| "project_closed".to_string());
     let actor = caller.audit_actor();
     // 进程终止归 Worker 侧兜底路径（pm-api 与 Codex 不同机）；此处落终态 + 撤凭据。
     let executor = pm_application::run_dispatch::NoopExecutor;
-    match archive_project(
+    match close_project(
         &state.pool,
         &executor,
         &actor,
@@ -83,20 +76,50 @@ async fn archive_handler(
     {
         Ok(outcome) => Json(json!({
             "project_id": project_id,
-            "status": "archived",
+            "status": "closed",
             "queued_runs_cancelled": outcome.queued_runs_cancelled,
             "imports_finalized": outcome.imports_finalized,
             "active_runs_cancelled": outcome.active_runs_cancelled,
         }))
         .into_response(),
-        Err(pm_application::ArchiveError::AlreadyArchived) => (
+        Err(pm_application::ArchiveError::AlreadyClosed) => (
             StatusCode::CONFLICT,
-            Json(json!({ "code": "ALREADY_ARCHIVED", "message": "project is already archived" })),
+            Json(json!({ "code": "ALREADY_CLOSED", "message": "project is already closed" })),
         )
             .into_response(),
         Err(pm_application::ArchiveError::NotFound) => not_found(),
         Err(pm_application::ArchiveError::Db(err)) => {
-            tracing::error!(error = %err, "archive failed");
+            tracing::error!(error = %err, "close failed");
+            internal_error()
+        }
+    }
+}
+
+/// `POST /v1/pm/projects/{project_id}/reopen`（同一守卫；closed → active）。
+async fn reopen_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    match is_project_lifecycle_manager(&state.pool, caller.tenant_id, project_id, caller.principal_id).await {
+        Ok(true) => {}
+        Ok(false) => return not_found(),
+        Err(err) => {
+            tracing::error!(error = %err, "reopen manager check failed");
+            return internal_error();
+        }
+    }
+    let actor = caller.audit_actor();
+    match reopen_project(&state.pool, &actor, caller.tenant_id, project_id).await {
+        Ok(()) => Json(json!({ "project_id": project_id, "status": "active" })).into_response(),
+        Err(pm_application::ArchiveError::AlreadyClosed) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "code": "NOT_CLOSED", "message": "project is not closed" })),
+        )
+            .into_response(),
+        Err(pm_application::ArchiveError::NotFound) => not_found(),
+        Err(pm_application::ArchiveError::Db(err)) => {
+            tracing::error!(error = %err, "reopen failed");
             internal_error()
         }
     }
@@ -142,7 +165,7 @@ async fn cancel_run_handler(
     match run_executor::cancel_run(&state.pool, &executor, run_id, &reason).await {
         Ok(true) => Json(json!({ "run_id": run_id, "status": "cancelled", "reason": reason }))
             .into_response(),
-        // 不存在 / 不在可取消态（queued 归归档路径、终态不可覆盖）。
+        // 不存在 / 不在可取消态（queued 归关闭路径、终态不可覆盖）。
         Ok(false) => (
             StatusCode::CONFLICT,
             Json(json!({

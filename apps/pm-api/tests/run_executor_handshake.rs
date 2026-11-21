@@ -166,7 +166,7 @@ async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
 
     // 归档先落定（P2 cancel_run 撤凭据 + 终态化——stage='dispatch' 意图保留）。
-    pm_application::run_executor::cancel_run(&pool, executor.as_ref(), run_id, "project_archived")
+    pm_application::run_executor::cancel_run(&pool, executor.as_ref(), run_id, "project_closed")
         .await
         .unwrap();
     assert_eq!(
@@ -225,7 +225,7 @@ async fn start_confirmation_rejects_archived_project_and_terminates(pool: PgPool
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
 
     // 归档（保留 claimed？——不：P2 把 claimed 置 cancelled）。
-    pm_application::archive::archive_project(
+    pm_application::archive::close_project(
         &pool,
         executor.as_ref(),
         &pm_application::actor::AuditActor::principal(owner),

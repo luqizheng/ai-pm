@@ -114,7 +114,7 @@ pub use ai_roles::{
     list_project_roles, list_role_versions, set_project_role_enabled, AiRoleError,
     AiRoleVersionSummary, AiRoleVersionView, ProjectAiRoleView,
 };
-pub use archive::{archive_project, ArchiveError, ArchiveOutcome};
+pub use archive::{close_project, is_project_lifecycle_manager, reopen_project, ArchiveError, ArchiveOutcome};
 pub use authz::{require_project_member, resolve_project_executor, AuthzError, ExecutorKind};
 pub use bootstrap::{
     bootstrap_project, bootstrap_project_for_customer, bootstrap_project_for_customer_owned,

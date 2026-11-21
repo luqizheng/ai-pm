@@ -11,7 +11,7 @@
 //! - 审计完整性：被拒的提交不产生修订，也不产生发布审计。
 
 use pm_application::actor::AuditActor;
-use pm_application::archive::archive_project;
+use pm_application::archive::close_project;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::{CallerContext, DeviceClaim, HumanActor};
 use pm_application::knowledge::KnowledgeRoot;
@@ -43,7 +43,7 @@ fn test_caller(boot: &pm_application::bootstrap::BootstrapOutcome) -> CallerCont
 }
 
 async fn archive(boot: &pm_application::bootstrap::BootstrapOutcome, pool: &PgPool) {
-    archive_project(
+    close_project(
         pool,
         &NoopExecutor,
         &AuditActor::principal(boot.human_id),
@@ -84,7 +84,7 @@ async fn propose_goal(
 }
 
 fn is_archived_conflict(err: &pm_mcp::tools::ToolError) -> bool {
-    matches!(err, pm_mcp::tools::ToolError::Conflict(msg) if msg.contains("archived"))
+    matches!(err, pm_mcp::tools::ToolError::Conflict(msg) if msg.contains("closed"))
 }
 
 /// I4-019：归档后不得新建 Goal 提案（提案表零新增）。
@@ -312,12 +312,12 @@ async fn archive_racing_with_confirm_never_publishes_after_archive(pool: PgPool)
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(status, "archived");
+        assert_eq!(status, "closed");
 
         // 不变式：归档审计时刻之后不得出现新的 published 修订。
         let archived_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
             "SELECT created_at FROM governance.audit_log \
-             WHERE project_id = $1 AND action = 'project.archived' LIMIT 1",
+             WHERE project_id = $1 AND action = 'project.closed' LIMIT 1",
         )
         .bind(boot.project_id)
         .fetch_one(&pool)
@@ -427,7 +427,7 @@ async fn rejected_writes_leave_no_publish_audit(pool: PgPool) {
 
     let archive_audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \
-         WHERE project_id = $1 AND action = 'project.archived'",
+         WHERE project_id = $1 AND action = 'project.closed'",
     )
     .bind(boot.project_id)
     .fetch_one(&pool)

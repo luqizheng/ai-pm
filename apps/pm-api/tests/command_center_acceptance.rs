@@ -457,7 +457,7 @@ async fn archived_project_keeps_history_but_accepts_no_new_activity(pool: PgPool
     )
     .await;
 
-    pm_application::archive::archive_project(
+    pm_application::archive::close_project(
         &pool,
         &NoopExecutor,
         &pm_application::actor::AuditActor::principal(owner),
@@ -471,14 +471,14 @@ async fn archived_project_keeps_history_but_accepts_no_new_activity(pool: PgPool
     // 历史活动仍可读（且归档本身也是一条白名单活动）。
     let (_status, body) = get_center(&pool, project_id, "").await;
     assert_eq!(
-        block(&body, "project_summary")["data"]["archived"],
+        block(&body, "project_summary")["data"]["closed"],
         json!(true)
     );
     let activity_items = items(&body, "recent_activity");
     assert!(
         activity_items
             .iter()
-            .any(|item| item["activity_type"] == json!("project_archived")),
+            .any(|item| item["activity_type"] == json!("project_closed")),
         "归档事件应出现在活动流：{activity_items:?}"
     );
 

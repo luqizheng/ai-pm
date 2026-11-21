@@ -83,7 +83,7 @@ pub(crate) async fn ensure_project_writable(
     use crate::project_gate::{lock_project_activity_tx, GateError, ProjectActivity};
     match lock_project_activity_tx(tx, project_id).await {
         Ok(ProjectActivity::Active) => Ok(()),
-        Ok(ProjectActivity::Archived) => Err(KbServiceError::Conflict(
+        Ok(ProjectActivity::Closed) => Err(KbServiceError::Conflict(
             "project is archived: knowledge base writes are closed".to_string(),
         )),
         Err(GateError::NotFound) => Err(KbServiceError::NotFound("project not found")),

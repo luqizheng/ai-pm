@@ -24,7 +24,7 @@ use uuid::Uuid;
 /// **唯一真源**：SQL 的 `CASE` 映射与 Rust 侧 `activity_type_for` 都由本表生成，
 /// 避免两处漂移。非白名单 action 一律不展示。
 pub const ACTIVITY_TYPE_BY_ACTION: &[(&str, &str)] = &[
-    ("project.archived", "project_archived"),
+    ("project.closed", "project_closed"),
     ("commit_document_revision", "goal_committed"),
     ("finding.decided", "finding_decided"),
     (
@@ -282,9 +282,9 @@ pub struct ProjectSummary {
     pub project_id: Uuid,
     pub code: String,
     pub name: String,
-    /// `core.project.status` 原样透传（`planning`/`initializing`/`archived`）。
+    /// `core.project.status` 原样透传（`active`/`closed`）。
     pub lifecycle: String,
-    pub archived: bool,
+    pub closed: bool,
     pub customer_name: Option<String>,
     pub goal: GoalSummary,
     pub repository_count: i64,

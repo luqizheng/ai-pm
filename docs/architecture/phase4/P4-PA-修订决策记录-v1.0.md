@@ -68,7 +68,7 @@
 - **修订关系：** DR-ORG-06②（仅 Project Owner 关开）→ **守卫条款失效**（Project Owner 不存在）；DR-ORG-06①③④⑤（Closed 全局只读拦截/AI 可读历史/fail-closed/审计）→ **机制保留**；DR-ORG-04④（D-4 人类直改免审批）→ 保留，主体改 Product Member。
 - **决定：**
   1. Project Closed 与 Product Abandoned 是不同生命周期概念（PA §5）；Project Active/Closed 两态与全局写入拦截（project_gate）机制继续有效。
-  2. **OPEN（待产品裁决）：** close/reopen 的授权主体（Project Owner 已废止；候选=Product Owner（关联 Products）∪ Team Owner，待裁）。close/reopen API 在裁决前**不开放入口**（fail-closed），拦截机制先行为所有写入口就绪。
+  2. **守卫裁决（2026-11-21 人工裁决生效，原 OPEN 关闭）：** close/reopen 授权主体 = **关联 Products 的任意有效 Product Owner**（有效 = Link withdrawn_at IS NULL → product_member role='owner'；Link 撤回即失去该来源，多来源并集语义；Product abandoned 不撤销 Owner 身份故仍可关）。裁决后 close/reopen API 已开放（POST /v1/pm/projects/{id}/close 与 /reopen，同守卫）。
   3. 知识开放（PA §6）：对同一 Project，具有有效业务访问资格的相关人类可读取完整普通研发知识（需求/设计/技术认知/任务/决策记录/历史）；知识读取能力与正式决策权分离；敏感/未发布/撤回/非正式内容遵循各自状态规则不因开放原则绕过；Product Membership 不作为知识库 ACL（PA §9.2）。
   4. 人类 Product Member 直接修改正式需求与项目知识不经 AI 审批链；K4 等审阅链仅约束 AI 生成/回写（DR-ORG-04④ 主体更新）。
 - **OPEN：** §8-6 资格边界；close/reopen 守卫。

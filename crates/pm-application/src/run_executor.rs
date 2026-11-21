@@ -135,7 +135,7 @@ pub async fn claim_and_start(
             // 把子进程推进为 running。
             let mut tx = pool.begin().await?;
             match crate::project_gate::lock_project_activity_tx(&mut tx, project_id).await {
-                Ok(crate::project_gate::ProjectActivity::Archived) => {
+                Ok(crate::project_gate::ProjectActivity::Closed) => {
                     tx.rollback().await?;
                     let session = ExecutorSession {
                         session: session_text.clone(),
@@ -859,8 +859,8 @@ async fn record_termination(
 ) -> Result<bool, RunDispatchError> {
     let terminal = match reason_code {
         "timeout" => "timed_out",
-        // 用户取消与归档收口（I1-D/P2）：同一「人为终止」语义 → cancelled。
-        "user_cancel" | "project_archived" => "cancelled",
+        // 用户取消与关闭收口（I1-D/P2）：同一「人为终止」语义 → cancelled。
+        "user_cancel" | "project_closed" => "cancelled",
         // 心跳丢失 / 进展停滞：执行类失败（Agent 死锁 / 长期停滞），终态 failed。
         _ => "failed",
     };

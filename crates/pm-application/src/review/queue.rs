@@ -154,10 +154,10 @@ pub async fn enqueue_review(
 
     // I1-A 归档守卫 + I1-B 锁序：**先锁 Project 行**，再锁 Task、最后建 Run——
     // 与 TaskReady/Worker claim 同为 `project → run → task`（§17.1 裁决 3）。
-    // 创建与归档在同一把行锁上串行：归档先拿锁 → 这里看到 archived 合法跳过；
+    // 创建与关闭在同一把行锁上串行：归档先拿锁 → 这里看到 archived 合法跳过；
     // 创建先拿锁 → 归档随后看到新建的 queued run 并条件取消（I1-012/I1-013）。
     match crate::project_gate::lock_project_activity_tx(&mut tx, project_id).await {
-        Ok(crate::project_gate::ProjectActivity::Archived) => {
+        Ok(crate::project_gate::ProjectActivity::Closed) => {
             tx.commit().await?;
             return Ok(EnqueueOutcome::NotFound);
         }

@@ -118,7 +118,7 @@ async fn claim_skips_archived_project_and_claims_the_next_one(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(p1)
         .execute(&pool)
         .await
@@ -169,7 +169,7 @@ async fn run_created_before_archive_gets_conditionally_cancelled(pool: PgPool) {
 
     // 归档（P1 条件取消 queued）。
     let executor = pm_application::run_dispatch::NoopExecutor;
-    let outcome = pm_application::archive::archive_project(
+    let outcome = pm_application::archive::close_project(
         &pool,
         &executor,
         &pm_application::actor::AuditActor::principal(owner),

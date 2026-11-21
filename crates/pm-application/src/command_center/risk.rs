@@ -137,7 +137,7 @@ pub(super) async fn load_risk_summary(
 
     // 归档后残留活跃 Run（I1 P3 事实）
     let archived: bool = sqlx::query_scalar(
-        "SELECT status = 'archived' FROM core.project WHERE id = $1 AND tenant_id = $2",
+        "SELECT status = 'closed' FROM core.project WHERE id = $1 AND tenant_id = $2",
     )
     .bind(project_id)
     .bind(tenant_id)
@@ -159,7 +159,7 @@ pub(super) async fn load_risk_summary(
                 source_id: project_id.to_string(),
                 project_id,
                 title: "归档后仍有执行中的 Run".to_string(),
-                source_state: "archived".to_string(),
+                source_state: "closed".to_string(),
                 severity: "medium".to_string(),
                 occurred_at: None,
                 suggestion: "终止残留进程并确认清理完成".to_string(),

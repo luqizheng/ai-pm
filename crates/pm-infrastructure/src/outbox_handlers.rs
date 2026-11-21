@@ -54,13 +54,13 @@ impl OutboxHandler for TaskReadyHandler {
         let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
 
         // I1-A 归档守卫 + I1-B 锁序：**先锁 Project 行**再锁 Task——
-        // 创建与归档在同一把行锁上串行（I1-012/I1-013）：
+        // 创建与关闭在同一把行锁上串行（I1-012/I1-013）：
         //   创建先拿锁 → 归档随后看到该 Run 并按 queued 条件取消；
         //   归档先拿锁 → 创建随后看到 archived 并合法跳过（不建 Run）。
         match pm_application::project_gate::lock_project_activity_tx(&mut tx, event.project_id)
             .await
         {
-            Ok(pm_application::project_gate::ProjectActivity::Archived) => {
+            Ok(pm_application::project_gate::ProjectActivity::Closed) => {
                 tx.commit().await.map_err(|e| e.to_string())?;
                 tracing::info!(%task_id, "TaskReady consumed: project archived, run suppressed");
                 return Ok(());

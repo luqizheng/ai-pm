@@ -279,7 +279,7 @@ async fn claim_writes_gate_snapshots(pool: PgPool) {
 /// 快照与租约均不落库（失败路径不写证据）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn blocked_product_denies_claim(pool: PgPool) {
-    for status in ["suspended", "archived"] {
+    for status in ["suspended", "closed"] {
         let f = fx(&pool, &format!("SG-B-{status}")).await;
         let task_id = seed_claimable(&pool, f.project_id, "B").await;
         seed_task_product(&pool, f.project_id, task_id, status).await;

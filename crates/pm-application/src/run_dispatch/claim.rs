@@ -418,7 +418,8 @@ async fn claim_core_in_project(
             .bind(project_id)
             .fetch_optional(&mut *tx)
             .await?;
-    if project_status.as_deref() == Some("archived") {
+    // 仅 closed 跳过（planning/initializing 是导入流水线过程态，放行）。
+    if project_status.as_deref() == Some("closed") {
         tx.commit().await?;
         return Ok(None);
     }

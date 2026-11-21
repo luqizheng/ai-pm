@@ -281,7 +281,7 @@ async fn archived_project_blocks_execution(pool: PgPool) {
     seed_task_and_run(&pool, &w, "acc").await;
     let (_run_id, snapshot) = claim_and_snapshot(&pool).await;
 
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(w.project_id)
         .execute(&pool)
         .await

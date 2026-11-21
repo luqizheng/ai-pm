@@ -206,7 +206,7 @@ async fn bootstrap_inner(
             // 租户谓词：跨租户的 customer_id 视为不存在，不泄露存在性。
             let found: Option<Uuid> = sqlx::query_scalar(
                 "SELECT id FROM core.customer \
-                  WHERE id = $1 AND tenant_id = $2 AND status <> 'archived'",
+                  WHERE id = $1 AND tenant_id = $2 AND status = 'active'",
             )
             .bind(id)
             .bind(tenant_id)

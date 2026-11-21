@@ -1120,6 +1120,66 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
     assert_eq!(status, StatusCode::CREATED, "body: {project}");
     let project_id = uuid_of(&project, "id");
 
+    // P4-ORG Phase 5：close 守卫 = 关联 Products 的 Product Owner——fixture 直
+    // 接种 Team/Product/Link（首位 Owner = 调用者 dev-off principal）。
+    let tenant_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT tenant_id FROM core.project WHERE id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    // project.tenant_id 无 FK（identity 域镜像键），fixture 先补租户行。
+    sqlx::query(
+        "INSERT INTO core.tenant (id, provider, external_key, display_name)          VALUES ($1, 'lmms', 'e2e-flow-15', 'E2E Flow') ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let team_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.team (tenant_id, name) VALUES ($1, 'E2E Team') RETURNING id",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.team_member (team_id, principal_id, tenant_id, role)          VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(team_id)
+    .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let product_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.product (team_id, tenant_id, name) VALUES ($1, $2, 'E2E Product') RETURNING id",
+    )
+    .bind(team_id)
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role)          VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(product_id)
+    .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.product_project_link (product_id, project_id, tenant_id)          VALUES ($1, $2, $3)",
+    )
+    .bind(product_id)
+    .bind(project_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
     // 建密钥 → 响应只回公钥与指纹，绝不回私钥。
     let (status, key) = body_json(
         app.clone()
@@ -1158,7 +1218,7 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
         app.clone()
             .oneshot(json_request(
                 "POST",
-                &format!("/v1/pm/projects/{project_id}/archive"),
+                &format!("/v1/pm/projects/{project_id}/close"),
                 json!({ "reason": "E2E 归档" }),
             ))
             .await
@@ -1166,7 +1226,7 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "body: {archived}");
-    assert_eq!(archived["status"], json!("archived"));
+    assert_eq!(archived["status"], json!("closed"));
 
     let project_status: String =
         sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
@@ -1174,14 +1234,14 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(project_status, "archived");
+    assert_eq!(project_status, "closed");
 
-    // 重复归档 → 409 ALREADY_ARCHIVED。
+    // 重复归档 → 409 ALREADY_CLOSED。
     let (status, again) = body_json(
         app.clone()
             .oneshot(json_request(
                 "POST",
-                &format!("/v1/pm/projects/{project_id}/archive"),
+                &format!("/v1/pm/projects/{project_id}/close"),
                 json!({}),
             ))
             .await
@@ -1189,7 +1249,7 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "body: {again}");
-    assert_eq!(again["code"], json!("ALREADY_ARCHIVED"));
+    assert_eq!(again["code"], json!("ALREADY_CLOSED"));
 }
 
 /// FLOW-01 的辅助：`git ls-remote` 平台同款命令可用性前置检查。

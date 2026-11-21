@@ -127,7 +127,7 @@ pub fn activity_type_for(action: &str) -> Option<&'static str> {
 
 fn activity_summary(activity_type: &str) -> String {
     match activity_type {
-        "project_archived" => "项目已归档".to_string(),
+        "project_closed" => "项目已关闭".to_string(),
         "goal_committed" => "项目目标已发布新版本".to_string(),
         "finding_decided" => "发现已由人工裁决".to_string(),
         "finding_revision_requested" => "发现被要求补充信息".to_string(),

@@ -148,7 +148,7 @@ async fn new_project_renders_all_blocks_and_zero_repository_is_legal(pool: PgPoo
 
     let summary = block(&body, "project_summary")["data"].clone();
     assert_eq!(summary["project_id"], json!(project_id.to_string()));
-    assert_eq!(summary["archived"], json!(false));
+    assert_eq!(summary["closed"], json!(false));
     assert_eq!(summary["repository_count"], json!(0));
     assert_eq!(summary["goal"]["present"], json!(false));
 
@@ -439,7 +439,7 @@ async fn recent_activity_filters_whitelist_and_dedups(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn archived_project_is_reported_read_only(pool: PgPool) {
     let (project_id, _owner) = seed_project(&pool, "I5-5").await;
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(project_id)
         .execute(&pool)
         .await
@@ -448,8 +448,8 @@ async fn archived_project_is_reported_read_only(pool: PgPool) {
     let (status, body) = get_center(&pool, project_id).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     let summary = block(&body, "project_summary")["data"].clone();
-    assert_eq!(summary["archived"], json!(true));
-    assert_eq!(summary["lifecycle"], json!("archived"));
+    assert_eq!(summary["closed"], json!(true));
+    assert_eq!(summary["lifecycle"], json!("closed"));
 }
 
 /// I5-017/018：非成员访问 → 404（不泄露存在性）。
