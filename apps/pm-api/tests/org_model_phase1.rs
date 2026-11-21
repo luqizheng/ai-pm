@@ -81,11 +81,12 @@ async fn insert_project(pool: &PgPool, tenant_id: Uuid, customer_id: Uuid, code:
 
 async fn insert_product(pool: &PgPool, team_id: Uuid, tenant_id: Uuid) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO core.product (team_id, tenant_id, name) VALUES ($1, $2, 'Product A') \
+        "INSERT INTO core.product (team_id, tenant_id, key, name) VALUES ($1, $2, $3, 'Product A') \
          RETURNING id",
     )
     .bind(team_id)
     .bind(tenant_id)
+    .bind(format!("P-{}", &Uuid::new_v4().simple().to_string()[..8].to_uppercase()))
     .fetch_one(pool)
     .await
     .unwrap()
@@ -196,10 +197,11 @@ async fn product_requires_existing_team(pool: PgPool) {
     let tenant = insert_tenant(&pool).await;
     let err = violation(
         sqlx::query(
-            "INSERT INTO core.product (team_id, tenant_id, name) VALUES ($1, $2, 'Bad')",
+            "INSERT INTO core.product (team_id, tenant_id, key, name) VALUES ($1, $2, $3, 'Bad')",
         )
         .bind(Uuid::new_v4())
         .bind(tenant)
+        .bind("P-PROBE")
         .execute(&pool)
         .await
         .expect_err("bogus team must violate fk_product_team"),

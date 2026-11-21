@@ -1154,7 +1154,7 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
     .await
     .unwrap();
     let product_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO core.product (team_id, tenant_id, name) VALUES ($1, $2, 'E2E Product') RETURNING id",
+        "INSERT INTO core.product (team_id, tenant_id, key, name) VALUES ($1, $2, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'E2E Product') RETURNING id",
     )
     .bind(team_id)
     .bind(tenant_id)

@@ -401,7 +401,7 @@ async fn seed_product_owner_link(pool: &PgPool, project_id: Uuid) -> Uuid {
     .await
     .unwrap();
     let product_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.product (team_id, tenant_id, name) VALUES ($1, $2, 'Fixture Product') RETURNING id",
+        "INSERT INTO core.product (team_id, tenant_id, key, name) VALUES ($1, $2, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'Fixture Product') RETURNING id",
     )
     .bind(team_id)
     .bind(tenant_id)

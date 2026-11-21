@@ -14,7 +14,7 @@ ALTER TABLE core.product ADD COLUMN key text;
 
 -- 回填第一遍：按服务层派生规则生成基名；同基名行按 created_at 序追加行号。
 WITH raw AS (
-    SELECT id,
+    SELECT id, created_at,
            regexp_replace(
                regexp_replace(
                    regexp_replace(upper(name), '[^A-Z0-9]+', '-', 'g'),

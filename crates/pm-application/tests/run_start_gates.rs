@@ -164,8 +164,8 @@ async fn seed_task_product(pool: &PgPool, project_id: Uuid, task_id: Uuid, statu
              INSERT INTO core.team (tenant_id, name) \
              SELECT tenant_id, $1 || '-team' FROM delivery.task WHERE id = $2 RETURNING tenant_id, id \
          ), p AS ( \
-             INSERT INTO core.product (team_id, tenant_id, name, status) \
-             SELECT id, tenant_id, $1, $3 FROM t RETURNING id \
+             INSERT INTO core.product (team_id, tenant_id, key, name, status) \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), $1, $3 FROM t RETURNING id \
          ) SELECT id FROM p",
     )
     .bind(format!("p-{status}"))
@@ -279,7 +279,7 @@ async fn claim_writes_gate_snapshots(pool: PgPool) {
 /// 快照与租约均不落库（失败路径不写证据）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn blocked_product_denies_claim(pool: PgPool) {
-    for status in ["suspended", "closed"] {
+    for status in ["suspended", "archived"] {
         let f = fx(&pool, &format!("SG-B-{status}")).await;
         let task_id = seed_claimable(&pool, f.project_id, "B").await;
         seed_task_product(&pool, f.project_id, task_id, status).await;

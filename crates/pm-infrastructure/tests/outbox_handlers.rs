@@ -65,9 +65,6 @@ async fn seed_task(pool: &PgPool, code: &str, status: &str, assigned: bool) -> S
         .execute(pool)
         .await
         .unwrap();
-    .fetch_one(pool)
-    .await
-    .unwrap();
     Seeded {
         project_id,
         task_id,
@@ -383,17 +380,28 @@ async fn role_version_id(pool: &PgPool, project_id: Uuid, role_key: &str) -> Uui
 
 /// ready 且未指派、带 Role 版本锚的任务（D-2=A 的调度决策输入面）。
 async fn seed_ready_task_with_role(pool: &PgPool, project_id: Uuid, version_id: Uuid) -> Seeded {
+    // PA07-IMP-002：Run 建链要求 current_task_revision_id 非 NULL（同 seed_task）。
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task \
-           (project_id, title, status, revision, assignee_id, ai_role_version_id, tenant_id) \
-         VALUES ($1, 'd2a', 'ready', 1, NULL, $2, \
-                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+        "INSERT INTO delivery.task            (project_id, title, status, revision, assignee_id, ai_role_version_id, tenant_id)          VALUES ($1, 'd2a', 'ready', 1, NULL, $2,                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(version_id)
     .fetch_one(pool)
     .await
     .unwrap();
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no)          SELECT tenant_id, project_id, id, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
     Seeded {
         project_id,
         task_id,
