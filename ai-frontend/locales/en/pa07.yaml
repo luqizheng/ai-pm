@@ -1,0 +1,168 @@
+# PA-07 task execution orchestration (Figma canvas 179:3603 "Task & Execution", 2026-11-21).
+# Vocabulary: scheduling conditions and product gates are derived display, never task lifecycle states.
+list:
+  title: Tasks
+  subtitle: Task lifecycle, execution and scheduling conditions in one view
+  viewList: List
+  viewRelationships: Relationships
+  filterProduct: Product
+  filterProductAll: "Product: All"
+  filterStatus: Task status
+  filterStatusAll: "Task status: All"
+  filterDependency: Dependency
+  filterDependencyAll: "Dependency: All"
+  clearFilters: Clear filters
+  searchPlaceholder: Search Task code or title…
+  count: "{count} Tasks"
+  sortedByPriority: Sorted by priority
+  colTask: Task / Priority / Date
+  colProducts: Product(s)
+  colStatus: Task status
+  colExecution: Execution
+  colCondition: Scheduling condition / reason
+  empty: No tasks under the current filters
+  footnote: Dependency conditions are calculated; they never replace Task lifecycle status.
+condition:
+  running: Running
+  blocked_product: Blocked by Product Suspension
+  waiting: Waiting for Dependencies
+  ready: Ready to Start
+  closed: Closed
+panel:
+  title: AI-PM · Execution context
+  scopeCaption: Current project
+  schedulingTitle: Scheduling is calculated
+  schedulingCopy: A Task can start only when every predecessor condition and every relevant Product gate permits execution.
+  relatedCaption: Related products
+  relatedEmpty: No products linked to this project yet
+  bypassCaption: Context, not a bypass
+  bypassCopy: Task status is never changed just to represent dependency blocking. There is no Force Start or Ignore Dependency action.
+  updated: Updated {time}
+relationships:
+  title: Task relationships
+  subtitle: Focused dependency view · All conditions use AND
+  addDependency: Add dependency
+  taskDetails: Task details
+  andGateTitle: AND gate
+  andGateCopy: All predecessor conditions AND all relevant Product gates must permit execution before this Task can start.
+  dependsOn: Depends on
+  selectedTask: Selected task
+  blocks: Blocks
+  satisfied: Satisfied
+  notSatisfied: Not satisfied
+  emptyDependsOn: No predecessors — nothing gates this Task.
+  emptyBlocks: No successor Tasks. Completing this Task does not gate another Task.
+  parallelTitle: Parallel successors
+  parallelCopy: Successor Tasks do not depend on each other; they only wait for this Task's AND gate.
+dependencies:
+  title: Dependencies
+  objectiveFallback: (no objective)
+  blockedTitle: Waiting for Dependencies
+  blockedCopy: PM predecessors must be accepted before this Task can start. Task status remains unchanged.
+  allSatisfiedTitle: All predecessors satisfied
+  allSatisfiedCopy: Every predecessor condition and every relevant Product gate permits execution.
+  dependsOn: Depends on
+  blocks: Blocks
+  conditionsSummary: "{met}/{total} conditions satisfied · AND"
+  conditionCompleted: Requires Completed
+  conditionAccepted: Requires Accepted
+  conditionDeliverable: Requires Deliverable Approved
+  noDeliverable: No deliverable reference
+  satisfied: Satisfied
+  notSatisfied: Not satisfied
+  addDependency: Add dependency
+  removeTitle: Remove dependency
+  removeBody: Remove the dependency edge on {code}? This takes effect immediately and is audited.
+  removeConfirm: Remove
+  wizardStep1: 1 Select predecessor
+  wizardStep2: 2 Set condition
+  wizardStep3: 3 Review
+  wizardTitle: Add dependency
+  wizardPick: Select predecessor
+  wizardCondition: Set the satisfaction condition
+  wizardReview: Review dependency
+  wizardReviewCopy: "{from} → {to} · this Task starts only after this condition and all other gates are satisfied."
+  wizardSave: Save dependency
+  wizardBack: Back to editor
+  wizardNext: Next
+  wizardCancel: Cancel
+  wizardNoTasks: No tasks available to pick as predecessor.
+  circularTitle: Would create a cycle
+  circularCopy: This predecessor sits downstream of the current task in the dependency graph — the backend rejects the edge (cycle 409).
+  savedTitle: Dependency saved
+  savedCopy: Edge created and audited; unlock evaluation runs in the same transaction.
+  lockedTitle: Read-only
+  lockedCopy: Predecessor edges are frozen by the baseline / AI plan and cannot be edited manually.
+  emptyTitle: No dependencies yet
+  emptyCopy: Declare execution order with dependency edges; the Task can start only after all predecessors are satisfied.
+  emptyCta: Add first dependency
+  loadFailed: Failed to load
+  removed: Dependency removed
+history:
+  title: Revision history
+  subtitle: Stable identity, immutable history
+  activeBadge: Active
+  historicalBadge: Historical · Immutable
+  compare: Compare
+  compareTo: Compare with r{no}
+  warningTitle: An older Run still uses a previous Revision
+  warningCopy: Run #{attempt} ({status}) continues using r{rev} pending AI-PM evaluation.
+  changedLabel: Changed
+  reasonLabel: Reason
+  runsLabel: Runs
+  runsCount: "{count}"
+  runsNone: None
+  emptyTitle: No revisions yet
+  emptyCopy: Task creation freezes r1; only substantive changes (objective/scope/criteria/execution contract) add revisions.
+  backToTask: Back to task
+runs:
+  title: Runs
+  colAttempt: Run
+  colStatus: Status
+  colVerdict: Review verdict
+  colCreatedAt: Created
+  empty: No runs for this task yet.
+dashboard:
+  title: Project execution dashboard
+  subtitle: Execution overview · human attention · currently executing · waiting and ready
+  overviewTitle: Execution overview
+  attentionTitle: Needs human attention
+  executingTitle: Currently executing
+  waitingTitle: Waiting and ready
+  statActive: Active-channel tasks
+  statWaiting: Waiting
+  statReady: Ready to start
+  statAttention: Needs attention
+  emptyOverview: No task data yet.
+  emptyAttention: Nothing is waiting for a human decision.
+  emptyExecuting: No runs are executing right now.
+  emptyWaiting: No waiting or ready tasks.
+  goTasks: Open task list
+products:
+  title: Products
+  subtitle: Project-linked products and lifecycle gates
+  detailTitle: Product detail
+  tabOverview: Overview
+  tabLifecycle: Lifecycle
+  tabTasks: Tasks
+  tabHistory: History
+  statusNormal: Normal · Execution permitted
+  statusResuming: Resuming · Execution permitted
+  statusSuspended: Suspended · Development restricted
+  statusArchived: Archived · Development restricted
+  impactBlockedTitle: "{count} development Tasks blocked"
+  impactExecutableTitle: "{count} Tasks remain executable outside suspension scope"
+  impactNote: Task lifecycle statuses are unchanged; unrelated work remains executable.
+  affectedTitle: Affected and unaffected Tasks
+  restrictedTitle: Work restricted pending decision
+  restrictedCopy: Claims are denied during suspension and gate snapshots are recorded; there is no bypass toggle.
+  lifecycleSuspend: Suspend
+  lifecycleResume: Resume
+  lifecycleRestart: Complete resume
+  lifecycleAbandon: Archive
+  lifecycleNoop: Product is already in the target state
+  tasksEmpty: No tasks are linked to this product.
+  historyEmpty: No history yet.
+  ownerLabel: Product Owner
+  taskCountLabel: "{count} linked Tasks"
+  backToProducts: Back to products

@@ -30,6 +30,7 @@ export interface ProductProfile {
   key: string;
   name: string;
   description: string | null;
+  /** PA07-IMP-004 四值化生命周期门禁：suspended/archived 阻塞受影响开发工作 */
   status: ProductLifecycleStatus;
   updated_at: string;
 }
@@ -132,14 +133,65 @@ export async function demoteProductOwner(
   );
 }
 
-/** POST /v1/pm/products/{id}/lifecycle {action: abandon|restart}（任意 Product Owner） */
+/**
+ * POST /v1/pm/products/{id}/lifecycle（任意 Product Owner）。
+ * PA07-IMP-004 四动作：abandon→archived / suspend→suspended / resume→resuming
+ * / restart|complete_resume→normal；noop 同态 409 product_lifecycle_noop。
+ */
+export type ProductLifecycleAction =
+  | "abandon"
+  | "suspend"
+  | "resume"
+  | "restart"
+  | "complete_resume";
+
 export async function setProductLifecycle(
   productId: string,
-  action: "abandon" | "restart"
+  action: ProductLifecycleAction
 ): Promise<ProductProfile> {
   return http.post<ProductProfile>(`/v1/pm/products/${productId}/lifecycle`, {
     action
   });
+}
+
+/* ------------------------- PA-07 项目级产品读面（179:3603 E 系列） ---------- */
+
+/** 项目关联产品行：link 有效行 + 产品 profile + 本项目内关联任务计数 */
+export interface ProjectProduct {
+  link_id: string;
+  linked_at: string;
+  product: ProductProfile;
+  task_count: number;
+}
+
+/** GET /v1/pm/projects/{project_id}/products（项目成员可见） */
+export async function listProjectProducts(projectId: string): Promise<ProjectProduct[]> {
+  const res = await http.get<{ items: ProjectProduct[] }>(
+    `/v1/pm/projects/${projectId}/products`
+  );
+  return res.items ?? [];
+}
+
+/** 产品关联任务行（E 页 Tasks tab / Impact Summary；行含调度原料） */
+export interface ProductTask {
+  id: string;
+  code: string;
+  project_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  planned_end_at: string | null;
+  deps_total: number;
+  deps_met: number;
+  created_at: string;
+}
+
+/** GET /v1/pm/products/{id}/tasks（Product Member 可读） */
+export async function listProductTasks(productId: string): Promise<ProductTask[]> {
+  const res = await http.get<{ items: ProductTask[] }>(
+    `/v1/pm/products/${productId}/tasks`
+  );
+  return res.items ?? [];
 }
 
 /* ---------------------------------- Link ---------------------------------- */

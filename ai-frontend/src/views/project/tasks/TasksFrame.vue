@@ -15,6 +15,11 @@ const route = useRoute();
 
 const TASK_TABS = [
   {
+    key: "list",
+    path: "/project/tasks/list",
+    labelKey: "s04.tasks.tabs.list"
+  },
+  {
     key: "overview",
     path: "/project/tasks",
     labelKey: "s04.tasks.tabs.overview"
@@ -41,9 +46,13 @@ const TASK_TABS = [
   }
 ] as const;
 
-const activeKey = computed(
-  () => TASK_TABS.find(tab => tab.path === route.path)?.key ?? ""
-);
+// list 页内二级视图（/project/tasks/relationships）也归 list 页签亮起。
+const LIST_TAB_PATHS = ["/project/tasks/list", "/project/tasks/relationships"];
+
+const activeKey = computed(() => {
+  if (LIST_TAB_PATHS.includes(route.path)) return "list";
+  return TASK_TABS.find(tab => tab.path === route.path)?.key ?? "";
+});
 </script>
 
 <template>

@@ -48,6 +48,8 @@ export interface DetailHistoryView {
 
 export interface DetailViewModel {
   id: string;
+  /** PA-07 任务身份锚（0050 PM-NNN） */
+  code: string;
   title: string;
   status: string;
   priority: string;
@@ -123,6 +125,7 @@ export function toDetailView(detail: TaskDetailView): DetailViewModel {
 
   return {
     id: task.id,
+    code: task.code,
     title: task.title,
     status: task.status,
     priority: task.priority,

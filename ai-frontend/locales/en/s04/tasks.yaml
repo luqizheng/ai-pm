@@ -1,5 +1,6 @@
 tasks:
   tabs:
+    list: List
     overview: Overview
     breakdown: Breakdown
     backlog: Backlog

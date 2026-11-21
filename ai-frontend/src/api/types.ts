@@ -73,9 +73,27 @@ export interface Requirement {
   created_at: string;
 }
 
-/** delivery.task */
+/** 活跃关联产品摘要（0044 task_product × core.product，PA-07 列表读面） */
+export interface TaskProductRef {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** 任务最新一次 run（attempt_no 降序第一条，PA-07 列表读面） */
+export interface TaskLatestRun {
+  id: string;
+  attempt_no: number;
+  status: string;
+  review_verdict: string | null;
+  created_at: string;
+}
+
+/** delivery.task（PA-07 读面：0050 code + 调度原料一并返回） */
 export interface Task {
   id: string;
+  /** 项目内业务编号（0050 触发器发号 PM-NNN / 兜底 P-hex），UI 展示锚 */
+  code: string;
   project_id: string;
   milestone_id: string | null;
   title: string;
@@ -84,6 +102,12 @@ export interface Task {
   priority: string;
   assignee_id: string | null;
   revision: number;
+  planned_end_at: string | null;
+  products: TaskProductRef[];
+  latest_run: TaskLatestRun | null;
+  deps_total: number;
+  deps_met: number;
+  product_blocked: boolean;
   created_at: string;
   updated_at: string;
 }

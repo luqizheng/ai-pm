@@ -212,6 +212,8 @@ shell:
         discovery: 代码发现
         requirements: 需求
         taskManagement: 任务管理
+        executionDashboard: 执行看板
+        products: 产品
         technicalDesign: 技术设计
         execution: AI 执行
         assistant: AI 助手

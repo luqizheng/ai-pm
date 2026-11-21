@@ -1,5 +1,6 @@
 tasks:
   tabs:
+    list: 列表
     overview: 总览
     breakdown: 任务拆解
     backlog: 任务池

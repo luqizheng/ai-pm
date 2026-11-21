@@ -1,0 +1,168 @@
+# PA-07 任务执行编排（Figma 画布 179:3603「Task & Execution」，2026-11-21）。
+# 词汇口径：Scheduling condition 与产品门禁是派生展示，不改任务生命周期状态。
+list:
+  title: 任务
+  subtitle: 任务生命周期、执行与调度条件一屏可见
+  viewList: 列表
+  viewRelationships: 依赖关系
+  filterProduct: 产品
+  filterProductAll: 产品：全部
+  filterStatus: 任务状态
+  filterStatusAll: 状态：全部
+  filterDependency: 依赖
+  filterDependencyAll: 依赖：全部
+  clearFilters: 清除筛选
+  searchPlaceholder: 搜索任务编号 / 标题…
+  count: "{count} 个任务"
+  sortedByPriority: 按优先级排序
+  colTask: 任务 / 优先级 / 日期
+  colProducts: 关联产品
+  colStatus: 任务状态
+  colExecution: 执行
+  colCondition: 调度条件 / 原因
+  empty: 当前筛选下没有任务
+  footnote: 依赖条件实时计算；它们不会替代任务生命周期状态。
+condition:
+  running: 执行中
+  blocked_product: 产品暂停阻塞
+  waiting: 等待依赖
+  ready: 可启动
+  closed: 已关闭
+panel:
+  title: AI-PM · 执行上下文
+  scopeCaption: 当前项目
+  schedulingTitle: 调度是计算出来的
+  schedulingCopy: 只有当全部前置条件与全部相关产品门禁都放行时，任务才能启动。
+  relatedCaption: 关联产品
+  relatedEmpty: 本项目暂无关联产品
+  bypassCaption: 上下文而非绕行
+  bypassCopy: 任务状态从不因依赖阻塞或产品暂停而原地改写；系统不提供「强制启动」或「忽略依赖」动作。
+  updated: 更新于 {time}
+relationships:
+  title: 任务依赖关系
+  subtitle: 焦点依赖视图 · 全部条件为 AND
+  addDependency: 添加依赖
+  taskDetails: 任务详情
+  andGateTitle: AND 门禁
+  andGateCopy: 所有前置条件与所有相关产品门禁都必须放行，本任务才能启动。
+  dependsOn: 前置依赖
+  selectedTask: 当前任务
+  blocks: 阻塞的后继
+  satisfied: 已满足
+  notSatisfied: 未满足
+  emptyDependsOn: 无前置依赖——本任务不被其他任务阻塞。
+  emptyBlocks: 无后继任务——完成本任务不会阻塞其他任务。
+  parallelTitle: 并行后继
+  parallelCopy: 后继任务之间互不依赖：它们只等待本任务的 AND 门禁，互相不等待。
+dependencies:
+  title: 依赖
+  objectiveFallback: （无目标描述）
+  blockedTitle: 等待依赖
+  blockedCopy: 前置任务验收通过后本任务才能启动。任务状态保持不变。
+  allSatisfiedTitle: 全部前置已满足
+  allSatisfiedCopy: 所有前置条件与相关产品门禁均已放行；本任务已进入就绪侧。
+  dependsOn: 前置依赖
+  blocks: 阻塞的后继
+  conditionsSummary: "{met}/{total} 条件满足 · AND"
+  conditionCompleted: 前置需 Completed
+  conditionAccepted: 前置需 Accepted
+  conditionDeliverable: 需交付物获批
+  noDeliverable: 无交付物引用
+  satisfied: 已满足
+  notSatisfied: 未满足
+  addDependency: 添加依赖
+  removeTitle: 移除依赖
+  removeBody: 移除 {code} 的依赖边？该操作立即生效并写审计。
+  removeConfirm: 移除
+  wizardStep1: 1 选择前置
+  wizardStep2: 2 设置条件
+  wizardStep3: 3 复核
+  wizardTitle: 添加依赖
+  wizardPick: 选择前置任务
+  wizardCondition: 设置满足条件
+  wizardReview: 复核依赖
+  wizardReviewCopy: "{from} → {to} · 满足后本任务才会在全部门禁放行后启动。"
+  wizardSave: 保存依赖
+  wizardBack: 返回编辑器
+  wizardNext: 下一步
+  wizardCancel: 取消
+  wizardNoTasks: 项目内暂无可选作前置的任务。
+  circularTitle: 会形成环
+  circularCopy: 该前置在当前依赖图中位于本任务下游——创建将被后端拒绝（环路 409）。
+  savedTitle: 依赖已保存
+  savedCopy: 已创建依赖边并写审计；解锁判定同事务完成。
+  lockedTitle: 只读
+  lockedCopy: 前置边由基线/AI 计划冻结，人工不可修改。
+  emptyTitle: 还没有依赖
+  emptyCopy: 用依赖边声明执行顺序；全部前置满足后任务才可启动。
+  emptyCta: 添加第一个依赖
+  loadFailed: 加载失败
+  removed: 依赖已移除
+history:
+  title: 修订历史
+  subtitle: 稳定身份，不可变历史
+  activeBadge: 活跃
+  historicalBadge: 历史 · 不可变
+  compare: 对比
+  compareTo: 与 r{no} 对比
+  warningTitle: 有 Run 仍绑定旧 Revision
+  warningCopy: Run #{attempt}（{status}）仍在使用 r{rev}，等待 AI-PM 评估后再迁移。
+  changedLabel: 变更
+  reasonLabel: 原因
+  runsLabel: Runs
+  runsCount: "{count} 次"
+  runsNone: 无
+  emptyTitle: 暂无修订
+  emptyCopy: 任务创建即冻结 r1；实质变更（目标/范围/验收口径/执行契约）才会新增修订。
+  backToTask: 返回任务
+runs:
+  title: Runs
+  colAttempt: Run
+  colStatus: 状态
+  colVerdict: 评审结论
+  colCreatedAt: 创建时间
+  empty: 本任务还没有 Run。
+dashboard:
+  title: 项目执行看板
+  subtitle: 执行总览 · 人工介入 · 执行中 · 等待与就绪
+  overviewTitle: 执行总览
+  attentionTitle: 需要人工关注
+  executingTitle: 正在执行
+  waitingTitle: 等待与就绪
+  statActive: 执行通道任务
+  statWaiting: 等待中
+  statReady: 可启动
+  statAttention: 待人工处理
+  emptyOverview: 尚无任务数据。
+  emptyAttention: 没有等待人工处理的项。
+  emptyExecuting: 当前没有正在执行的 Run。
+  emptyWaiting: 没有等待或就绪的任务。
+  goTasks: 打开任务列表
+products:
+  title: 产品
+  subtitle: 项目关联产品与生命周期门禁
+  detailTitle: 产品详情
+  tabOverview: 概览
+  tabLifecycle: 生命周期
+  tabTasks: 任务
+  tabHistory: 历史
+  statusNormal: 正常 · 允许执行
+  statusResuming: 恢复中 · 允许执行
+  statusSuspended: 已暂停 · 限制开发
+  statusArchived: 已归档 · 限制开发
+  impactBlockedTitle: "{count} 个开发任务被阻塞"
+  impactExecutableTitle: "{count} 个任务在暂停范围外仍可执行"
+  impactNote: 任务生命周期状态不变；无关工作保持可执行。
+  affectedTitle: 受影响与不受影响的任务
+  restrictedTitle: 工作受限，等待决策
+  restrictedCopy: 暂停期间领取被拒绝并记录门禁快照；不存在绕行开关。
+  lifecycleSuspend: 暂停
+  lifecycleResume: 恢复
+  lifecycleRestart: 完成恢复
+  lifecycleAbandon: 归档
+  lifecycleNoop: 产品已处于目标状态
+  tasksEmpty: 本产品暂无关联任务。
+  historyEmpty: 暂无历史记录。
+  ownerLabel: 产品 Owner
+  taskCountLabel: "{count} 个关联任务"
+  backToProducts: 返回产品列表

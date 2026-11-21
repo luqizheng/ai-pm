@@ -9,6 +9,7 @@ import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
 import { getTaskDetail, type TaskDetailView } from "@/api/task-plans";
 import TasksFrame from "../TasksFrame.vue";
+import TaskDetailTabs from "./TaskDetailTabs.vue";
 import TaskPriorityChip from "../components/TaskPriorityChip.vue";
 import TaskStatusChip from "../components/TaskStatusChip.vue";
 import { shortId } from "../tasks-contract";
@@ -89,7 +90,7 @@ function goBack() {
     :title="task?.title ?? t('s04.tasks.detail.loading')"
     :description="
       task
-        ? `${t('s04.tasks.common.taskLabel')} ${shortId(task.id)}`
+        ? `${task.code} · ${t('s04.tasks.common.taskLabel')} ${shortId(task.id)}`
         : t('s04.tasks.detail.loading')
     "
   >
@@ -101,6 +102,7 @@ function goBack() {
     </template>
 
     <TasksFrame />
+    <TaskDetailTabs v-if="taskId" :task-id="taskId" />
 
     <EmptyState
       v-if="loadError"

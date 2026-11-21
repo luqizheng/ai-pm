@@ -212,6 +212,8 @@ shell:
         discovery: Code Discovery
         requirements: Requirements
         taskManagement: Task Management
+        executionDashboard: Execution dashboard
+        products: Products
         technicalDesign: Technical Design
         execution: AI Execution
         assistant: AI Assistant

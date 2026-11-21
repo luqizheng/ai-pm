@@ -13,11 +13,15 @@ import { http } from "@/api/base";
 
 export { createTask, listTasks, updateTask } from "./pm";
 
-/** 依赖边（upstream / downstream 共用） */
+/** 依赖边（upstream / downstream 共用）。satisfied = 边条件行级求值（PA-07 UI
+ * 「✓ Satisfied / ○ Not satisfied · x/y met」），恒对前置任务求值 */
 export interface TaskDependencyEdge {
   id: string;
   title: string;
   status: string;
+  required_condition: "completed" | "accepted" | "deliverable_approved";
+  required_deliverable_ref: Record<string, unknown> | null;
+  satisfied: boolean;
 }
 
 /** 单任务依赖图（后端逐任务聚合；项目级图接口待补） */
@@ -31,9 +35,17 @@ export function listTaskDependencies(taskId: string) {
   return http.get<TaskDependencyGraph>(`/v1/pm/tasks/${taskId}/dependencies`);
 }
 
-export function addTaskDependency(taskId: string, dependsOnTaskId: string) {
+export function addTaskDependency(
+  taskId: string,
+  dependsOnTaskId: string,
+  options?: { required_condition?: string; required_deliverable_ref?: Record<string, unknown> }
+) {
   return http.post<TaskDependencyGraph>(`/v1/pm/tasks/${taskId}/dependencies`, {
-    depends_on_task_id: dependsOnTaskId
+    depends_on_task_id: dependsOnTaskId,
+    ...(options?.required_condition ? { required_condition: options.required_condition } : {}),
+    ...(options?.required_deliverable_ref
+      ? { required_deliverable_ref: options.required_deliverable_ref }
+      : {})
   });
 }
 
@@ -68,7 +80,6 @@ export interface MarkTasksReadyResult {
   already_ready: string[];
   skipped: string[];
 }
-
 /**
  * 人工批量 `draft → ready`（E2：AI 调用 Forbidden，无旁路）。
  * 整批确认必须走本端点而非 updateTask 直写——直写不产生 TaskReady 事件，
@@ -78,5 +89,38 @@ export function markTasksReady(projectId: string, taskIds: string[]) {
   return http.post<{ result: MarkTasksReadyResult }>(
     `/v1/pm/projects/${projectId}/tasks/mark-ready`,
     { task_ids: taskIds }
+  );
+}
+
+// ───────────────────────── PA-07 · Task Revision 历史（Figma 179:3603 D 系列）
+
+/** 单条 Revision 时间线行（展示序号连续 r1/r2/r3；epoch_no = CAS 纪元，允许间隙） */
+export interface TaskRevision {
+  id: string;
+  revision_no: number;
+  epoch_no: number;
+  active: boolean;
+  goal: string | null;
+  scope: Record<string, unknown>;
+  acceptance_criteria: Record<string, unknown>;
+  execution_contract: Record<string, unknown>;
+  change_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  run_count: number;
+}
+
+/** 绑定在非当前 Revision 上的仍活跃 Run（D 画布「Older active Run warning」） */
+export interface StaleActiveRun {
+  run_id: string;
+  attempt_no: number;
+  status: string;
+  revision_no: number;
+  created_at: string;
+}
+
+export function listTaskRevisions(taskId: string) {
+  return http.get<{ items: TaskRevision[]; stale_active_runs: StaleActiveRun[] }>(
+    `/v1/pm/tasks/${taskId}/revisions`
   );
 }

@@ -171,6 +171,8 @@ export interface TaskBaselineSnapshot {
 export interface TaskDetailView {
   task: {
     id: string;
+    /** PA-07 任务身份锚（0050 PM-NNN） */
+    code: string;
     project_id: string;
     title: string;
     description: string | null;

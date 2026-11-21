@@ -10,6 +10,7 @@ import {
   Home,
   LayoutDashboard,
   ListChecks,
+  Package,
   ListTree,
   Megaphone,
   Network,
@@ -392,6 +393,26 @@ export const auxiliaryNavItems: NavItem[] = [
     icon: SquareKanban,
     component: () =>
       import("@/views/project/tasks/overview/TasksOverviewView.vue").then(
+        module => module.default
+      )
+  },
+  // PA-07 执行看板（Figma 179:3603 00 Dashboard）：四块执行面板
+  {
+    path: "/project/dashboard",
+    labelKey: "shell.app.side.item.executionDashboard",
+    icon: Gauge,
+    component: () =>
+      import("@/views/project/dashboard/ExecutionDashboardView.vue").then(
+        module => module.default
+      )
+  },
+  // PA-07 产品面（Figma 179:3603 E 系列）：项目关联产品 + 生命周期门禁
+  {
+    path: "/project/products",
+    labelKey: "shell.app.side.item.products",
+    icon: Package,
+    component: () =>
+      import("@/views/project/products/ProductsView.vue").then(
         module => module.default
       )
   },

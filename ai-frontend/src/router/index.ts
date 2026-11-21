@@ -229,6 +229,21 @@ export function buildRoutes(): RouteRecordRaw[] {
       meta: { title: "s04.tasks.page.planningTitle" }
     },
     {
+      // PA-07 任务列表（Figma 179:3603 A）：0050 读面 + 调度条件派生。
+      // 静态段注册在 :taskId 前（本文件 L449 惯例）。
+      path: "/project/tasks/list",
+      component: () =>
+        import("@/views/project/tasks/list/TasksListView.vue"),
+      meta: { title: "pa07.list.title" }
+    },
+    {
+      // PA-07 依赖关系焦点视图（Figma 179:3603 C）。
+      path: "/project/tasks/relationships",
+      component: () =>
+        import("@/views/project/tasks/relationships/RelationshipsFocusView.vue"),
+      meta: { title: "pa07.relationships.title" }
+    },
+    {
       // 任务拆解（S04-UI-02）：接真后端 task-plans 系。
       path: "/project/tasks/breakdown",
       component: () =>
@@ -264,11 +279,41 @@ export function buildRoutes(): RouteRecordRaw[] {
       meta: { title: "s04.tasks.page.detailTitle" }
     },
     {
+      // PA-07 详情四页签（Figma 179:3603 B/D）：依赖页 / Revision 历史 / Runs。
+      // 静态后缀段在 :taskId 单段之后，Vue Router 按 specificity 优先匹配。
+      path: "/project/tasks/:taskId/dependencies",
+      component: () =>
+        import("@/views/project/tasks/detail/dependencies/TaskDependenciesView.vue"),
+      meta: { title: "pa07.dependencies.title" }
+    },
+    {
+      path: "/project/tasks/:taskId/history",
+      component: () =>
+        import("@/views/project/tasks/detail/history/TaskRevisionHistoryView.vue"),
+      meta: { title: "pa07.history.title" }
+    },
+    {
+      path: "/project/tasks/:taskId/runs",
+      component: () =>
+        import("@/views/project/tasks/detail/runs/TaskRunsView.vue"),
+      meta: { title: "pa07.runs.title" }
+    },
+    {
       path: "/project/tasks/backlog",
       component: TasksBacklogView,
       meta: { title: "s04.tasks.page.backlogTitle" }
     }
   );
+
+  // ─── PA-07 产品详情（Figma 179:3603 E 系列）───
+  // /project/dashboard 与 /project/products 由 navigation.ts auxiliary 条目
+  // buildRoutes 派生（单源），此处只补不占导航的详情页。
+  routes.push({
+    path: "/project/products/:productId",
+    component: () =>
+      import("@/views/project/products/ProductDetailView.vue"),
+    meta: { title: "pa07.products.detailTitle" }
+  });
 
   // ─── Analysis 报告详情（Phase 2 P2-01）───
   // 列表页 /project/analysis 由导航树派生（navigation.ts 单源）；详情页不占

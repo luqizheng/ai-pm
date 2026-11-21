@@ -62,6 +62,11 @@
      的绿点 #8DC5AF；用于「开发环境已就绪」这类环境状态指示） */
   --ws-color-status-ready: #8dc5af;
 
+  /* 调度就绪状态色（PA-07 画布 179:3603「Ready to Start」紫 #8B83F6）：
+     Scheduling Condition 与任务生命周期状态并行展示（不改任务状态），需要
+     与 status-ready（绿）区分的独立档位 */
+  --ws-color-status-scheduled: #8b83f6;
+
   /* 形状 / 密度 —— V1.0 §1.2 */
   --ws-radius-card: 8px;
   --ws-radius-dialog: 12px;
