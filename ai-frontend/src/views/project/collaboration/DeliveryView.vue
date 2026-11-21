@@ -80,8 +80,12 @@ const failedVerdicts = computed(() =>
   verdicts.value.filter(row => row.verdict && row.verdict !== "passed")
 );
 
+// 完成判定=每条口径都被 review run 覆盖且通过；「未被覆盖」≠通过
+// （PA-06-05 §7.3：验收条件未满足不得标记完成——诚实优先于好看）。
 const allPassed = computed(
-  () => verdicts.value.length > 0 && failedVerdicts.value.length === 0
+  () =>
+    verdicts.value.length > 0 &&
+    verdicts.value.every(row => rowEvaluated(row) && row.verdict === "passed")
 );
 
 function verdictLabel(verdict: CriterionVerdict): string {
@@ -273,9 +277,9 @@ watch([projectId, () => route.query.task_id], load);
           </p>
         </div>
 
-        <!-- 交付阻塞卡（有未过口径时） -->
+        <!-- 交付阻塞卡（未全过即阻塞：未通过与未覆盖都算未完成） -->
         <div
-          v-if="!allPassed && failedVerdicts.length > 0"
+          v-if="!allPassed"
           class="dl-blocked"
           data-testid="dl-blocked"
         >

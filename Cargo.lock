@@ -535,7 +535,7 @@ dependencies = [
 [[package]]
 name = "digua_common_consul"
 version = "1.7.0"
-source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+source = "sparse+http://192.168.2.103:16444/api/v1/crates/"
 checksum = "e3c7216ee042642758a623fef618baa86a905f290c2766bbf199bc0ca1c8d303"
 dependencies = [
  "once_cell",
@@ -551,7 +551,7 @@ dependencies = [
 [[package]]
 name = "digua_common_jwt"
 version = "1.7.0"
-source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+source = "sparse+http://192.168.2.103:16444/api/v1/crates/"
 checksum = "89381f8439eadbe5c9cee973cdf23a8bd6ff4e8dc0ab2c72241f226bc83fff42"
 dependencies = [
  "chrono",
@@ -567,7 +567,7 @@ dependencies = [
 [[package]]
 name = "digua_file_sdk"
 version = "1.7.0"
-source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+source = "sparse+http://192.168.2.103:16444/api/v1/crates/"
 checksum = "e482b3a65ba0c014fa1381b8b7182de962e803cced22a08d5d62f6915833eaec"
 dependencies = [
  "chrono",
@@ -582,7 +582,7 @@ dependencies = [
 [[package]]
 name = "digua_http_client"
 version = "1.7.0"
-source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+source = "sparse+http://192.168.2.103:16444/api/v1/crates/"
 checksum = "7e709692f40c3a0386a3626f21a6081ecd49596e21bd34de88ca2212f2933b5c"
 dependencies = [
  "async-trait",

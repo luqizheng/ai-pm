@@ -554,9 +554,15 @@ fn analyze_graph(nodes: &[DependencyGraphNode], edges: &[DependencyGraphEdge]) -
             }
         }
     }
+    // 空图（项目无任务）早退：unwrap_or(0) 会落到越界索引 0 上 panic
+    // （2026-11-21 空项目冒烟实测）。layers/cycles 已为空集，并行组循环
+    // 天然跳过；关键路径直接置空。
+    if ids.is_empty() {
+        return (layers, Vec::new(), Vec::new(), cycles);
+    }
     let start = (0..ids.len())
         .max_by_key(|i| longest_downstream[*i])
-        .unwrap_or(0);
+        .expect("non-empty ids always yield an argmax");
     let mut critical_path: Vec<Uuid> = Vec::new();
     let mut cursor = Some(start);
     while let Some(current) = cursor {
