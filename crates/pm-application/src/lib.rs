@@ -91,6 +91,7 @@ pub mod task_products;
 pub mod task_traceability;
 pub mod task_plan;
 pub mod task_read;
+pub mod task_revisions;
 pub mod task_repository_binding;
 pub mod team_llm;
 pub mod team_llm_catalog;

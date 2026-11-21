@@ -1068,3 +1068,107 @@ pub async fn list_product_links(
     .await?;
     Ok(rows)
 }
+
+// ───────────────────────────── PA-07 项目级产品读面（Figma 179:3603 E 系列）
+
+/// 项目关联产品行（`GET /v1/pm/projects/{project_id}/products`）：
+/// core.product_project_link 有效行 → 产品 profile + link 元数据 + 关联任务计数。
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ProjectProductRow {
+    pub link_id: Uuid,
+    pub linked_at: chrono::DateTime<Utc>,
+    #[sqlx(flatten)]
+    pub product: ProductProfile,
+    /// 该产品在本项目内的活跃关联任务数（task_product 反查，withdrawn 不含）。
+    pub task_count: i64,
+}
+
+/// 项目 → 产品方向读面（此前只有 product→project 方向）。
+/// 可见性：项目成员可见（产品经由 link/任务对项目成员天然可见；
+/// Team Owner / Product Member 管理面走既有 team/products 端点，不在此列）。
+pub async fn list_project_products(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    principal_id: Uuid,
+) -> Result<Vec<ProjectProductRow>, ProductError> {
+    let visible: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2 \
+          AND EXISTS (SELECT 1 FROM core.project_member m \
+                       WHERE m.project_id = core.project.id AND m.principal_id = $3)",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_optional(pool)
+    .await?;
+    if visible.is_none() {
+        return Err(ProductError::NotFound);
+    }
+    let rows: Vec<ProjectProductRow> = sqlx::query_as(
+        "SELECT l.id AS link_id, l.created_at AS linked_at, \
+                p.id, p.team_id, p.key, p.name, p.description, p.status, \
+                (SELECT count(*) FROM delivery.task_product tp \
+                   JOIN delivery.task tt ON tt.id = tp.task_id \
+                  WHERE tp.product_id = p.id AND tp.withdrawn_at IS NULL \
+                    AND tt.project_id = $1) AS task_count \
+           FROM core.product_project_link l \
+           JOIN core.product p ON p.id = l.product_id \
+          WHERE l.project_id = $1 AND l.withdrawn_at IS NULL \
+          ORDER BY p.name, p.id",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// 产品关联任务行（`GET /v1/pm/products/{product_id}/tasks`，E 页 Tasks tab /
+/// Impact Summary 数据源）：task_product 活跃关联 → 任务 + PA-07 调度原料。
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ProductTaskRow {
+    pub id: Uuid,
+    pub code: String,
+    pub project_id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
+    pub planned_end_at: Option<chrono::DateTime<Utc>>,
+    pub deps_total: i64,
+    pub deps_met: i64,
+    pub created_at: chrono::DateTime<Utc>,
+}
+
+/// product → tasks 反查。可见性：Product Member（与 product_profile 同口径）。
+pub async fn list_product_tasks(
+    pool: &PgPool,
+    product_id: Uuid,
+    principal_id: Uuid,
+) -> Result<Vec<ProductTaskRow>, ProductError> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM core.product_member \
+          WHERE product_id = $1 AND principal_id = $2)",
+    )
+    .bind(product_id)
+    .bind(principal_id)
+    .fetch_one(pool)
+    .await?;
+    if !is_member {
+        return Err(ProductError::NotFound);
+    }
+    let rows: Vec<ProductTaskRow> = sqlx::query_as(&format!(
+        "SELECT t.id, t.code, t.project_id, t.title, t.status, t.priority, \
+                t.planned_end_at, {}, t.created_at \
+           FROM delivery.task_product tp \
+           JOIN delivery.task t ON t.id = tp.task_id \
+          WHERE tp.product_id = $1 AND tp.withdrawn_at IS NULL \
+          ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 \
+                                   WHEN 'normal' THEN 2 ELSE 3 END, \
+                   t.created_at DESC",
+        crate::rows::TASK_AGGREGATE_COLUMNS
+    ))
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}

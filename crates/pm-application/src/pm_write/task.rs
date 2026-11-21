@@ -584,11 +584,15 @@ pub async fn mark_task_batch_ready(
 }
 
 pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, PmWriteError> {
-    sqlx::query_as::<_, TaskRow>(
-        "SELECT id, project_id, milestone_id, title, description, status, priority, \
-                assignee_id, revision, ai_role_version_id, created_at, updated_at \
-         FROM delivery.task WHERE id = $1",
-    )
+    // 聚合列与列表读面共享（TASK_AGGREGATE_COLUMNS），create/update 返回体与
+    // 列表行同形，前端无需二次拉取。
+    sqlx::query_as::<_, TaskRow>(&format!(
+        "SELECT id, code, project_id, milestone_id, title, description, status, priority, \
+                assignee_id, revision, ai_role_version_id, planned_end_at, {}, \
+                created_at, updated_at \
+         FROM delivery.task t WHERE id = $1",
+        crate::rows::TASK_AGGREGATE_COLUMNS
+    ))
     .bind(task_id)
     .fetch_one(pool)
     .await

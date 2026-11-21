@@ -536,3 +536,136 @@ async fn revisions_list_orders_by_version_desc(pool: PgPool) {
         );
     }
 }
+
+// ─────────────────────── PA-07 列表读面（Figma 179:3603 A，0050 读面扩展）
+
+/// 建 Product（归属该任务租户的新 Team，status 参数化）+ 有效 Task-Product 归属。
+async fn seed_task_product(pool: &PgPool, project_id: uuid::Uuid, task_id: uuid::Uuid, name: &str, status: &str) -> uuid::Uuid {
+    let product_id: uuid::Uuid = sqlx::query_scalar(
+        "WITH t AS ( \
+             INSERT INTO core.team (tenant_id, name) \
+             SELECT tenant_id, $1 || '-team' FROM delivery.task WHERE id = $2 RETURNING tenant_id, id \
+         ), p AS ( \
+             INSERT INTO core.product (team_id, tenant_id, key, name, status) \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), $1, $3 FROM t RETURNING id \
+         ) SELECT id FROM p",
+    )
+    .bind(name)
+    .bind(task_id)
+    .bind(status)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.task_product (tenant_id, project_id, task_id, product_id) \
+         SELECT tenant_id, project_id, $1, $2 FROM delivery.task WHERE id = $1",
+    )
+    .bind(task_id)
+    .bind(product_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    product_id
+}
+
+/// 直插依赖边（required_condition 可参数化）。
+async fn seed_dependency_edge(pool: &PgPool, project_id: uuid::Uuid, task_id: uuid::Uuid, depends_on: uuid::Uuid, created_by: uuid::Uuid, condition: &str) {
+    sqlx::query(
+        "INSERT INTO delivery.task_dependency \
+         (tenant_id, project_id, task_id, depends_on_task_id, created_by, required_condition) \
+         SELECT tenant_id, project_id, $1, $2, $3, $4 FROM delivery.task WHERE id = $1",
+    )
+    .bind(task_id)
+    .bind(depends_on)
+    .bind(created_by)
+    .bind(condition)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn task_list_exposes_pa07_scheduling_material(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "PA07-L".into(),
+            project_name: "pa07".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    common::join_dev(&pool, boot.project_id).await;
+
+    // 主任务：关联 normal+suspended 产品、两条依赖边（1 满足 1 未满足）、一条 queued run。
+    let main = seed_task(&pool, boot.project_id, "main", 0).await;
+    seed_task_product(&pool, boot.project_id, main, "Auth service", "normal").await;
+    seed_task_product(&pool, boot.project_id, main, "Billing API", "suspended").await;
+    let met_pred = seed_task(&pool, boot.project_id, "pred-met", 30).await;
+    sqlx::query("UPDATE delivery.task SET status = 'completed' WHERE id = $1")
+        .bind(met_pred)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let unmet_pred = seed_task(&pool, boot.project_id, "pred-unmet", 20).await;
+    seed_dependency_edge(&pool, boot.project_id, main, met_pred, boot.human_id, "completed").await;
+    seed_dependency_edge(&pool, boot.project_id, main, unmet_pred, boot.human_id, "completed").await;
+    sqlx::query(
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1))",
+    )
+    .bind(boot.project_id)
+    .bind(main)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 干净任务：无产品/依赖/run。
+    seed_task(&pool, boot.project_id, "plain", 10).await;
+
+    let app = router(pool.clone());
+    let response = app
+        .oneshot(get(format!("/v1/pm/tasks?project_id={}", boot.project_id)))
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 4);
+
+    let main_row = items.iter().find(|t| t["title"] == json!("main")).unwrap();
+    // code：0050 触发器统一发号 PM-NNN（项目内连续）。
+    let code = main_row["code"].as_str().unwrap();
+    assert!(
+        code.starts_with("PM-") && code[3..].chars().all(|c| c.is_ascii_digit()),
+        "task code must be PM-NNN, got {code}"
+    );
+    // products：活跃关联产品名+状态齐出。
+    let products = main_row["products"].as_array().unwrap();
+    assert_eq!(products.len(), 2, "active task-product links only");
+    let names: Vec<&str> = products.iter().map(|p| p["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"Auth service") && names.contains(&"Billing API"));
+    // 调度原料：deps 计数与产品门禁态。
+    assert_eq!(main_row["deps_total"], json!(2));
+    assert_eq!(main_row["deps_met"], json!(1), "completed predecessor satisfies");
+    assert_eq!(main_row["product_blocked"], json!(true), "suspended product blocks");
+    // 最新 run 原料。
+    assert_eq!(main_row["latest_run"]["attempt_no"], json!(1));
+    assert_eq!(main_row["latest_run"]["status"], json!("queued"));
+
+    let plain = items.iter().find(|t| t["title"] == json!("plain")).unwrap();
+    assert_eq!(plain["products"], json!([]));
+    assert!(plain["latest_run"].is_null());
+    assert_eq!(plain["deps_total"], json!(0));
+    assert_eq!(plain["deps_met"], json!(0));
+    assert_eq!(plain["product_blocked"], json!(false));
+
+    // 排序：priority 相同按 created_at DESC；不同 priority urgent 在前。
+    let priority_order: Vec<String> = items
+        .iter()
+        .map(|t| t["priority"].as_str().unwrap().to_string())
+        .collect();
+    assert!(priority_order.iter().all(|p| p == "normal"), "seeded all normal");
+    let titles: Vec<&str> = items.iter().map(|t| t["title"].as_str().unwrap()).collect();
+    assert_eq!(titles[0], "main", "same priority → created_at DESC keeps newest first");
+}

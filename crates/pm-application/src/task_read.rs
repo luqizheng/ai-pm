@@ -33,6 +33,8 @@ use uuid::Uuid;
 #[derive(Debug, sqlx::FromRow, Serialize)]
 pub struct TaskDetailRow {
     pub id: Uuid,
+    /// PA-07 任务身份锚（0050）：PM-NNN，详情页展示/引用用。
+    pub code: String,
     pub project_id: Uuid,
     pub title: String,
     pub description: Option<String>,
@@ -152,7 +154,7 @@ pub async fn task_detail(
     task_id: Uuid,
 ) -> Result<TaskDetail, PmWriteError> {
     let task: TaskDetailRow = sqlx::query_as(
-        "SELECT id, project_id, title, description, status, priority, assignee_id, revision, \
+        "SELECT id, code, project_id, title, description, status, priority, assignee_id, revision, \
                 goal, constraints, deliverables, git_branch, planned_start_at, planned_end_at, \
                 estimate_hours, implementation_baseline_id, plan_revision_id, created_at, updated_at \
          FROM delivery.task WHERE tenant_id = $1 AND id = $2",
@@ -645,7 +647,7 @@ pub async fn project_execution_readiness(
     project_id: Uuid,
 ) -> Result<ExecutionReadiness, PmWriteError> {
     let tasks: Vec<TaskDetailRow> = sqlx::query_as(
-        "SELECT id, project_id, title, description, status, priority, assignee_id, revision, \
+        "SELECT id, code, project_id, title, description, status, priority, assignee_id, revision, \
                 goal, constraints, deliverables, git_branch, planned_start_at, planned_end_at, \
                 estimate_hours, implementation_baseline_id, plan_revision_id, created_at, updated_at \
          FROM delivery.task WHERE tenant_id = $1 AND project_id = $2 ORDER BY created_at",
@@ -1032,7 +1034,7 @@ pub async fn set_task_schedule(
     tx.commit().await.map_err(PmWriteError::Db)?;
 
     let task: TaskDetailRow = sqlx::query_as(
-        "SELECT id, project_id, title, description, status, priority, assignee_id, revision, \
+        "SELECT id, code, project_id, title, description, status, priority, assignee_id, revision, \
                 goal, constraints, deliverables, git_branch, planned_start_at, planned_end_at, \
                 estimate_hours, implementation_baseline_id, plan_revision_id, created_at, updated_at \
          FROM delivery.task WHERE tenant_id = $1 AND id = $2",

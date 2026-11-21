@@ -18,6 +18,7 @@ use pm_application::task_read::{self, TaskScheduleRequest};
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/tasks/{task_id}", get(task_detail))
+        .route("/v1/pm/tasks/{task_id}/revisions", get(task_revisions))
         .route("/v1/pm/tasks/{task_id}/schedule", patch(set_task_schedule))
         .route(
             "/v1/pm/projects/{project_id}/dependency-graph",
@@ -41,6 +42,26 @@ async fn task_detail(
     require_task_project(&state.pool, task_id, &caller).await?;
     let detail = task_read::task_detail(&state.pool, caller.tenant_id, task_id).await?;
     Ok(Json(serde_json::json!(detail)))
+}
+
+/// `GET /v1/pm/tasks/{task_id}/revisions`：Revision 历史时间线（PA-07 D 画布）。
+/// 时间线 + 陈旧活跃 Run 警告数据；任务不存在/跨租户 → 404。
+async fn task_revisions(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(task_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_task_project(&state.pool, task_id, &caller).await?;
+    let Some((revisions, stale)) =
+        pm_application::task_revisions::list_task_revisions(&state.pool, caller.tenant_id, task_id)
+            .await?
+    else {
+        return Err(crate::support::ApiError::NotFound("task_not_found"));
+    };
+    Ok(Json(serde_json::json!({
+        "items": revisions,
+        "stale_active_runs": stale,
+    })))
 }
 
 /// `PATCH /v1/pm/tasks/{task_id}/schedule`：写生效排期（S04-UI-06 拖拽/改工期）。

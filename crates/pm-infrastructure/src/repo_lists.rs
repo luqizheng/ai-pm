@@ -140,17 +140,24 @@ impl PmListRepo for PgPmListRepo {
         project_id: Option<Uuid>,
         page: ListPage,
     ) -> Result<(Vec<TaskRow>, i64), sqlx::Error> {
-        let items: Vec<TaskRow> = sqlx::query_as(
-            "SELECT t.id, t.project_id, t.milestone_id, t.title, t.description, t.status, \
-                    t.priority, t.assignee_id, t.revision, t.ai_role_version_id, \
+        // PA-07 列表读面（Figma 179:3603 A）：code/planned_end_at + 聚合列一并透出
+        // （关联产品/最新 run/依赖满足计数/产品门禁态），前端派生 Scheduling condition。
+        let items: Vec<TaskRow> = sqlx::query_as(&format!(
+            "SELECT t.id, t.code, t.project_id, t.milestone_id, t.title, t.description, \
+                    t.status, t.priority, t.assignee_id, t.revision, t.ai_role_version_id, \
+                    t.planned_end_at, {}, \
                     t.created_at, t.updated_at \
              FROM delivery.task t \
              WHERE t.tenant_id = $5 \
                AND EXISTS (SELECT 1 FROM core.project_member m \
                             WHERE m.project_id = t.project_id AND m.principal_id = $4) \
                AND ($1::uuid IS NULL OR t.project_id = $1) \
-             ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
-        )
+             ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 \
+                                      WHEN 'normal' THEN 2 ELSE 3 END, \
+                      t.created_at DESC \
+             LIMIT $2 OFFSET $3",
+            pm_application::rows::TASK_AGGREGATE_COLUMNS
+        ))
         .bind(project_id)
         .bind(page.size)
         .bind(page.offset)

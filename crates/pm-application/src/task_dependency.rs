@@ -54,6 +54,9 @@ pub struct DependencyEdge {
     pub required_condition: String,
     /// deliverable_approved 边的交付物引用（其余条件为 null）。
     pub required_deliverable_ref: Option<serde_json::Value>,
+    /// 该边条件当前是否满足（PA-07 UI「✓ Satisfied / ○ Not satisfied · x/y met」
+    /// 数据源）：行级求值，谓词与 dependencies_satisfied 同源。
+    pub satisfied: bool,
 }
 
 /// `GET /v1/pm/tasks/{task_id}/dependencies` 的响应体。
@@ -200,25 +203,46 @@ pub async fn list_dependencies(
 
     // 边表行与任务同租户（tenant_id NOT NULL + 组合外键，I1/I5）；边查询同样
     // 按 tenant 锚定，保证返回的相邻任务都属于本租户。
-    // PA07-IMP-003：读面透出边条件与交付物引用（审查75/81）。
-    let upstream = sqlx::query(
-        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref \
+    // PA07-IMP-003：读面透出边条件与交付物引用（审查75/81）；satisfied 行级求值
+    // 与 dependencies_satisfied 三谓词同源（PA-07 UI 依赖页「x/y met」数据源）。
+    // satisfied 是**边的属性**，恒对前置任务（depends_on）求值——Upstream 行前置
+    // 即对端 t；Blocks 行前置是本任务，需另 join 前置别名 p 求值（对端 t 只做展示）。
+    let satisfied_pred = |pre: &str| {
+        format!(
+            "((d.required_condition = 'completed' AND {pre}.status = 'completed') \
+           OR (d.required_condition = 'accepted' AND {pre}.status = 'completed' \
+               AND EXISTS (SELECT 1 FROM governance.review_approval ra \
+                            WHERE ra.task_id = {pre}.id AND ra.status = 'approved')) \
+           OR (d.required_condition = 'deliverable_approved' AND {pre}.status = 'completed' \
+               AND EXISTS (SELECT 1 FROM governance.review_approval ra \
+                            WHERE ra.task_id = {pre}.id AND ra.status = 'approved') \
+               AND EXISTS (SELECT 1 FROM delivery.task_revision tr \
+                            WHERE tr.id = {pre}.current_task_revision_id \
+                              AND (tr.execution_contract->'deliverables') \
+                                  @> jsonb_build_array(d.required_deliverable_ref)))) AS satisfied"
+        )
+    };
+    let upstream = sqlx::query(&format!(
+        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref, {pred} \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.depends_on_task_id \
           WHERE d.task_id = $1 AND d.tenant_id = $2 \
           ORDER BY t.created_at, t.id",
-    )
+        pred = satisfied_pred("t"),
+    ))
     .bind(task_id)
     .bind(tenant_id)
     .fetch_all(pool)
     .await?;
-    let downstream = sqlx::query(
-        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref \
+    let downstream = sqlx::query(&format!(
+        "SELECT t.id, t.title, t.status, d.required_condition, d.required_deliverable_ref, {pred} \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.task_id \
+           JOIN delivery.task p ON p.project_id = d.project_id AND p.id = d.depends_on_task_id \
           WHERE d.depends_on_task_id = $1 AND d.tenant_id = $2 \
           ORDER BY t.created_at, t.id",
-    )
+        pred = satisfied_pred("p"),
+    ))
     .bind(task_id)
     .bind(tenant_id)
     .fetch_all(pool)
@@ -238,6 +262,7 @@ fn edge_of(row: &sqlx::postgres::PgRow) -> DependencyEdge {
         status: row.get("status"),
         required_condition: row.get("required_condition"),
         required_deliverable_ref: row.get("required_deliverable_ref"),
+        satisfied: row.get("satisfied"),
     }
 }
 

@@ -65,6 +65,12 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_links_handler).post(create_link_handler),
         )
         .route("/v1/pm/product-links/{link_id}/end", post(end_link_handler))
+        // PA-07 项目级产品读面（Figma 179:3603 E 系列）。
+        .route(
+            "/v1/pm/projects/{project_id}/products",
+            get(project_products_handler),
+        )
+        .route("/v1/pm/products/{product_id}/tasks", get(product_tasks_handler))
 }
 
 // ─────────────────────────────────────────────────────────────── 错误映射
@@ -180,6 +186,44 @@ async fn product_profile_handler(
     db_ok(
         product::product_profile(&state.pool, product_id, caller.principal_id).await,
         |p| Json(p).into_response(),
+    )
+}
+
+/// `GET /v1/pm/projects/{project_id}/products`：项目关联产品（link 有效行 +
+/// 产品 profile + 本项目内关联任务计数）。项目成员可见。
+async fn project_products_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    if let Err(resp) =
+        crate::support::require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await
+    {
+        return resp.into_response();
+    }
+    db_ok(
+        product::list_project_products(
+            &state.pool,
+            caller.tenant_id,
+            project_id,
+            caller.principal_id,
+        )
+        .await,
+        |rows| Json(json!({ "items": rows })).into_response(),
+    )
+}
+
+/// `GET /v1/pm/products/{product_id}/tasks`：产品关联任务反查（E 页 Tasks tab /
+/// Impact Summary；行含 PA-07 调度原料 deps_total/deps_met）。Product Member 可见。
+async fn product_tasks_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(product_id): Path<Uuid>,
+) -> Response {
+    db_ok(
+        product::list_product_tasks(&state.pool, product_id, caller.principal_id).await,
+        |rows| Json(json!({ "items": rows })).into_response(),
     )
 }
 

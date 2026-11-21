@@ -1011,3 +1011,36 @@ async fn imp3_deliverable_approved_matches_frozen_revision(pool: PgPool) {
     .unwrap();
     assert_eq!(task_status(&pool, unmatched).await, "blocked");
 }
+
+/// PA-07 UI（Figma 179:3603 B/C）：list_dependencies 每边透出 satisfied——
+/// 与 dependencies_satisfied 同源谓词的行级求值，供「x/y met · AND」汇总。
+#[sqlx::test(migrations = "../../migrations")]
+async fn imp3_list_dependencies_reports_per_edge_satisfaction(pool: PgPool) {
+    use pm_application::task_dependency::{add_dependency_with, list_dependencies, AddDependencyOptions};
+    let fx = seed_project(&pool, "TD-IMP3-E").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+
+    // 未满足：前置 reviewing（未 completed）→ satisfied=false（边已存在但条件未达成）。
+    add_dependency_with(
+        &pool,
+        downstream,
+        upstream,
+        AddDependencyOptions::default(),
+        &actor(&fx),
+    )
+    .await
+    .unwrap();
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
+    assert_eq!(graph.upstream.len(), 1);
+    assert_eq!(graph.upstream[0].required_condition, "completed");
+    assert!(!graph.upstream[0].satisfied, "draft predecessor must not satisfy");
+
+    // 前置 completed → satisfied 行级翻转（无需重算全量布尔）。
+    transition(&pool, &fx, upstream, TaskStatus::Completed).await;
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
+    assert!(graph.upstream[0].satisfied, "completed predecessor must satisfy");
+    // Blocks 视角（从前置看后继）：同一条边、同一个条件，satisfied 同源为真。
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, upstream).await.unwrap();
+    assert!(graph.downstream[0].satisfied, "blocks-side edge shares the same satisfied value");
+}
