@@ -1,19 +1,18 @@
 dashboard:
-  title: "{team}"
-  description: 团队工作入口——成员、项目与团队级配置。项目执行详情请进入具体项目的总控台。
-  createProject: 新建项目
+  subtitle: 长期组织单元 · {org}
+  teamBadge: TEAM
+  ownersLine: Team Owner：{names}
+  statsLine: "{people} 人 · {owners} 位 Team Owner · {members} 位 Team Member · {products} 个 Product"
+  productsTitle: 团队名下的 Products
+  colProduct: Product
+  colLifecycle: 生命周期
+  colOwner: Product Owner
+  colAccess: 访问
+  lifecycleActive: 生效中
+  lifecycleAbandoned: 已放弃
+  openProduct: 打开 Product
+  restricted: 受限
+  restrictedHint: 需要 Product 成员资格
+  affiliationTitle: 组织隶属不授予 Product Membership
+  affiliationDetail: Team Owner 管理 Team 及其 Products；Product 访问另行校验。
   loadFailed: 团队概览加载失败
-  manageMembers: 管理成员
-  roleLine: 我的角色 {role}
-  membersTitle: 成员概览
-  viewAll: 查看全部
-  statOwners: Owner
-  statAdmins: Admin
-  statMembers: Member
-  statInactive: 待激活
-  projectsTitle: 团队项目
-  projectsEmpty: 团队还没有项目
-  projectsEmptyHint: 创建第一个项目，或邀请成员一起开始。
-  invitationsTitle: 邀请管理
-  aiTitle: AI 模型配置
-  open: 前往配置

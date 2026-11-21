@@ -1,0 +1,21 @@
+succession:
+  title: 变更 Team Owner
+  stepSelect: 选定继任者
+  stepReview: 复核
+  stepApply: 应用变更
+  cardTitle: Team Owner 继任
+  successorLabel: 继任者 · 必填
+  successorHelp: 仅列出当前合格的 Team 成员。
+  successorOwnerSuffix: 现任 Team Owner
+  successorPlaceholder: 选择继任者
+  afterThisChange: 变更后
+  impactSuccessorRemains: "{name} 保持 Team Owner。"
+  impactSuccessorBecomes: "{name} 成为 Team Owner。"
+  impactSelfBecomesMember: "{name} 转为 Team Member。"
+  impactRetain: 团队保留 {count} 名 Owner；
+  impactProducts: Product 身份不在此变更。
+  confirm: 确认 Owner 变更
+  cancel: 取消
+  lastOwnerTitle: 末位 Owner 保护
+  lastOwnerDetail: 没有继任者时无法完成变更；连续变更同样适用此规则。
+  loadFailed: 成员列表加载失败

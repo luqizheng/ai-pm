@@ -1,0 +1,7 @@
+restricted:
+  badge: 资格 · 受限
+  title: 团队详情受限
+  description: 你的 Tenant Admin 身份不会自动获得 Team 业务访问。
+  backToProducts: 返回 Products
+  noImplicitAccess: 无隐式访问
+  noImplicitAccessDetail: 未获得显式资格前，不显示内部成员、Product 内容或审计细节。

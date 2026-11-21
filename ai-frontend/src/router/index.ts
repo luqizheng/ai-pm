@@ -415,6 +415,16 @@ export function buildRoutes(): RouteRecordRaw[] {
     redirect: "/settings/team/members"
   });
 
+  // Team Owner 继任（P4-ORG UX 修订 V1.0 / Figma T3）：成员页发起的三步
+  // 流程页，不占主导航——入口 = 成员页「变更 Team Owner」。助手可见性随
+  // /settings/team/members 前缀规则覆盖（navigation.ts ASSISTANT_HIDDEN_RULES）。
+  routes.push({
+    path: "/settings/team/members/owner-succession",
+    component: () =>
+      import("@/views/settings/team/TeamOwnerSuccessionView.vue"),
+    meta: { title: "team.succession.title" }
+  });
+
   // 收件箱占位退役（Q-10/C5）：旧 /inbox 统一跳通知中心。
   routes.push({
     path: "/inbox",

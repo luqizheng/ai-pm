@@ -1,0 +1,7 @@
+restricted:
+  badge: Eligibility · restricted
+  title: Team details are restricted
+  description: Your Tenant Admin identity does not automatically provide Team business access.
+  backToProducts: Back to Products
+  noImplicitAccess: No implicit access
+  noImplicitAccessDetail: No internal members, Product content or audit details are shown without explicit eligibility.

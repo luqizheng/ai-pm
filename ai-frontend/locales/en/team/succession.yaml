@@ -1,0 +1,21 @@
+succession:
+  title: Change Team Owner
+  stepSelect: Select successor
+  stepReview: Review
+  stepApply: Apply change
+  cardTitle: Team Owner succession
+  successorLabel: Successor · required
+  successorHelp: Only current eligible Team Members are available.
+  successorOwnerSuffix: existing Team Owner
+  successorPlaceholder: Select a successor
+  afterThisChange: After this change
+  impactSuccessorRemains: "{name} remains Team Owner."
+  impactSuccessorBecomes: "{name} becomes Team Owner."
+  impactSelfBecomesMember: "{name} becomes Team Member."
+  impactRetain: Team retains {count} Owner;
+  impactProducts: Product identities are not changed here.
+  confirm: Confirm Owner change
+  cancel: Cancel
+  lastOwnerTitle: Last Owner protection
+  lastOwnerDetail: A change cannot be completed without a successor. This rule also applies to consecutive changes.
+  loadFailed: Failed to load members

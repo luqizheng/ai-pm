@@ -1,19 +1,18 @@
 dashboard:
-  title: "{team}"
-  description: Team entry point — members, projects and team-level configuration. Project execution lives in each project's Command Center.
-  createProject: New Project
+  subtitle: Long-lived organization unit · {org}
+  teamBadge: TEAM
+  ownersLine: Team Owners {names}
+  statsLine: "{people} people · {owners} Team Owners · {members} Team Members · {products} Products"
+  productsTitle: Products in this Team
+  colProduct: Product
+  colLifecycle: Lifecycle
+  colOwner: Product Owner
+  colAccess: Access
+  lifecycleActive: Active
+  lifecycleAbandoned: Abandoned
+  openProduct: Open Product
+  restricted: Restricted
+  restrictedHint: Requires Product membership
+  affiliationTitle: Organization affiliation does not grant Product Membership
+  affiliationDetail: Team Owners manage the Team and its Products. Product access is checked separately.
   loadFailed: Failed to load team overview
-  manageMembers: Manage members
-  roleLine: My role {role}
-  membersTitle: Members overview
-  viewAll: View all
-  statOwners: Owner
-  statAdmins: Admin
-  statMembers: Member
-  statInactive: Pending
-  projectsTitle: Team projects
-  projectsEmpty: No projects yet
-  projectsEmptyHint: Create the first project or invite members to get started.
-  invitationsTitle: Invitation management
-  aiTitle: AI model configuration
-  open: Open settings
