@@ -1107,7 +1107,7 @@ pub async fn list_project_products(
     }
     let rows: Vec<ProjectProductRow> = sqlx::query_as(
         "SELECT l.id AS link_id, l.created_at AS linked_at, \
-                p.id, p.team_id, p.key, p.name, p.description, p.status, \
+                p.id, p.team_id, p.key, p.name, p.description, p.status, p.updated_at, \
                 (SELECT count(*) FROM delivery.task_product tp \
                    JOIN delivery.task tt ON tt.id = tp.task_id \
                   WHERE tp.product_id = p.id AND tp.withdrawn_at IS NULL \
