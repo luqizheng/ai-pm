@@ -25,7 +25,8 @@ use crate::routes::AppState;
 use crate::support::{require_project_visible, ApiError, ApiResult};
 
 use pm_application::work_item::{
-    mark_read_state, my_feed, product_feed, project_feed, WorkItemError,
+    mark_all_my_feed_read, mark_read_state, my_feed, my_feed_counts, product_feed,
+    project_feed, MyFeedFilter, WorkItemError,
 };
 
 /// WorkItemError → ApiError（NotFound 保持 404 语义；Validation → 400）。
@@ -61,6 +62,7 @@ pub(crate) fn router() -> Router<AppState> {
             get(product_feed_handler),
         )
         .route("/v1/pm/feeds/read-state", post(mark_read_state_handler))
+        .route("/v1/pm/feeds/mark-all-read", post(mark_all_read_handler))
 }
 
 #[derive(Deserialize)]
@@ -69,13 +71,25 @@ struct FeedQuery {
     limit: i64,
     #[serde(default)]
     offset: i64,
+    /// 视图：unread（仅未读）/ attention（需关注）；缺省 All activity。
+    #[serde(default)]
+    view: Option<String>,
+    #[serde(default)]
+    actor_type: Option<String>,
+    #[serde(default)]
+    activity_type: Option<String>,
+    #[serde(default)]
+    project_id: Option<Uuid>,
 }
 
 fn default_limit() -> i64 {
     50
 }
 
-fn feed_json(rows: Vec<pm_application::work_item::FeedRow>) -> Json<serde_json::Value> {
+fn feed_json_with_counts(
+    rows: Vec<pm_application::work_item::FeedRow>,
+    counts: Option<pm_application::work_item::FeedCounts>,
+) -> Json<serde_json::Value> {
     let items: Vec<serde_json::Value> = rows
         .iter()
         .map(|row| {
@@ -97,7 +111,33 @@ fn feed_json(rows: Vec<pm_application::work_item::FeedRow>) -> Json<serde_json::
             })
         })
         .collect();
-    Json(serde_json::json!({ "items": items }))
+    let mut body = serde_json::json!({ "items": items });
+    if let Some(c) = counts {
+        body["counts"] = serde_json::json!({
+            "total": c.total,
+            "unread": c.unread,
+            "attention": c.attention,
+        });
+    }
+    Json(body)
+}
+
+fn feed_json(rows: Vec<pm_application::work_item::FeedRow>) -> Json<serde_json::Value> {
+    feed_json_with_counts(rows, None)
+}
+
+#[derive(Deserialize)]
+struct MarkAllBody {}
+
+async fn mark_all_read_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let updated =
+        mark_all_my_feed_read(&state.pool, principal.tenant_id, principal.principal_id)
+            .await
+            .map_err(api_err)?;
+    Ok(Json(serde_json::json!({ "updated": updated })))
 }
 
 async fn my_feed_handler(
@@ -105,15 +145,26 @@ async fn my_feed_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<FeedQuery>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    let filter = MyFeedFilter {
+        unread_only: query.view.as_deref() == Some("unread"),
+        attention_only: query.view.as_deref() == Some("attention"),
+        actor_type: query.actor_type.clone(),
+        activity_type: query.activity_type.clone(),
+        project_id: query.project_id,
+    };
     let rows = my_feed(
         &state.pool,
         principal.tenant_id,
         principal.principal_id,
+        Some(&filter),
         query.limit.clamp(1, 200),
         query.offset.max(0),
     )
     .await
     .map_err(api_err)?;
+    let counts = my_feed_counts(&state.pool, principal.tenant_id, principal.principal_id)
+        .await
+        .map_err(api_err)?;
     Ok(feed_json(rows))
 }
 

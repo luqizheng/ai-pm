@@ -1,0 +1,35 @@
+feeds:
+  titleMy: My activity feed
+  titleProduct: Product activity feed
+  titleProject: Project activity feed
+  subtitle: What changed, what needs your attention, and where to go next. Activity records describe the past; Work Items describe the present. Personal read state never changes workflow state.
+  tabsLabel: Feed scope
+  tab:
+    my: My feed
+    product: Product feed
+    project: Project feed
+  unreadBadge: "{count} unread · only you"
+  markAll: Mark all as read
+  markAllDone: All activities marked read
+  viewAll: All activity
+  viewUnread: Unread
+  viewAttention: Needs attention
+  actorAll: All actors
+  actorHuman: Human
+  actorAgent: AI & System
+  pickProduct: Select a product
+  pickProject: Select a project
+  filterType: Filter by activity type
+  typeAll: All activity types
+  typeCreated: Created
+  typeStatusChanged: Status changed
+  typeRelationChanged: Relationship changed
+  typeAcceptance: Acceptance recorded
+  emptyTitle: No activity yet
+  emptyHint: The timeline appears as business activity is recorded.
+  unread: Unread
+  markUnread: Mark as unread
+  expand: Expand
+  collapse: Collapse
+  showing: Showing {count} activities
+  loadEarlier: Load earlier activities

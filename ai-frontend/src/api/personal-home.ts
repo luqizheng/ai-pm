@@ -435,7 +435,7 @@ export async function loadPersonalProjects(
 export async function loadPersonalActivity(
   ctx: PersonalContext
 ): Promise<ActivityEntry[]> {
-  const feed = await fetchMyFeed(12, 0);
+  const feed = (await fetchMyFeed({ limit: 12 })).items;
   return feed.map(row => {
     const actorKind: ActivityActorKind =
       row.actor_type === "agent" ? "ai" : "human";

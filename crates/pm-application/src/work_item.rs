@@ -16,6 +16,7 @@
 //! 状态映射（PA-05-02）：统一语义仅供跨领域过滤/待办/统计，各领域映射
 //! 显式声明；同名状态不默认同义。
 
+use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -517,31 +518,136 @@ SELECT a.id, a.item_id, w.target_type, w.target_id, w.title AS item_title, \
   LEFT JOIN core.work_item_read_state r \
          ON r.item_id = a.item_id AND r.principal_id = $2 AND r.tenant_id = a.tenant_id";
 
+/// My Feed 视图/筛选参数（PA-05 UI：All activity | Unread | Needs attention
+/// 三视图 + Project/Activity type/Actor 筛选）。
+#[derive(Debug, Clone, Default)]
+pub struct MyFeedFilter {
+    /// 仅未读（调用者 read_at 为空）。
+    pub unread_only: bool,
+    /// 仅需关注：未读且事项统一状态仍开放（open/blocked/in_review）——
+    /// 「读了不等于处理完」（PA-05-09），事项关闭后活动只留历史。
+    pub attention_only: bool,
+    /// human | agent。
+    pub actor_type: Option<String>,
+    /// 按活动类型过滤（created/status_changed/relation_changed/…）。
+    pub activity_type: Option<String>,
+    /// My Feed 内再收敛到单一项目。
+    pub project_id: Option<Uuid>,
+}
+
+const MY_FEED_SCOPE: &str = "(a.project_id IN (SELECT project_id FROM core.project_member WHERE tenant_id = $1 AND principal_id = $2) OR a.product_id IN (SELECT product_id FROM core.product_member WHERE tenant_id = $1 AND principal_id = $2))";
+
 /// My Feed（PA-05-08）：调用者 Project Membership（项目活动）∪ Product
 /// Membership（产品维度活动）的去重集合，时间倒序。已读状态按调用者。
 pub async fn my_feed(
     pool: &PgPool,
     tenant_id: Uuid,
     principal_id: Uuid,
+    filter: Option<&MyFeedFilter>,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<FeedRow>, WorkItemError> {
-    let rows = sqlx::query_as::<_, FeedRow>(
-        &format!(
-            "{FEED_SELECT} \
-          WHERE a.tenant_id = $1 \
-            AND (a.project_id IN (SELECT project_id FROM core.project_member WHERE tenant_id = $1 AND principal_id = $2) \
-              OR a.product_id IN (SELECT product_id FROM core.product_member WHERE tenant_id = $1 AND principal_id = $2)) \
-          ORDER BY a.created_at DESC, a.id DESC LIMIT $3 OFFSET $4"
-        ),
+    let mut sql = format!("{FEED_SELECT} WHERE a.tenant_id = $1 AND {MY_FEED_SCOPE}");
+    let f = filter.cloned().unwrap_or_default();
+    if f.unread_only || f.attention_only {
+        sql.push_str(" AND r.read_at IS NULL");
+    }
+    if let Some(actor) = f.actor_type.as_deref() {
+        sql.push_str(&format!(" AND a.actor_type = '{actor}'"));
+    }
+    if let Some(kind) = f.activity_type.as_deref() {
+        sql.push_str(&format!(" AND a.activity_type = '{kind}'"));
+    }
+    if let Some(project) = f.project_id {
+        sql.push_str(&format!(" AND a.project_id = '{project}'"));
+    }
+    if f.attention_only {
+        // 需关注 = 未读且事项仍开放（open/blocked/in_review）。
+        sql.push_str(" AND w.status IN ('open','blocked','in_review')");
+    }
+    sql.push_str(&format!(
+        " ORDER BY a.created_at DESC, a.id DESC LIMIT {limit} OFFSET {offset}"
+    ));
+    let rows = sqlx::query_as::<_, FeedRow>(&sql)
+        .bind(tenant_id)
+        .bind(principal_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows)
+}
+
+/// My Feed 计数（页头徽标与视图条：unread / needs attention / 总量）。
+pub async fn my_feed_counts(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+) -> Result<FeedCounts, WorkItemError> {
+    let base = format!(
+        "FROM core.work_item_activity a \
+         JOIN core.work_item w ON w.id = a.item_id \
+         LEFT JOIN core.work_item_read_state r \
+                ON r.item_id = a.item_id AND r.principal_id = $2 AND r.tenant_id = $1 \
+         WHERE a.tenant_id = $1 AND {MY_FEED_SCOPE}"
+    );
+    let total: i64 = sqlx::query_scalar(&format!("SELECT count(*) {base}"))
+        .bind(tenant_id)
+        .bind(principal_id)
+        .fetch_one(pool)
+        .await?;
+    let unread: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) {base} AND r.read_at IS NULL"
+    ))
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_one(pool)
+    .await?;
+    let attention: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) {base} AND r.read_at IS NULL AND w.status IN ('open','blocked','in_review')"
+    ))
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(FeedCounts {
+        total,
+        unread,
+        attention,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct FeedCounts {
+    pub total: i64,
+    pub unread: i64,
+    pub attention: i64,
+}
+
+/// 全部标记已读（PA-05 UI「Mark all as read」）：My Feed 范围内所有未读
+/// 置读；只动 Read（普通活动支持批量标记，PA-05-09）。
+pub async fn mark_all_my_feed_read(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+) -> Result<u64, WorkItemError> {
+    let result = sqlx::query(
+        "INSERT INTO core.work_item_read_state (tenant_id, principal_id, item_id, read_at) \
+         SELECT $1, $2, D.item_id, now() \
+           FROM ( \
+             SELECT DISTINCT a.item_id \
+               FROM core.work_item_activity a \
+               LEFT JOIN core.work_item_read_state r \
+                      ON r.item_id = a.item_id AND r.principal_id = $2 AND r.tenant_id = $1 \
+              WHERE a.tenant_id = $1 AND r.read_at IS NULL \
+                AND (a.project_id IN (SELECT project_id FROM core.project_member WHERE tenant_id = $1 AND principal_id = $2) \
+                  OR a.product_id IN (SELECT product_id FROM core.product_member WHERE tenant_id = $1 AND principal_id = $2)) \
+           ) AS D \
+         ON CONFLICT (principal_id, item_id) DO UPDATE SET read_at = now()",
     )
     .bind(tenant_id)
     .bind(principal_id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
+    .execute(pool)
     .await?;
-    Ok(rows)
+    Ok(result.rows_affected())
 }
 
 /// Project Feed：项目全部活动（成员资格由 API 层守卫校验）。

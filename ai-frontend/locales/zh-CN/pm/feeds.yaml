@@ -1,0 +1,35 @@
+feeds:
+  titleMy: 我的动态
+  titleProduct: 产品动态
+  titleProject: 项目动态
+  subtitle: 变化了什么、什么需要你关注、下一步去哪里。动态描述过去，事项描述现在；已读是个人状态，不改变流程状态。
+  tabsLabel: 信息流视角
+  tab:
+    my: 我的动态
+    product: 产品动态
+    project: 项目动态
+  unreadBadge: "{count} 条未读 · 仅你可见"
+  markAll: 全部标记已读
+  markAllDone: 已全部标记已读
+  viewAll: 全部动态
+  viewUnread: 未读
+  viewAttention: 需关注
+  actorAll: 全部来源
+  actorHuman: 人类
+  actorAgent: AI 与系统
+  pickProduct: 选择产品
+  pickProject: 选择项目
+  filterType: 按活动类型筛选
+  typeAll: 全部活动类型
+  typeCreated: 创建
+  typeStatusChanged: 状态变化
+  typeRelationChanged: 关联变化
+  typeAcceptance: 验收记录
+  emptyTitle: 暂无动态
+  emptyHint: 有业务活动时这里会出现时间线。
+  unread: 未读
+  markUnread: 标为未读
+  expand: 展开
+  collapse: 收起
+  showing: 已显示 {count} 条
+  loadEarlier: 加载更早动态

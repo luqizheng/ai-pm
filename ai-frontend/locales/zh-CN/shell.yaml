@@ -205,6 +205,7 @@ shell:
         administration: 管理
       item:
         personalWorkspace: 个人工作区
+        feeds: 信息流
         dashboard: 团队总览
         projects: 项目
         globalSearch: 全局搜索

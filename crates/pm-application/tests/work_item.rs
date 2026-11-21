@@ -8,8 +8,8 @@
 use pm_application::actor::AuditActor;
 use pm_application::pm_write::{create_task, link_task_requirement, CreateTaskRequest};
 use pm_application::work_item::{
-    add_relation, ensure_work_item, list_activity, on_task_transition, project_tenant,
-    record_activity, remove_relation, WorkItemError,
+    add_relation, ensure_work_item, list_activity, my_feed_counts, on_task_transition,
+    project_tenant, record_activity, remove_relation, WorkItemError,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -511,7 +511,7 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let empty = my_feed(&pool, tenant_id, outsider, 50, 0).await.unwrap();
+    let empty = my_feed(&pool, tenant_id, outsider, None, 50, 0).await.unwrap();
     assert!(empty.is_empty());
 
     // 项目成员视角：可见。
@@ -525,7 +525,7 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
     assert_eq!(feed.len(), 1);
     assert!(feed[0].read_at.is_none());
 
@@ -534,12 +534,12 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
     mark_read_state(&pool, tenant_id, principal_id, &[item_id], true)
         .await
         .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
     assert!(feed[0].read_at.is_some());
     mark_read_state(&pool, tenant_id, principal_id, &[item_id], false)
         .await
         .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
     assert!(feed[0].read_at.is_none());
 }
 
@@ -656,4 +656,62 @@ async fn task_product_link_lands_on_product_feed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(rows.len(), 2);
+}
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn my_feed_views_counts_and_mark_all(pool: PgPool) {
+    let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
+    sqlx::query(
+        "INSERT INTO core.project_member (project_id, principal_id, tenant_id, role)          VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(project_id)
+    .bind(principal_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_task_with_activity(&pool, tenant_id, project_id, principal_id, "Feed V").await;
+    let counts = my_feed_counts(&pool, tenant_id, principal_id).await.unwrap();
+    assert_eq!(counts.total, 1);
+    assert_eq!(counts.unread, 1);
+
+    // 需关注视图：事项 open → 计入 attention。
+    let attention = my_feed(
+        &pool,
+        tenant_id,
+        principal_id,
+        Some(&pm_application::work_item::MyFeedFilter {
+            attention_only: true,
+            ..Default::default()
+        }),
+        50,
+        0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(attention.len(), 1);
+
+    // 全部已读 → unread/attention 清零，总量保留。
+    pm_application::work_item::mark_all_my_feed_read(&pool, tenant_id, principal_id)
+        .await
+        .unwrap();
+    let counts = my_feed_counts(&pool, tenant_id, principal_id).await.unwrap();
+    assert_eq!(counts.total, 1);
+    assert_eq!(counts.unread, 0);
+    assert_eq!(counts.attention, 0);
+    let unread_view = my_feed(
+        &pool,
+        tenant_id,
+        principal_id,
+        Some(&pm_application::work_item::MyFeedFilter {
+            unread_only: true,
+            ..Default::default()
+        }),
+        50,
+        0,
+    )
+    .await
+    .unwrap();
+    assert!(unread_view.is_empty());
 }

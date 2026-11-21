@@ -28,11 +28,37 @@ export interface FeedItem {
   read_at: string | null;
 }
 
-export async function fetchMyFeed(limit = 50, offset = 0): Promise<FeedItem[]> {
-  const res = await http.get<{ items: FeedItem[] }>(
-    `/v1/pm/feeds/my?limit=${limit}&offset=${offset}`
+export interface FeedCounts {
+  total: number;
+  unread: number;
+  attention: number;
+}
+
+export type FeedView = "all" | "unread" | "attention";
+
+export interface MyFeedQuery {
+  limit?: number;
+  offset?: number;
+  view?: FeedView;
+  actor_type?: string;
+  activity_type?: string;
+  project_id?: string;
+}
+
+export async function fetchMyFeed(
+  query: MyFeedQuery = {}
+): Promise<{ items: FeedItem[]; counts?: FeedCounts }> {
+  const params = new URLSearchParams();
+  params.set("limit", String(query.limit ?? 50));
+  params.set("offset", String(query.offset ?? 0));
+  if (query.view && query.view !== "all") params.set("view", query.view);
+  if (query.actor_type) params.set("actor_type", query.actor_type);
+  if (query.activity_type) params.set("activity_type", query.activity_type);
+  if (query.project_id) params.set("project_id", query.project_id);
+  const res = await http.get<{ items: FeedItem[]; counts?: FeedCounts }>(
+    `/v1/pm/feeds/my?${params.toString()}`
   );
-  return res.items ?? [];
+  return { items: res.items ?? [], counts: res.counts };
 }
 
 export async function fetchProjectFeed(
@@ -66,5 +92,14 @@ export async function markFeedRead(
     item_ids: itemIds,
     read
   });
+  return res.updated;
+}
+
+/** 全部标记已读（My Feed 范围）；返回受影响行数 */
+export async function markAllFeedRead(): Promise<number> {
+  const res = await http.post<{ updated: number }>(
+    "/v1/pm/feeds/mark-all-read",
+    {}
+  );
   return res.updated;
 }
