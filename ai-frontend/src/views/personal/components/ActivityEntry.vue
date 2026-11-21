@@ -26,6 +26,8 @@ interface Props {
   projectName: string;
   objectRef: string | null;
   occurredAt: string;
+  /** PA-05-09 未读（调用者 read_at 为空）：标题左侧 accent 圆点 */
+  unread?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -106,7 +108,15 @@ const actorIcon = computed(() => {
       </span>
       <span class="pm-activity__time">{{ relative(occurredAt) }}</span>
     </div>
-    <p class="pm-activity__summary">{{ summary }}</p>
+    <p class="pm-activity__summary">
+      <span
+        v-if="unread"
+        class="pm-activity__unread-dot"
+        :title="t('pm.personalHome.activity.unread')"
+        aria-hidden="true"
+      />
+      {{ summary }}
+    </p>
     <button type="button" class="pm-activity__object" @click="emit('open')">
       {{ projectName }}<template v-if="objectRef"> · {{ objectRef }}</template>
     </button>
@@ -167,6 +177,17 @@ const actorIcon = computed(() => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* PA-05-09 未读点：Read 是个人状态，未读仅提示，不强制确认 */
+.pm-activity__unread-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--ws-accent);
+  vertical-align: middle;
 }
 
 /* 文本级链接钮：显式清掉浏览器默认 buttonface 底色（违和根因） */

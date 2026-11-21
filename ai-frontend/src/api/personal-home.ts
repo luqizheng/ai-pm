@@ -148,6 +148,8 @@ export interface ActivityEntry {
   /** 关联业务对象标识 */
   objectRef: string | null;
   occurredAt: string;
+  /** PA-05-09：调用者尚未 Read（read_at 为空） */
+  unread?: boolean;
 }
 
 /** 三个区块共享的上下文 */
@@ -447,7 +449,8 @@ export async function loadPersonalActivity(
       projectId: row.project_id ?? "",
       projectName: ctx.projectById.get(row.project_id ?? "")?.name ?? "",
       objectRef: row.item_title,
-      occurredAt: row.created_at
+      occurredAt: row.created_at,
+      unread: row.read_at === null
     };
   });
 }

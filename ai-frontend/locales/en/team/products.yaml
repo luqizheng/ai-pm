@@ -157,3 +157,6 @@ products:
   associationOnlyTitle: Association only
   associationOnlyDetail: Membership, asset ownership, knowledge and lifecycle do not propagate across this link.
   associationFootnote: Your reading eligibility for the example Project is explicitly granted. Other associated Projects are evaluated independently. Sensitive areas retain their existing restrictions.
+  activityTitle: Activity
+  activityEmpty: No activity yet
+  activityMeta: "{kind} · {time}"

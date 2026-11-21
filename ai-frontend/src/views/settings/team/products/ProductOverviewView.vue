@@ -14,9 +14,11 @@ import {
   type ProductProfile
 } from "@/api/products";
 import { listProjects } from "@/api/pm";
+import { fetchProductFeed, type FeedItem } from "@/api/feeds";
 import type { Project } from "@/api/types";
 import { useTeamStore } from "@/stores/team";
 import TeamRestrictedState from "@/views/team/TeamRestrictedState.vue";
+import { useRelativeTime } from "@/views/personal/useRelativeTime";
 import ProductTabs from "./ProductTabs.vue";
 import { lifecyclePresentation } from "./product-display";
 
@@ -48,9 +50,12 @@ const members = ref<
 >([]);
 const links = ref<Array<{ id: string; project_id: string }>>([]);
 const projects = ref<Project[]>([]);
+/** O1 页脚 Activity（PA-05-08 Product Feed 视图，前 5 条） */
+const activity = ref<FeedItem[]>([]);
 
 const productId = computed(() => String(route.params.productId));
 const teamName = computed(() => teamStore.context?.team?.name ?? "");
+const { relative } = useRelativeTime();
 
 const lifecycle = computed(() =>
   profile.value ? lifecyclePresentation(profile.value.status) : null
@@ -115,6 +120,12 @@ async function reload(): Promise<void> {
     links.value = linkRows;
     // Your access 判定源 = 当前用户可见项目集（成员/Owner 语义由后端过滤）。
     projects.value = (await listProjects({ page: 1, size: 200 })).items ?? [];
+    // O1 页脚 Activity = PA-05-08 Product Feed 视图（失败降级空态，不阻塞页面）。
+    try {
+      activity.value = await fetchProductFeed(productId.value, 5, 0);
+    } catch {
+      activity.value = [];
+    }
   } catch (err) {
     if (
       err instanceof HttpError &&
@@ -248,6 +259,36 @@ onMounted(async () => {
           {{ $t("team.products.viewLifecycle") }}
         </Button>
       </div>
+
+      <!-- Activity（O1 页脚锚点；PA-05-08 Product Feed 视图，只读展示） -->
+      <section class="po-card" data-testid="product-activity">
+        <h2 class="po-card__title">{{ $t("team.products.activityTitle") }}</h2>
+        <p v-if="activity.length === 0" class="po-card__empty">
+          {{ $t("team.products.activityEmpty") }}
+        </p>
+        <p
+          v-for="row in activity"
+          :key="row.id"
+          class="po-activity"
+          :class="{ 'is-unread': row.read_at === null }"
+          :data-testid="`product-activity-${row.id}`"
+        >
+          <span
+            v-if="row.read_at === null"
+            class="po-activity__dot"
+            aria-hidden="true"
+          />
+          <span class="po-activity__summary">{{ row.summary }}</span>
+          <span class="po-activity__time">
+            {{
+              $t("team.products.activityMeta", {
+                kind: row.activity_type,
+                time: relative(row.created_at)
+              })
+            }}
+          </span>
+        </p>
+      </section>
     </template>
   </PageFrame>
 </template>
@@ -354,5 +395,41 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* Activity（PA-05-08 Timeline 呈现；未读点 = 个人已读状态提示） */
+.po-activity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+
+.po-activity:last-child {
+  border-bottom: none;
+}
+
+.po-activity__dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  align-self: center;
+  border-radius: var(--radius-full);
+  background: var(--ws-accent);
+}
+
+.po-activity__summary {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.po-activity__time {
+  flex: none;
+  color: var(--text-tertiary);
 }
 </style>

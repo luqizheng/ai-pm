@@ -860,6 +860,7 @@ personalHome:
   activity:
     title: Recent Activity
     empty: No activity records yet
+    unread: Unread
     actors:
       human: Human
       ai: AI Agent

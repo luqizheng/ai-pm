@@ -619,6 +619,7 @@ function openObject(path: string) {
             :project-name="entry.projectName"
             :object-ref="entry.objectRef"
             :occurred-at="entry.occurredAt"
+            :unread="entry.unread"
             @open="
               openObject(
                 `/project/command-center?project_id=${entry.projectId}`

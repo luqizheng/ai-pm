@@ -157,3 +157,6 @@ products:
   associationOnlyTitle: 仅限关联本身
   associationOnlyDetail: 成员、资产归属、知识与生命周期不随此关联传播。
   associationFootnote: 对示例项目的读取资格是显式授予的；其他关联项目独立评估，敏感区域沿用现有限制。
+  activityTitle: 活动
+  activityEmpty: 暂无活动记录
+  activityMeta: "{kind} · {time}"
