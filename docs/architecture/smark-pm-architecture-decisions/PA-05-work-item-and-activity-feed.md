@@ -242,7 +242,7 @@ My Feed 根据 Product Membership 和事项路由生成。同一事件涉及多�
 
 用户裁决：PA-05-01 采用**注册表形态**（新建 `core.work_item` 注册表，领域对象保留独立表与状态机；映射式不建表方案否决）。
 
-已实施（migration 0050 + `pm-application/src/work_item.rs`）：
+已实施（migration 0051——撞号修正：0050 已被并行批次 task_code 占用——+ `pm-application/src/work_item.rs`）：
 
 - **PA-05-01/02**：`core.work_item`（统一事项 ID=主键、tenant/target_type/target_id 唯一、title、统一状态 8 值、project 归属）；Task/Requirement/ADR 三类显式注册；状态语义映射在服务层逐域显式声明（task 13 值 / requirement 3 值 / adr 6 值），同名状态不默认同义。
 - **PA-05-03/04**：`core.work_item_relation`（V1 六关系类型 + origin human|agent + reason；唯一 (source,target,type)；self 拒绝）；解除通道仅服务人类操作面（PA-05-04 Agent 不得覆盖人类修改）。
