@@ -79,6 +79,50 @@ pub struct Orchestrator {
     pub executor: Arc<PgCommandExecutor>,
 }
 
+/// Counts affected work items across one AI analysis batch.
+fn total_blast_radius(proposals: &[Proposal]) -> usize {
+    proposals
+        .iter()
+        .map(|proposal| proposal.command.impact_count())
+        .fold(0usize, |total, count| total.saturating_add(count))
+}
+
+#[cfg(test)]
+mod blast_radius_tests {
+    use super::*;
+    use pm_domain::import::TaskDraft;
+    use pm_domain::{Confidence, RiskLevel};
+
+    fn task_proposal(count: usize) -> Proposal {
+        let task = TaskDraft {
+            key: "T".to_string(),
+            title: "Task".to_string(),
+            description: String::new(),
+            priority: "normal".to_string(),
+            milestone_key: None,
+            requirement_key: None,
+            assignee_role: None,
+            confidence: Confidence::High,
+            evidence: Vec::new(),
+        };
+        Proposal {
+            command: ProjectCommand::CreateTasks {
+                tasks: vec![task; count],
+            },
+            rationale: String::new(),
+            risk_level: RiskLevel::Low,
+            confidence: Confidence::High,
+            evidence: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn blast_radius_sums_batch_items_across_multiple_proposals() {
+        let proposals = vec![task_proposal(6), task_proposal(5)];
+        assert_eq!(total_blast_radius(&proposals), 11);
+    }
+}
+
 /// Errors surfaced by [`Orchestrator::handle_ai_job`].
 ///
 /// `RunAlreadyDone` is part of the interface for callers that want to
@@ -239,11 +283,7 @@ impl Orchestrator {
         // to MAX_BATCH_ITEMS tasks. impact_count() reads only collection
         // cardinality, never model-controlled payload content.
         let proposal_count = result.proposals.len();
-        let blast_radius = result
-            .proposals
-            .iter()
-            .map(|proposal| proposal.command.impact_count())
-            .fold(0usize, |total, count| total.saturating_add(count));
+        let blast_radius = total_blast_radius(&result.proposals);
         let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(proposal_count);
         let mut routable: Vec<bool> = Vec::with_capacity(proposal_count);
         for (seq, proposal) in result.proposals.iter().enumerate() {
