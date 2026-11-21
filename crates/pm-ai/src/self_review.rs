@@ -108,6 +108,7 @@ pub fn self_review_json(outcomes: &[ProposalOutcome]) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pm_domain::import::TaskDraft;
     use pm_domain::{ProjectCommand, RiskLevel, TaskStatus};
 
     fn proposal(command: ProjectCommand, confidence: Confidence) -> Proposal {
@@ -117,6 +118,23 @@ mod tests {
             risk_level: RiskLevel::Low,
             confidence,
             evidence: Vec::new(),
+        }
+    }
+
+    fn create_tasks(count: usize) -> ProjectCommand {
+        let task = TaskDraft {
+            key: "T".to_string(),
+            title: "Task".to_string(),
+            description: String::new(),
+            priority: "normal".to_string(),
+            milestone_key: None,
+            requirement_key: None,
+            assignee_role: None,
+            confidence: Confidence::High,
+            evidence: Vec::new(),
+        };
+        ProjectCommand::CreateTasks {
+            tasks: vec![task; count],
         }
     }
 
@@ -197,6 +215,29 @@ mod tests {
         // 10 is NOT strictly greater than 10: no escalation.
         let at = review_proposals(&policy, &[proposal(create_task(), Confidence::High)], 10);
         assert_eq!(at, vec![ProposalOutcome::Auto]);
+    }
+
+    #[test]
+    fn create_tasks_batch_cardinality_drives_blast_radius_threshold() {
+        let policy = PolicyEngine::for_tests();
+
+        let ten = create_tasks(10);
+        let at_threshold =
+            review_proposals(&policy, &[proposal(ten.clone(), Confidence::High)], ten.impact_count());
+        assert_eq!(at_threshold, vec![ProposalOutcome::Auto]);
+
+        let eleven = create_tasks(11);
+        let above_threshold = review_proposals(
+            &policy,
+            &[proposal(eleven.clone(), Confidence::High)],
+            eleven.impact_count(),
+        );
+        assert_eq!(
+            above_threshold,
+            vec![ProposalOutcome::Escalate {
+                reason: "blast_radius_above_10".to_string(),
+            }]
+        );
     }
 
     #[test]
