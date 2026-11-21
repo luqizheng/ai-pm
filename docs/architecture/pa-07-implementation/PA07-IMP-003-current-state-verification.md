@@ -21,7 +21,7 @@
 
 ## 2. 原始审计与提交差异
 
-截至本次复核的 master HEAD `015e524a5c361be022cf38efdd00126e47ad8fbf`，Git compare `75094e1...015e524` 显示后续共有 17 个提交、15 个变更文件。与 PA-07 实施代码有关的变化集中在：
+截至本次复核的 master HEAD `a6310673b432018cc2feb75482fe0a105674be35`，Git compare `75094e1...a631067` 显示后续共有 20 个提交、15 个变更文件。与 PA-07 实施代码有关的变化集中在：
 
 - `crates/pm-application/src/command_executor/transition.rs` 与 `crates/pm-application/tests/command_executor.rs`：E2 Ready actor 守卫和边界测试。
 - `crates/pm-domain/src/command.rs`：命令影响条目数计算及领域单测。
