@@ -52,7 +52,7 @@ PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关�
 
 | # | 级别 | 问题 | 建议 |
 |---|---|---|---|
-| **P1** | **重要** | **E2「AI 永不置 ready」命令通道第三入口无执法**：AI-PM 分析编排器可提案 `UpdateTaskStatus{to: Ready}`——update_task_status 非红线、confidence≠low 且批≤10 → self_review=Auto → AiPm 执行 → apply_task_transition 无 actor 门（transition.rs:36）→ `(Draft, Ready)` 是 pm_domain 无守卫合法边（task_transition.rs:47）→ 绕过 E5 整批人类确认。E2 只在 REST 直写（task.rs:228）与 mark_task_batch_ready（task.rs:564）执法，命令通道是空白；无任何测试断言此边界。**直接侵蚀 §11 CLOSED 裁决「draft→ready E2 真人闸不变」的完整性** | executor.update_task_status（或 TransitionFacts 命令通道形态）对 `to==Ready && from==Draft && actor_kind!=Human` 拒绝或强制 escalate；补边界测试 |
+| ~~P1~~ | **已修复（2026-11-22）** | ~~E2「AI 永不置 ready」命令通道第三入口无执法~~ → `apply_task_transition` 单点执法：迁入 Ready 仅允许 Human（人类面/E5/红线批准）与 Service（依赖解锁 D7/D8），AiPm/DevAgent 一律 `CommandError::Validation("E2: ...")` 且状态/revision 不变；边界测试 3 条（AiPm 拒/DevAgent 拒/Human 放）+ 既有 7 处 AiPm+Ready 机械测试改 Human；12 套件 135/135 绿 | 已随本报告实施 |
 | P2 | 中 | 红线摘除后批量门禁弱化：blast_radius=proposals.len()（orchestrator.rs:237，self_review 不读 payload）→ 单条 CreateTasks 提案含 N 任务时 radius=1 永不升级，AiPm 可 auto_apply 最多 200 任务；解析层无 kind 白名单。我们写入 yaml/policy_engine 的注释「超大批量仍走 escalate」只在逐条 create_task 形状下成立 | ProjectCommand 加纯函数 item_count() 并入 blast_radius；或修正注释口径 |
 | P3 | 低 | Human Consultation decision 未执法 Product Membership（仅 human+项目可见；product_scope 无比对）——与 DR-PA-06 资格项 OPEN 自洽，窄于 PA-07 §7 文本 | 文档对齐或批次 B 补 Membership 比对 |
 | P4 | 低 | `source='platform_flow'` 成死值（API 接受但平台主体必 403）——与 §7「平台流程」主体词冲突，已有文档背书 | API 注释标注「仅人类代录语义」或后续轮次明确平台流程主体 |

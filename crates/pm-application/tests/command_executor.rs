@@ -151,7 +151,8 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
                 expected_revision: 1,
                 new_status: TaskStatus::Ready,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
         )
         .await
         .expect("update_task_status must execute");
@@ -212,7 +213,8 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
             expected_revision: 1,
             new_status: TaskStatus::Ready,
         },
-        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+        // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+        ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
     )
     .await
     .expect("first execute succeeds");
@@ -224,7 +226,8 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
                 expected_revision: 1,
                 new_status: TaskStatus::Ready,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
         )
         .await
         .expect_err("stale revision must conflict");
@@ -263,7 +266,8 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
                 expected_revision: 1,
                 new_status: TaskStatus::Ready,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
         )
         .await
         .expect("execute succeeds");
@@ -331,7 +335,8 @@ async fn compensating_same_audit_twice_fails_with_already_compensated(pool: PgPo
                 expected_revision: 1,
                 new_status: TaskStatus::Ready,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
         )
         .await
         .expect("execute succeeds");
@@ -378,7 +383,8 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
                 expected_revision: 1,
                 new_status: TaskStatus::Ready,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            // E2：迁入 Ready 须人类主体（AI 主体走提案会被拒）。
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
         )
         .await
         .expect("first execute succeeds");
@@ -830,8 +836,9 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                     new_status: TaskStatus::Ready,
                 };
                 assert!(!policy.is_redline(&cmd));
+                // E2：迁入 Ready 须人类主体。
                 let receipt = ex
-                    .execute(cmd, ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap))
+                    .execute(cmd, ctx(&f, ActorKind::Human, CommandSource::Bootstrap))
                     .await
                     .expect("update_task_status executes");
                 assert!(
@@ -945,4 +952,99 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
             other => panic!("invariant test does not cover command kind {other}"),
         }
     }
+}
+
+// ───────────────────── E2：AI 永不置 ready（PA07-IMP-002 §4 P1，2026-11-22）───
+//
+// apply_task_transition 是状态变更唯一入口（R1）；此前 E2 只在 REST 直写
+// （pm_write/task.rs require_human_conn）与 mark_task_batch_ready（E5）执法，
+// 命令通道是空白——AI-PM 提案 UpdateTaskStatus{to: Ready} 经 self_review=Auto
+// 以 AiPm 执行即可绕过 E5 整批人类确认。门在入口单点执法：迁入 Ready 仅允许
+// Human（人类面/E5/红线批准）与 Service（上游完成解锁下游 D7/D8）。
+
+/// AI 主体（AiPm）提案 to=Ready → E2 拒绝；任务保持 draft、revision 不变。
+#[sqlx::test(migrations = "../../migrations")]
+async fn e2_ai_pm_cannot_move_task_into_ready_via_command_channel(pool: PgPool) {
+    let f = seed(&pool).await;
+    let outcome = executor(&pool)
+        .execute(
+            ProjectCommand::UpdateTaskStatus {
+                task_id: f.task_id,
+                expected_revision: 1,
+                new_status: TaskStatus::Ready,
+            },
+            ctx(
+                &f,
+                ActorKind::AiPm,
+                CommandSource::AiProposal {
+                    run_id: pm_domain::RunId::nil(),
+                    proposal_id: pm_domain::ProposalId::nil(),
+                },
+            ),
+        )
+        .await;
+    match outcome {
+        Err(CommandError::Validation(msg)) => {
+            assert!(msg.contains("E2"), "expected E2 rejection, got {msg}");
+        }
+        other => panic!("expected E2 rejection, got {other:?}"),
+    }
+    let (status, revision) = task_state(&pool, f.task_id).await;
+    assert_eq!(status, "draft", "task must stay draft after rejection");
+    assert_eq!(revision, 1, "revision must be untouched");
+}
+
+/// DevAgent 主体同样拒绝（门按 actor_kind 执法，不按 principal）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn e2_dev_agent_cannot_move_task_into_ready(pool: PgPool) {
+    let f = seed(&pool).await;
+    let outcome = executor(&pool)
+        .execute(
+            ProjectCommand::UpdateTaskStatus {
+                task_id: f.task_id,
+                expected_revision: 1,
+                new_status: TaskStatus::Ready,
+            },
+            ctx(
+                &f,
+                ActorKind::DevAgent,
+                CommandSource::AiProposal {
+                    run_id: pm_domain::RunId::nil(),
+                    proposal_id: pm_domain::ProposalId::nil(),
+                },
+            ),
+        )
+        .await;
+    let e2_rejected = match outcome {
+        Err(CommandError::Validation(msg)) => msg.contains("E2"),
+        other => panic!("expected E2 rejection, got {other:?}"),
+    };
+    assert!(e2_rejected);
+    let (status, _) = task_state(&pool, f.task_id).await;
+    assert_eq!(status, "draft");
+}
+
+/// 同一边、人类主体（人工干预/红线批准以 Human 经命令通道执行）→ 放行。
+#[sqlx::test(migrations = "../../migrations")]
+async fn e2_human_actor_still_moves_task_into_ready(pool: PgPool) {
+    let f = seed(&pool).await;
+    executor(&pool)
+        .execute(
+            ProjectCommand::UpdateTaskStatus {
+                task_id: f.task_id,
+                expected_revision: 1,
+                new_status: TaskStatus::Ready,
+            },
+            ctx(
+                &f,
+                ActorKind::Human,
+                CommandSource::HumanIntervention {
+                    intervention_id: Uuid::nil(),
+                },
+            ),
+        )
+        .await
+        .expect("human ready must be allowed (E2 only restricts AI actors)");
+    let (status, _) = task_state(&pool, f.task_id).await;
+    assert_eq!(status, "ready");
 }

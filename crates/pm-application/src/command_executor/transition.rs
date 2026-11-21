@@ -101,6 +101,24 @@ pub(crate) async fn apply_task_transition(
             to.as_str()
         ))
     })?;
+    // E2 / E5（PA-06-02，PA07-IMP-002 §4 P1，2026-11-21 审计）：「AI 永不置
+    // ready」在本入口单点执法——迁入 Ready 仅允许人类主体（REST 直写另有
+    // require_human；E5 整批确认与红线批准以 Human 经本入口执行）与平台
+    // 调度解锁路径（ActorKind::Service，上游完成解锁下游 D7/D8）。AI 主体
+    // （AiPm/DevAgent）提案 UpdateTaskStatus{to: Ready} 此前可经
+    // self_review=Auto 以 AiPm 执行，绕过 E5 整批人类确认——审计实测
+    // （TransitionFacts::for_command_channel 无 actor 门 + (Draft, Ready)
+    // 是 pm_domain 无守卫合法边）。拦截于状态推进之前，任务保持原状态。
+    if to == TaskStatus::Ready
+        && ctx.actor_kind != ActorKind::Human
+        && ctx.actor_kind != ActorKind::Service
+    {
+        return Err(CommandError::Validation(format!(
+            "E2: moving a task into ready requires a human principal (actor_kind={:?}); \
+             AI proposals for ready must go through human confirmation",
+            ctx.actor_kind
+        )));
+    }
     // PA07-IMP-005（PA-07 §13，审查89-90）：迁入 Completed 前检查 Product 级
     // 验收完整性——每个仍有效关联 Product 的最新验收必须是 approved；撤回
     // Product 不阻塞（历史保留）。这是单点执法：review complete_task / D2
