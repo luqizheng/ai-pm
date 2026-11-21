@@ -19,6 +19,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 wiremock.workspace = true

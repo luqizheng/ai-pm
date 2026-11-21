@@ -39,6 +39,30 @@ const LOG_MAX_BYTES_DEFAULT: u64 = 50 * 1024 * 1024;
 /// 镜像仓锁的陈旧阈值（秒）：持锁进程崩溃后锁文件残留，超时视为陈旧可清除。
 const MIRROR_LOCK_STALE_SECS: u64 = 600;
 
+/// SSH 协议仓库 url（决定是否需要落临时私钥）。与迁移 0022 起的判定口径
+/// 一致：`git@` scp 风格或 `ssh://` 前缀。
+fn is_ssh_url(url: &str) -> bool {
+    url.starts_with("git@") || url.starts_with("ssh://")
+}
+
+/// [`CodexExecutor::ssh_command_for`] 的可测内芯：给定明文私钥，落 0700
+/// 临时目录（0600 key 文件，Windows 退化为普通文件）并组装
+/// `GIT_SSH_COMMAND`。返回的 `KeyMaterial` 守卫 drop 时删除整个目录。
+fn ssh_command_with_key(
+    url: &str,
+    plain: &str,
+) -> Option<(String, pm_application::git_access::KeyMaterial)> {
+    if !is_ssh_url(url) {
+        return None;
+    }
+    let key = pm_application::git_access::write_temp_key(plain).ok()?;
+    let command = format!(
+        "ssh -i {} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes",
+        key.key_path().display()
+    );
+    Some((command, key))
+}
+
 pub struct CodexExecutor {
     pool: PgPool,
     bin: String,
@@ -107,28 +131,24 @@ impl CodexExecutor {
         self.run_root(run_id).join("process.json")
     }
 
-    /// 一次性把私钥写成临时 key 文件，返回 `GIT_SSH_COMMAND`（非 ssh url 返回 None）。
-    /// 文件按 repository 维度命名（迁移 0022）：同一 Run 多仓库各绑不同 key 时
-    /// `{project_id}.pem` 会互相覆盖，故落 `keys/{repository_id}.pem`。
+    /// 解密私钥并落成 RAII 临时 key 文件，返回 `(GIT_SSH_COMMAND, 守卫)`
+    /// （非 ssh url 返回 None）。守卫必须与本次镜像 fetch/clone 的 git 子进程
+    /// 同作用域存续，drop 时连目录删除——成功/失败/崩溃路径均无明文残留
+    /// （PA07-IMP-008；复用 `git_access::write_temp_key`，即 submit 远端校验
+    /// 路径同一先例）。旧实现明文写共享 `keys/{repository_id}.pem` 且无删除
+    /// 路径，本方法废弃该布局。
     fn ssh_command_for(
         &self,
         url: &str,
         project_id: Uuid,
-        repository_id: Uuid,
         ciphertext: &[u8],
-    ) -> Option<String> {
-        if !(url.starts_with("git@") || url.starts_with("ssh://")) {
+    ) -> Option<(String, pm_application::git_access::KeyMaterial)> {
+        if !is_ssh_url(url) {
             return None;
         }
         let plain =
             pm_application::repository::open_ssh_private_key(project_id, ciphertext).ok()?;
-        let key_path = self.root.join("keys").join(format!("{repository_id}.pem"));
-        std::fs::create_dir_all(key_path.parent()?).ok()?;
-        std::fs::write(&key_path, plain).ok()?;
-        Some(format!(
-            "ssh -i {} -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes",
-            key_path.display()
-        ))
+        ssh_command_with_key(url, &plain)
     }
 
     /// T-032 §6.1：镜像仓跨进程锁（每 repo_id 一把；原子 create_new + 陈旧检测）。
@@ -215,9 +235,15 @@ impl CodexExecutor {
                 "repository {repository_id} not found for project {project_id}"
             )));
         };
-        let ssh_command = key_ciphertext
+        let (_ssh_key_guard, ssh_command) = match key_ciphertext
             .as_deref()
-            .and_then(|cipher| self.ssh_command_for(&url, project_id, repository_id, cipher));
+            .and_then(|cipher| self.ssh_command_for(&url, project_id, cipher))
+        {
+            Some((command, guard)) => (Some(guard), Some(command)),
+            None => (None, None),
+        };
+        // IMP-008：`_ssh_key_guard` 与下方全部 git 子进程同作用域存续，
+        // 函数返回（含错误提前返回）时 Drop 删除临时密钥目录。
 
         let git = |args: &[&str]| {
             let mut cmd = tokio::process::Command::new("git");
@@ -1064,5 +1090,42 @@ mod job_object {
                 CloseHandle(self.handle);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod imp008_tests {
+    use super::*;
+
+    /// PA07-IMP-008：ssh url 落 RAII 临时密钥文件，守卫存续期间文件存在、
+    /// drop 后整个临时目录删除——不再向共享 `keys/` 明文残留。
+    #[test]
+    fn ssh_key_file_lives_only_as_long_as_the_guard() {
+        let (command, key) = ssh_command_with_key("git@host:org/repo.git", "PRIVATE-KEY-BODY")
+            .expect("ssh url must produce a GIT_SSH_COMMAND");
+        assert!(
+            command.contains("ssh -i "),
+            "command embeds the temp key path"
+        );
+        assert!(command.contains("StrictHostKeyChecking=accept-new"));
+        let (dir, path) = (key.dir().to_path_buf(), key.key_path());
+        assert!(path.exists(), "key file must exist while the guard lives");
+        let body = std::fs::read_to_string(&path).expect("key file readable");
+        assert_eq!(body, "PRIVATE-KEY-BODY");
+        assert!(
+            !path.starts_with(std::path::Path::new(".").join("keys")),
+            "must not write into the shared workspace keys/ dir"
+        );
+        drop(key);
+        assert!(
+            !dir.exists(),
+            "guard drop must remove the temp dir (no plaintext residue)"
+        );
+    }
+
+    /// 非 ssh url（https）不落任何密钥文件。
+    #[test]
+    fn https_url_never_writes_a_key_file() {
+        assert!(ssh_command_with_key("https://host/org/repo.git", "PRIVATE").is_none());
     }
 }

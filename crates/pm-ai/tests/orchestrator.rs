@@ -792,3 +792,170 @@ async fn context_not_found_schedules_retry_and_leaves_the_job_queued(pool: sqlx:
             .unwrap();
     assert_eq!(event_status, "received");
 }
+
+/// PA07-IMP-002 §4 P2 回归（blast radius 按实际影响条数计）：模型一揽子
+/// 提案 `CreateTasks{11 任务}` 时，整轮影响范围=11（旧算法按提案数计 1，
+/// 批量闸永不触发）——self_review 判 Escalate，提案不执行、任务不落库、
+/// 事件 needs_clarification。对照面：10 任务的一揽子提案（radius=10 不超
+/// 阈值）正常 Auto 执行。红线优先级与阈值语义（10>10 为假）均由
+/// `self_review` 单测覆盖，此处锁端到端链路。
+struct BatchCreateTasksModel {
+    tasks: usize,
+}
+
+#[async_trait::async_trait]
+impl AnalysisModel for BatchCreateTasksModel {
+    async fn analyze(
+        &self,
+        _context: &pm_ai::model::AnalysisContext,
+        _skills: &[pm_ai::skill_router::SkillId],
+    ) -> Result<pm_domain::AnalysisResult, ModelError> {
+        let drafts: Vec<_> = (0..self.tasks)
+            .map(|i| pm_domain::import::TaskDraft {
+                key: format!("BT-{i}"),
+                title: format!("批量任务 {i}"),
+                description: String::new(),
+                priority: "high".to_string(),
+                milestone_key: None,
+                requirement_key: None,
+                assignee_role: None,
+                confidence: pm_domain::Confidence::High,
+                evidence: Vec::new(),
+            })
+            .collect();
+        Ok(pm_domain::AnalysisResult {
+            summary: "一揽子批量建任务提案".to_string(),
+            findings: Vec::new(),
+            proposals: vec![pm_domain::Proposal {
+                command: pm_domain::ProjectCommand::CreateTasks { tasks: drafts },
+                rationale: "批量创建".to_string(),
+                risk_level: pm_domain::RiskLevel::Low,
+                confidence: pm_domain::Confidence::High,
+                evidence: Vec::new(),
+            }],
+        })
+    }
+}
+
+fn batch_orchestrator(pool: &sqlx::PgPool, tasks: usize) -> Orchestrator {
+    let policy = Arc::new(PolicyEngine::for_tests());
+    let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy.clone()));
+    let model: Arc<dyn AnalysisModel> = Arc::new(BatchCreateTasksModel { tasks });
+    Orchestrator {
+        pool: pool.clone(),
+        model,
+        policy,
+        executor,
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn batch_create_tasks_with_11_items_escalates_on_item_count_not_proposal_count(
+    pool: sqlx::PgPool,
+) {
+    let seed = seed_world(&pool).await;
+    let payload = json!({
+        "fixture": "cache_overlap",
+        "task_ref": task_102_id().to_string(),
+        "milestone_ref": milestone_id().to_string(),
+    });
+    let job = seed_job(&pool, &seed, "technical_design_submitted", payload).await;
+
+    let outcome = batch_orchestrator(&pool, 11)
+        .handle_ai_job(&job)
+        .await
+        .expect("escalation routing must not fail the chain");
+    assert_eq!(outcome, HandleOutcome::Completed);
+
+    // The single proposal is escalated, never executed, and no batch task
+    // rows may exist (only the seeded TASK-102 survives).
+    let (status, executed_at): (String, bool) = sqlx::query_as(
+        "SELECT status, executed_at IS NOT NULL FROM ai.change_proposal \
+         WHERE project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "escalated");
+    assert!(!executed_at);
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT count(*) FROM delivery.task WHERE project_id = $1",
+            seed.project_id
+        )
+        .await,
+        1,
+        "no batch task may be auto-created above the threshold"
+    );
+
+    // The escalation surfaced as a notification with the threshold reason.
+    let (kind, reason): (String, String) = sqlx::query_as(
+        "SELECT n.kind, n.payload->>'reason' FROM integration.notification n \
+         JOIN ai.change_proposal cp ON cp.id = n.source_proposal_id \
+         WHERE n.project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kind, "escalated");
+    assert_eq!(reason, "blast_radius_above_10");
+
+    // The event needs clarification: proposals existed, none executed.
+    let event_status: String =
+        sqlx::query_scalar("SELECT status FROM integration.inbound_event WHERE id = $1")
+            .bind(job.event_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(event_status, "needs_clarification");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn batch_create_tasks_with_10_items_auto_applies_at_the_threshold(pool: sqlx::PgPool) {
+    let seed = seed_world(&pool).await;
+    let payload = json!({
+        "fixture": "cache_overlap",
+        "task_ref": task_102_id().to_string(),
+        "milestone_ref": milestone_id().to_string(),
+    });
+    let job = seed_job(&pool, &seed, "technical_design_submitted", payload).await;
+
+    let outcome = batch_orchestrator(&pool, 10)
+        .handle_ai_job(&job)
+        .await
+        .expect("10 items sit at the threshold and must auto-apply");
+    assert_eq!(outcome, HandleOutcome::Completed);
+
+    // Executed: the seeded task plus the ten batch tasks.
+    let (status, executed_at): (String, bool) = sqlx::query_as(
+        "SELECT status, executed_at IS NOT NULL FROM ai.change_proposal \
+         WHERE project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "executed");
+    assert!(executed_at);
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT count(*) FROM delivery.task WHERE project_id = $1",
+            seed.project_id
+        )
+        .await,
+        11,
+        "seeded TASK-102 plus the ten auto-created batch tasks"
+    );
+
+    let event_status: String =
+        sqlx::query_scalar("SELECT status FROM integration.inbound_event WHERE id = $1")
+            .bind(job.event_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(event_status, "applied");
+}

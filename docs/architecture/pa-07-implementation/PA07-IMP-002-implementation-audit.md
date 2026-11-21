@@ -1,7 +1,8 @@
 # PA07-IMP-002：PA-07 实施现状核查报告
 
 - **任务：** PA-07 检查（用户 2026-11-21）——对照基线核查实施现状 + PA-06 改动（f39618e）× PA-07 语义一致性
-- **日期：** 2026-11-21
+- **日期：** 2026-11-21（状态行 2026-11-22 随 IMP-003 终验更新）
+- **后续：** 本报告为 75094e1 时点的历史审计；当前 HEAD 的逐项状态以 [PA07-IMP-003-current-state-verification.md](PA07-IMP-003-current-state-verification.md) 为准
 - **核对基准：** HEAD `75094e1`（已 push），migrations 0001–0052，基线=PA-07 dev spec V1.0 §10/§11 与 PA07-IMP-001 核对报告（2026-11-20 快照 ecb1ce2 / migrations 0001–0041）
 - **方法：** 逐项代码证据核查（两次独立盘点）+ PA-07 关键测试面实跑（10 套件 100/100 绿）
 
@@ -22,8 +23,8 @@ PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关�
 | 005 Product 验收 | ✅ | 0045 + Completed 单点验收门（transition.rs:109）+ 撤回退出/最新生效测试 |
 | 006 人工决策 | ✅ | 0046 四态+DB CHECK 完整性+挂 task 阻塞；未回应≠同意 |
 | 007 审计闭环 | ✅ | Revision/Dependency/Product 生命周期/Run 快照/验收均有审计；小缺口：依赖边无原位变更审计位（只有删/建） |
-| 008 SSH 私钥 RAII | ❌ 缺失 | codex_executor.rs:113-132 仍明文写 keys/{id}.pem 且无删除路径；git_access.rs:67 已有 KeyMaterial RAII 先例未回移 |
-| 009 per-device 单活跃 Run | ❌ 缺失 | 仅 per-Task uq_task_run_active；cpk 领取与 MCP Model A 无 device 级活跃检查 |
+| 008 SSH 私钥 RAII | ❌ 缺失 | codex_executor.rs:113-132 仍明文写 keys/{id}.pem 且无删除路径；git_access.rs:67 已有 KeyMaterial RAII 先例未回移。**→ 2026-11-22 已修复**（[IMP-003](PA07-IMP-003-current-state-verification.md) §1/§2 表：改复用 write_temp_key RAII，2 单测绿） |
+| 009 per-device 单活跃 Run | ❌ 缺失 | 仅 per-Task uq_task_run_active；cpk 领取与 MCP Model A 无 device 级活跃检查。**→ 2026-11-22 已修复**（迁移 0053 部分唯一索引 + 并发双 claim 恰一成功测试绿，[IMP-003](PA07-IMP-003-current-state-verification.md)） |
 | 010 Workspace/mirror 回收 | ❌ 缺失 | run_cleanup 仅进程终止账本，无保留期/水位回收 |
 | 011 Runner 主循环单测 | ⚠️ 部分 | 辅助函数有；claim→spawn→heartbeat→command→submit→exit 全链与崩溃/迟到场景缺 |
 | 012 Run 转换一致性 | ⚠️ 部分 | Task 侧共享守卫+矩阵 ✅；Run 侧靠 fencing+分散检查，无集中 guard |
@@ -53,7 +54,7 @@ PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关�
 | # | 级别 | 问题 | 建议 |
 |---|---|---|---|
 | ~~P1~~ | **已修复（2026-11-22）** | ~~E2「AI 永不置 ready」命令通道第三入口无执法~~ → `apply_task_transition` 单点执法：迁入 Ready 仅允许 Human（人类面/E5/红线批准）与 Service（依赖解锁 D7/D8），AiPm/DevAgent 一律 `CommandError::Validation("E2: ...")` 且状态/revision 不变；边界测试 3 条（AiPm 拒/DevAgent 拒/Human 放）+ 既有 7 处 AiPm+Ready 机械测试改 Human；12 套件 135/135 绿 | 已随本报告实施 |
-| P2 | 中 | 红线摘除后批量门禁弱化：blast_radius=proposals.len()（orchestrator.rs:237，self_review 不读 payload）→ 单条 CreateTasks 提案含 N 任务时 radius=1 永不升级，AiPm 可 auto_apply 最多 200 任务；解析层无 kind 白名单。我们写入 yaml/policy_engine 的注释「超大批量仍走 escalate」只在逐条 create_task 形状下成立 | ProjectCommand 加纯函数 item_count() 并入 blast_radius；或修正注释口径 |
+| P2 | 中 | ~~红线摘除后批量门禁弱化：blast_radius=proposals.len()（orchestrator.rs:237，self_review 不读 payload）→ 单条 CreateTasks 提案含 N 任务时 radius=1 永不升级，AiPm 可 auto_apply 最多 200 任务；解析层无 kind 白名单。我们写入 yaml/policy_engine 的注释「超大批量仍走 escalate」只在逐条 create_task 形状下成立~~ | **已修复（2026-11-22，见 [IMP-003](PA07-IMP-003-current-state-verification.md) §1/§3）**：`ProjectCommand::item_count()`（批量命令按载荷长度）+ `self_review::round_blast_radius`（整轮累计，拆分不绕过）+ orchestrator 接线；单测 5 + 端到端 2（11→escalated / 10→applied）全绿；红线优先级与 PA-06-04 裁决（create_tasks 非红线）不变 |
 | P3 | 低 | Human Consultation decision 未执法 Product Membership（仅 human+项目可见；product_scope 无比对）——与 DR-PA-06 资格项 OPEN 自洽，窄于 PA-07 §7 文本 | 文档对齐或批次 B 补 Membership 比对 |
 | P4 | 低 | `source='platform_flow'` 成死值（API 接受但平台主体必 403）——与 §7「平台流程」主体词冲突，已有文档背书 | API 注释标注「仅人类代录语义」或后续轮次明确平台流程主体 |
 | P5 | 卫生 | 文档漂移三处：①IMP-001 §2 表 row 01/02 仍写裁决前状态（与同 commit 代码相反）；②AI_WRITABLE_COMMANDS 注释自称 §3.3 ✅ 行但缺 create_task；③legacy supervision 决策口与 pm_writes decide 均不校验 required_role（导入「owner 确认」实际项目成员即可——先于本批存在） | ①②文档更新；③按需收紧 |

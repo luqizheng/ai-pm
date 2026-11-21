@@ -86,6 +86,22 @@ impl ProjectCommand {
             _ => Reversibility::Compensable,
         }
     }
+
+    /// 命令实际影响的权威对象条数（PA07-IMP-002 §4 P2）：批量命令取载荷
+    /// 长度（`CreateTasks`=任务数、`CreateMilestones`=里程碑数……），
+    /// 单对象命令恒为 1。批量保护闸（self_review / policy 的
+    /// `blast_radius`）按本值累计整轮提案——单条 `CreateTasks` 含 11 个
+    /// 任务时 radius=11 而非 1；把同一批工作拆成多条提案，整轮累计不变，
+    /// 无法绕过阈值。
+    pub fn item_count(&self) -> usize {
+        match self {
+            ProjectCommand::CreateMilestones { milestones } => milestones.len(),
+            ProjectCommand::CreateRequirements { requirements } => requirements.len(),
+            ProjectCommand::CreateTasks { tasks } => tasks.len(),
+            ProjectCommand::WriteDocuments { documents } => documents.len(),
+            _ => 1,
+        }
+    }
 }
 
 /// How a command may be undone after execution.
@@ -244,5 +260,109 @@ mod tests {
             Reversibility::Compensable
         );
         assert_eq!(by_kind["adjust_milestone_plan"], Reversibility::Compensable);
+    }
+
+    fn task_draft(key: &str) -> TaskDraft {
+        TaskDraft {
+            key: key.to_string(),
+            title: format!("任务 {key}"),
+            description: String::new(),
+            priority: "high".to_string(),
+            milestone_key: None,
+            requirement_key: None,
+            assignee_role: Some(crate::import::AssigneeRole::Developer),
+            confidence: crate::proposal::Confidence::High,
+            evidence: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn item_count_counts_payload_items_for_batch_commands() {
+        // 一条 CreateTasks 含 11 个任务：影响范围是 11，不是 1（P2 修复核心）。
+        let eleven = ProjectCommand::CreateTasks {
+            tasks: (0..11).map(|i| task_draft(&format!("T{i}"))).collect(),
+        };
+        assert_eq!(eleven.item_count(), 11);
+
+        let ten = ProjectCommand::CreateTasks {
+            tasks: (0..10).map(|i| task_draft(&format!("T{i}"))).collect(),
+        };
+        assert_eq!(ten.item_count(), 10);
+
+        // 其余三类批量命令同理按载荷长度计。
+        let milestones = ProjectCommand::CreateMilestones {
+            milestones: vec![
+                MilestoneDraft {
+                    key: "M1".into(),
+                    name: "一".into(),
+                    planned_at: None,
+                },
+                MilestoneDraft {
+                    key: "M2".into(),
+                    name: "二".into(),
+                    planned_at: None,
+                },
+                MilestoneDraft {
+                    key: "M3".into(),
+                    name: "三".into(),
+                    planned_at: None,
+                },
+            ],
+        };
+        assert_eq!(milestones.item_count(), 3);
+
+        let requirements = ProjectCommand::CreateRequirements {
+            requirements: vec![
+                RequirementDraft {
+                    key: "R1".into(),
+                    code: "REQ-001".into(),
+                    title: "甲".into(),
+                    markdown: String::new(),
+                    priority: "high".into(),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                },
+                RequirementDraft {
+                    key: "R2".into(),
+                    code: "REQ-002".into(),
+                    title: "乙".into(),
+                    markdown: String::new(),
+                    priority: "high".into(),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                },
+            ],
+        };
+        assert_eq!(requirements.item_count(), 2);
+
+        let documents = ProjectCommand::WriteDocuments {
+            documents: vec![DocumentDraft {
+                doc_key: "architecture".into(),
+                doc_type: "architecture".into(),
+                markdown: "# 架构".into(),
+                change_summary: None,
+            }],
+        };
+        assert_eq!(documents.item_count(), 1);
+    }
+
+    #[test]
+    fn item_count_is_one_for_every_single_object_command() {
+        for command in sample_commands() {
+            if !matches!(
+                command,
+                ProjectCommand::CreateMilestones { .. }
+                    | ProjectCommand::CreateRequirements { .. }
+                    | ProjectCommand::CreateTasks { .. }
+                    | ProjectCommand::WriteDocuments { .. }
+            ) {
+                assert_eq!(
+                    command.item_count(),
+                    1,
+                    "{} affects exactly one authoritative object",
+                    command.kind()
+                );
+            }
+        }
     }
 }

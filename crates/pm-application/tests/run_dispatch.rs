@@ -1256,3 +1256,235 @@ async fn pending_approval_evidence_blocks_the_claim(pool: PgPool) {
     assert_eq!(run_status(&pool, fx.run_id).await, "queued");
     assert_eq!(task_status(&pool, fx.task_id).await, "ready");
 }
+
+// ───────── PA07-IMP-009：per-device 单活跃 Run 服务端约束（0053）─────────
+
+use pm_application::actor::AuditActor;
+use pm_application::run_dispatch::claim_task_run_as_client;
+
+/// 在既有项目里再种一条可领取的 ready 任务 + queued Run（复制 `seed` 的
+/// 关键产物：task + 初始 Revision + repo 映射 + queued run；assignee 必须
+/// 存在，否则领取门以 no_executor_assignee 跳过）。
+async fn seed_second_ready_run(pool: &PgPool, project_id: Uuid) -> Uuid {
+    let agent: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ('dev_agent', 'dev2') RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let task_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
+         VALUES ($1, 't2', 'ready', 1, $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(agent)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no) \
+         SELECT tenant_id, project_id, $1, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    let repo_id = add_repo(
+        pool,
+        project_id,
+        "RD-DV",
+        &format!("web-{}", Uuid::new_v4()),
+        "verified",
+    )
+    .await;
+    sqlx::query(
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', (SELECT tenant_id FROM core.project WHERE id = $2))",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .bind(repo_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    let run_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    run_id
+}
+
+/// 种一台 runner 设备并返回 device_id（owner 须先入 tenant_member）。
+async fn seed_runner_device(pool: &PgPool, project_id: Uuid, owner: Uuid, name: &str) -> Uuid {
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) \
+         VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+    )
+    .bind(SYSTEM_TENANT)
+    .bind(owner)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO devenv.device \
+         (id, tenant_id, owner_principal_id, name, platform, is_runner) \
+         VALUES ($1, $2, $3, $4, 'linux', true) RETURNING id",
+    )
+    .bind(Uuid::new_v4())
+    .bind(SYSTEM_TENANT)
+    .bind(owner)
+    .bind(name)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// IMP-009 验收：并发双 claim（同一设备、两条不同 Run）仅一成功；败者的
+/// Run 保持 queued；Run 终态后同设备可再领（名额释放）；不同设备互不影响。
+#[sqlx::test(migrations = "../../migrations")]
+async fn device_single_active_run_is_enforced_server_side(pool: PgPool) {
+    let fx = seed(&pool, "RD-DV1", true).await;
+    let second_run = seed_second_ready_run(&pool, fx.project_id).await;
+    let device = seed_runner_device(&pool, fx.project_id, fx.human_id, "runner-dv").await;
+    let second_task: Uuid =
+        sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+            .bind(second_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let cfg = cfg();
+
+    // 并发双 claim：同一设备同时领两条不同 Run——唯一索引保证恰好一条成功。
+    let actor = AuditActor::principal(fx.human_id);
+    let (a, b) = tokio::join!(
+        claim_task_run_as_client(
+            &pool,
+            fx.project_id,
+            fx.task_id,
+            device,
+            "runner-dv",
+            None,
+            &cfg,
+            &actor
+        ),
+        claim_task_run_as_client(
+            &pool,
+            fx.project_id,
+            second_task,
+            device,
+            "runner-dv",
+            None,
+            &cfg,
+            &actor
+        ),
+    );
+    let ok_count = [&a, &b].iter().filter(|r| r.is_ok()).count();
+    assert_eq!(
+        ok_count, 1,
+        "exactly one of the two concurrent claims may succeed"
+    );
+    let loser_queued = match (&a, &b) {
+        (Ok(winner), Err(_)) => {
+            assert_eq!(winner.task_id, fx.task_id);
+            second_run
+        }
+        (Err(_), Ok(winner)) => {
+            assert_eq!(winner.task_id, second_task);
+            fx.run_id
+        }
+        _ => panic!("expected exactly one winner"),
+    };
+    assert_eq!(
+        run_status(&pool, loser_queued).await,
+        "queued",
+        "the losing claim must leave its run untouched"
+    );
+
+    // 败者串行重试（同设备仍持活跃 Run）→ 依然被拒。
+    let retry = claim_task_run_as_client(
+        &pool,
+        fx.project_id,
+        sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+            .bind(loser_queued)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        device,
+        "runner-dv",
+        None,
+        &cfg,
+        &actor,
+    )
+    .await;
+    assert!(
+        retry.is_err(),
+        "sequential second claim must also be rejected"
+    );
+
+    // Run 进入终态 → 名额释放，同设备可领下一条。
+    let winner_run = if a.is_ok() {
+        a.as_ref().unwrap().run_id
+    } else {
+        b.as_ref().unwrap().run_id
+    };
+    sqlx::query("UPDATE delivery.task_run SET status = 'failed' WHERE id = $1")
+        .bind(winner_run)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let reclaimed = claim_task_run_as_client(
+        &pool,
+        fx.project_id,
+        sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+            .bind(loser_queued)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        device,
+        "runner-dv",
+        None,
+        &cfg,
+        &actor,
+    )
+    .await;
+    assert!(
+        reclaimed.is_ok(),
+        "terminal run releases the device slot: {:?}",
+        reclaimed.err()
+    );
+
+    // 不同设备互不影响：device2 可在 device1 活跃期间领取。
+    let third_run = seed_second_ready_run(&pool, fx.project_id).await;
+    let device2 = seed_runner_device(&pool, fx.project_id, fx.human_id, "runner-dv2").await;
+    let third = claim_task_run_as_client(
+        &pool,
+        fx.project_id,
+        sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+            .bind(third_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        device2,
+        "runner-dv2",
+        None,
+        &cfg,
+        &actor,
+    )
+    .await;
+    assert!(
+        third.is_ok(),
+        "a second device is not affected by the first device's active run"
+    );
+}

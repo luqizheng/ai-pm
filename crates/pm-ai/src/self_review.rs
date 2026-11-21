@@ -17,16 +17,36 @@
 //!    `Escalate { reason: format!("blast_radius_above_{threshold}") }`.
 //! 4. Otherwise → `Auto`.
 //!
-//! `blast_radius` is a batch-level parameter (M1 passes `proposals.len()`;
-//! Task 14 wires it) applied independently to every non-red-line proposal.
+//! `blast_radius` is a batch-level parameter — the orchestrator passes
+//! [`round_blast_radius`]: the sum of every proposal's actual affected-item
+//! count (`ProjectCommand::item_count`, PA07-IMP-002 §4 P2), NOT the
+//! proposal count. It is applied to every non-red-line proposal in the
+//! round, so splitting one 11-task `CreateTasks` into eleven single-task
+//! proposals cannot slip under the threshold: the round still sums to 11.
 //!
-//! Everything here is a pure function: no IO, no reads of command payloads —
-//! the gate routes on proposal meta-facts only, so model-controlled bytes
-//! have zero influence on routing (the injection surface is empty by
-//! construction, mirroring `PolicyContext`).
+//! Everything here is a pure function: no IO — the gate routes on proposal
+//! meta-facts only (plus the payload-derived item count of the command
+//! enum itself, which the model cannot inflate: lengths are structural),
+//! so model-controlled bytes have zero influence on routing (the injection
+//! surface is empty by construction, mirroring `PolicyContext`).
 
 use pm_application::PolicyEngine;
 use pm_domain::{Confidence, Proposal};
+
+/// 整轮提案的批量影响范围（PA07-IMP-002 §4 P2）：按每条命令**实际影响的
+/// 权威对象条数**累计（`ProjectCommand::item_count`），而非提案条数。
+///
+/// - 单条 `CreateTasks` 含 11 个任务 → radius=11（旧算法按提案数计 1，
+///   批量闸永不触发）；
+/// - 拆成 11 条单任务提案 → 整轮累计仍为 11，阈值无法被绕过；
+/// - `CreateMilestones` / `CreateRequirements` / `WriteDocuments` 同理；
+/// - 单对象命令（`create_task` / `update_task_status` / …）恒为 1。
+pub fn round_blast_radius(proposals: &[Proposal]) -> usize {
+    proposals
+        .iter()
+        .map(|proposal| proposal.command.item_count())
+        .sum()
+}
 
 /// Per-proposal routing verdict produced by [`review_proposals`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,6 +170,73 @@ mod tests {
             new_planned_at: None,
             expected_revision: 4,
         }
+    }
+
+    fn batch_create_tasks(n: usize) -> ProjectCommand {
+        use pm_domain::import::TaskDraft;
+        ProjectCommand::CreateTasks {
+            tasks: (0..n)
+                .map(|i| TaskDraft {
+                    key: format!("T{i}"),
+                    title: format!("任务 {i}"),
+                    description: String::new(),
+                    priority: "high".to_string(),
+                    milestone_key: None,
+                    requirement_key: None,
+                    assignee_role: None,
+                    confidence: Confidence::High,
+                    evidence: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn round_blast_radius_counts_items_not_proposals() {
+        // 一条 CreateTasks 含 11 任务：radius=11（旧算法 proposals.len()=1）。
+        let eleven = vec![proposal(batch_create_tasks(11), Confidence::High)];
+        assert_eq!(round_blast_radius(&eleven), 11);
+        // 10 个任务不超过阈值（10 > 10 为假）。
+        let ten = vec![proposal(batch_create_tasks(10), Confidence::High)];
+        assert_eq!(round_blast_radius(&ten), 10);
+    }
+
+    #[test]
+    fn round_blast_radius_accumulates_across_proposals_no_split_bypass() {
+        // 拆分绕过：11 条单对象提案累计=11，仍超阈值。
+        let split: Vec<Proposal> = (0..11)
+            .map(|_| proposal(create_task(), Confidence::High))
+            .collect();
+        assert_eq!(round_blast_radius(&split), 11);
+        // 混合累计：CreateTasks(6) + CreateTasks(5) = 11。
+        let mixed = vec![
+            proposal(batch_create_tasks(6), Confidence::High),
+            proposal(batch_create_tasks(5), Confidence::High),
+        ];
+        assert_eq!(round_blast_radius(&mixed), 11);
+        // 10 条单对象提案累计=10，不超阈值。
+        let calm: Vec<Proposal> = (0..10)
+            .map(|_| proposal(create_task(), Confidence::High))
+            .collect();
+        assert_eq!(round_blast_radius(&calm), 10);
+    }
+
+    #[test]
+    fn round_blast_radius_escalates_batch_create_tasks_above_threshold() {
+        let policy = PolicyEngine::for_tests();
+        // 11 任务的一揽子提案 → Escalate（blast_radius_above_10）。
+        let eleven = vec![proposal(batch_create_tasks(11), Confidence::High)];
+        let outcomes = review_proposals(&policy, &eleven, round_blast_radius(&eleven));
+        assert_eq!(
+            outcomes,
+            vec![ProposalOutcome::Escalate {
+                reason: "blast_radius_above_10".to_string()
+            }]
+        );
+        // 10 任务的一揽子提案 → Auto（批量建任务非红线，10 不严格大于 10）。
+        let ten = vec![proposal(batch_create_tasks(10), Confidence::High)];
+        let outcomes = review_proposals(&policy, &ten, round_blast_radius(&ten));
+        assert_eq!(outcomes, vec![ProposalOutcome::Auto]);
     }
 
     #[test]

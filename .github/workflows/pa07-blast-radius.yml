@@ -1,0 +1,60 @@
+# PA07-IMP-002 §4 P2 定向回归 CI：blast radius 按实际影响条数计。
+#
+# 为什么 runs-on 是 self-hosted 标签：Cargo.lock 有 4 个私有 registry crate
+# （digua_*，sparse+http://192.168.2.103:16444）。GitHub hosted runner 无法
+# 访问该内网地址，任何 build 都会死在依赖解析的网络错误上——那是网络限制，
+# 不是代码失败，不得据此判红代码。本工作流保留为内部 runner 的执行入口：
+# 在可访问私有 registry 的机器上打 `internal-registry` 标签即可运行。
+#
+# RUSTC_WRAPPER=env：仓库 .cargo/config.toml 配了 rustc-wrapper = "sccache"，
+# 未装 sccache 的机器上构建会失败；RUSTC_WRAPPER 环境变量优先于 config，
+# 值 `env` 是直通透传（`env rustc ...` 等价直接调 rustc），绕过 sccache。
+name: pa07-blast-radius
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "crates/pm-domain/src/command.rs"
+      - "crates/pm-ai/src/self_review.rs"
+      - "crates/pm-ai/src/orchestrator.rs"
+      - "crates/pm-ai/tests/orchestrator.rs"
+      - "policies/ai-pm-ai-lead-v2.yaml"
+      - ".github/workflows/pa07-blast-radius.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  # 直通透传，绕过本仓 .cargo/config.toml 的 sccache 包装（未装机器会构建失败）。
+  RUSTC_WRAPPER: env
+
+jobs:
+  # 纯函数面：不需要数据库。item_count（pm-domain）与 round_blast_radius /
+  # review_proposals（pm-ai self_review）单测锁定阈值语义（10>10 为假、
+  # 红线优先、拆分不绕过、批量命令按载荷长度计）。
+  unit:
+    runs-on: [self-hosted, internal-registry]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: pm-domain item_count
+        run: cargo test --locked -p pm-domain item_count
+      - name: pm-ai self_review
+        run: cargo test --locked -p pm-ai --lib self_review
+
+  # 端到端面：orchestrator 集成测试需要 PostgreSQL（sqlx::test 自动建库）。
+  # 在仓库 Settings → Variables 配 AIPM_TEST_DATABASE_URL（指向可建临时库的
+  # 实例，如 postgres://aipm:aipm@<host>:<port>/aipm）。未配置变量时本 job
+  # 主动跳过（结论=SKIP，不是 PASS），避免 CI 假绿。
+  integration:
+    runs-on: [self-hosted, internal-registry]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: pm-ai orchestrator blast-radius regression
+        if: ${{ vars.AIPM_TEST_DATABASE_URL != '' }}
+        env:
+          DATABASE_URL: ${{ vars.AIPM_TEST_DATABASE_URL }}
+        run: cargo test --locked -p pm-ai --test orchestrator batch_create_tasks
+      - name: Explain skip
+        if: ${{ vars.AIPM_TEST_DATABASE_URL == '' }}
+        run: echo "::warning::AIPM_TEST_DATABASE_URL 未配置，集成回归跳过（SKIP 非 PASS）"

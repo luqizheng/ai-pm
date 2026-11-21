@@ -234,8 +234,12 @@ impl Orchestrator {
         .await?;
 
         // Step 6: validate and persist every proposal.
-        let blast_radius = result.proposals.len();
-        let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(blast_radius);
+        // PA07-IMP-002 §4 P2：批量影响范围=整轮各命令实际影响条数之和
+        // （CreateTasks 含 N 任务计 N），而非提案条数——单提案一揽子 11 个
+        // 任务或拆成 11 条单任务提案，整轮 radius 都是 11，阈值（默认 10）
+        // 无法被载荷打包或拆分绕过。红线优先级不变（self_review 规则 1）。
+        let blast_radius = self_review::round_blast_radius(&result.proposals);
+        let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(result.proposals.len());
         let mut routable: Vec<bool> = Vec::with_capacity(blast_radius);
         for (seq, proposal) in result.proposals.iter().enumerate() {
             // `rollback_command` is registered in the handler map, but its
@@ -366,7 +370,8 @@ impl Orchestrator {
         .bind(job.event_id)
         .bind(serde_json::json!({
             "summary": result.summary,
-            "proposal_count": blast_radius,
+            "proposal_count": result.proposals.len(),
+            "blast_radius": blast_radius,
             "executed_count": executed_count,
         }))
         .execute(&self.pool)
@@ -375,7 +380,8 @@ impl Orchestrator {
         tracing::info!(
             event_id = %job.event_id,
             run_id = %run_id,
-            proposals = blast_radius,
+            proposals = result.proposals.len(),
+            blast_radius,
             executed = executed_count,
             event_status,
             "analysis chain complete"

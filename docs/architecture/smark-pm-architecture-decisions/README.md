@@ -16,6 +16,7 @@
 | [PA-07-Task Execution Orchestration 与跨 Product 协作 V1.0](PA-07-task-execution-orchestration-cross-product-collaboration-v1.0.md) | Task / Run / Workflow、Task Dependency、Task Decision Review、Human Consultation、Product 生命周期和跨 Product 协作 |
 | [PA-07-Agent Team 与执行 Runtime V1.0](PA-07-agent-team-and-execution-runtime-v1.0.md) | 单一逻辑 Project AI-PM、按需专业 Agent、多 Agent 并行、Workstream / Agent Work Unit、Runner / Harness / Session / Job / Process、MCP 通信边界和知识写入协调 |
 | [PA-07 开发实施规范 V1.0](PA-07-developer-implementation-specification-v1.0.md) | schema 映射、数据模型、事务/API/事件契约、实施任务（IMP-001~019）与测试矩阵 |
+| [PA-07 实施产物索引](../pa-07-implementation/README.md) | IMP-001~003 核对/审计/当前状态与最终验收报告（2026-11-22 终验） |
 
 ## 基线状态说明
 
