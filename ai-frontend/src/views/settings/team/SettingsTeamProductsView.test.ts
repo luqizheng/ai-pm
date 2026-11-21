@@ -74,6 +74,7 @@ function product(status: "active" | "abandoned" = "active") {
   return {
     id: PRODUCT_ID,
     team_id: TEAM_ID,
+    key: "ALPHA",
     name: "Alpha",
     description: "first",
     status
@@ -106,14 +107,38 @@ beforeEach(() => {
   vi.clearAllMocks();
   fetchTeamContext.mockResolvedValue(context("owner"));
   listTeamMembers.mockResolvedValue([
-    { principal_id: "p-owner", display_name: "owner", role: "owner", is_active: true, created_at: "x" },
-    { principal_id: "p-bob", display_name: "bob", role: "member", is_active: true, created_at: "x" }
+    {
+      principal_id: "p-owner",
+      display_name: "owner",
+      role: "owner",
+      is_active: true,
+      created_at: "x"
+    },
+    {
+      principal_id: "p-bob",
+      display_name: "bob",
+      role: "member",
+      is_active: true,
+      created_at: "x"
+    }
   ]);
   listProducts.mockResolvedValue([product()]);
   fetchProduct.mockResolvedValue(product());
   listProductMembers.mockResolvedValue([
-    { principal_id: "p-owner", display_name: "owner", role: "owner", is_active: true, created_at: "x" },
-    { principal_id: "p-bob", display_name: "bob", role: "member", is_active: true, created_at: "x" }
+    {
+      principal_id: "p-owner",
+      display_name: "owner",
+      role: "owner",
+      is_active: true,
+      created_at: "x"
+    },
+    {
+      principal_id: "p-bob",
+      display_name: "bob",
+      role: "member",
+      is_active: true,
+      created_at: "x"
+    }
   ]);
   listProductLinks.mockResolvedValue([]);
 });
@@ -152,7 +177,9 @@ describe("SettingsTeamProductsView", () => {
       "[data-test='product-create-confirm']"
     ) as HTMLButtonElement | null;
     expect(confirmEl).not.toBeNull();
-    await new (await import("@vue/test-utils")).DOMWrapper(confirmEl!).trigger("click");
+    await new (await import("@vue/test-utils")).DOMWrapper(confirmEl!).trigger(
+      "click"
+    );
     await flushPromises();
     expect(createProduct).toHaveBeenCalledWith(
       TEAM_ID,

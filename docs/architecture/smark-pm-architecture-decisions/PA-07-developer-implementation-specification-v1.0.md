@@ -150,6 +150,39 @@ Human Consultation 复用现有人工介入/等待能力，先核对 `human_inte
 
 状态语义：`pending`、`in_progress`、`decided`、`cancelled`。多 Product 决策分别保存，不能把一个 Product 的决定当成另一个 Product 的同意。
 
+### 4.8 Product 业务标识（Key）
+
+**决策来源**：UX 修订交付（2026-11-21）发现 UI 已按「name / KEY」呈现 Product（如 `Authentication service / AUTH`），而实体模型没有对应字段——模型与 UI 不一致，本节将其修正为正式域决策（新增决策，非既有决策追述）。
+
+**身份双轴**：Product ID 与 Product Key 是两个概念，不得互相替代——
+
+| | Product ID | Product Key |
+|---|---|---|
+| 标识对象 | 数据库内部主键 | 面向业务与系统集成的稳定业务标识 |
+| 用途 | 实体关联、外键引用（task_product、product_project_link、product_member、Run 快照等） | UI 识别、业务文档/ADR/需求引用、AI-PM 与 MCP/API 间传递身份、审计与日志、数据导入导出 |
+| 作为外键 | 是 | **否**——一切关联仍走 ID |
+
+**规则**：
+
+| 属性 | 决定 |
+|---|---|
+| 必有性 | `core.product.key` 为正式 Domain Entity 属性（NOT NULL），不是 UI 临时生成的显示字段 |
+| 唯一性 | **全局唯一**（跨租户）；DB 以 `lower(key)` 唯一索引保证（大小写不敏感） |
+| 生成 | 创建 Product 时由服务层从 name 派生自动生成；API/MCP 不接受指定 key |
+| 稳定性 | 创建后不可变；无重命名/重设 key 的 API |
+| 格式 | `^[A-Z0-9][A-Z0-9-]{0,62}[A-Z0-9]$`（2–64 字符；大写字母数字与连字符，首尾为字母数字） |
+| 派生规则 | name 中非 `[A-Za-z0-9]` 连续序列折叠为单个 `-`，去首尾 `-` 后大写，截断 64；结果不足 2 字符（或 name 无字母数字）时以 `P-` + id 前 8 位十六进制兜底；与既有 key 冲突（大小写不敏感）时追加 `-2`、`-3`… |
+| 与 name 关系 | 相互独立，name 变化不联动 key |
+| 边界 | key 是业务身份标识，不是业务名称，也不是权限标识——授权一律经由 ID + Membership，不读 key |
+
+**用途**：UI 展示（列表/详情/选择器以 `name / KEY` 呈现）、业务文档引用、AI-PM 会话识别、Task 业务范围标识、MCP/API 外部引用、审计事件、导入导出。API 侧 `ProductProfile` 从本修订起携带 `key`。
+
+**三实体标识一致性核查结论（2026-11-21）**：
+
+- `core.project.code`（0001 基线）：NOT NULL、创建时人工指定、唯一约束为 `uq(tenant_id, code)` **租户内唯一**、大小写敏感——与 Product Key 的「全局唯一 + 大小写不敏感」口径不一致。
+- `core.team`：**无**任何业务标识列；API `team.slug` 实为 `core.tenant.slug` 借用（`principals.rs` memberships 查询 SELECT `tn.slug`），属命名错位而非 Team Key。
+- **待裁决项**（不随本修订实施，另行决策）：①Project code 是否同步升级为全局唯一/大小写不敏感（涉及现有创建链路与 0001 约束）；②Team 是否需要自有业务 Key；③`team.slug` 字段语义是否正名（移除或改为真实 Team Key）。在裁决前，三实体标识规则不得各自继续演化。
+
 ## 5. Orchestrator 调度与 Run 启动协议
 
 ### 5.1 统一门禁
@@ -280,6 +313,7 @@ Outbox 与业务状态更新同事务写入；消费端按 event_id 幂等。事
 | PA07-IMP-016 | Provider endpoint DNS rebinding 防护 | 解析后再次校验并约束实际连接目标；回归 SSRF 测试 |
 | PA07-IMP-017 | Device credential TTL/rotation | 兼容现有 cpk 认证，提供轮换与撤销路径 |
 | PA07-IMP-018 | Runner / Workspace 运维可观测性 | 指标、告警、磁盘水位和清理失败队列 |
+| PA07-IMP-019 | Product 业务标识 Key（§4.8） | 0049 加列+`lower(key)` 全局唯一索引+格式 CHECK；创建自动生成（派生/兜底/冲突后缀）；API 带 key；大小写不敏感冲突与格式边界测试；已随本修订实施 |
 
 ## 11. 必须保留的人类业务授权阻塞项
 

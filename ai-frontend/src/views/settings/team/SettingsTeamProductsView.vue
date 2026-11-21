@@ -59,8 +59,8 @@ const busy = ref(false);
 const isOwner = computed(() => teamStore.teamRole === "owner");
 const teamId = computed(() => teamStore.context?.team?.id ?? "");
 const selfId = computed(() => teamStore.context?.principal_id ?? "");
-const selected = computed(() =>
-  products.value.find(p => p.id === selectedId.value) ?? null
+const selected = computed(
+  () => products.value.find(p => p.id === selectedId.value) ?? null
 );
 
 // ── 创建对话框 ───────────────────────────────────────────────
@@ -88,7 +88,10 @@ async function reload(): Promise<void> {
       const rows = await listTeamMembers(teamId.value);
       teamMembers.value = rows
         .filter(m => m.is_active)
-        .map(m => ({ principal_id: m.principal_id, display_name: m.display_name }));
+        .map(m => ({
+          principal_id: m.principal_id,
+          display_name: m.display_name
+        }));
     }
     if (selectedId.value) await reloadDetail(selectedId.value);
   } catch (err) {
@@ -287,7 +290,11 @@ onMounted(async () => {
 
     <SettingsFormSection :title="$t('team.products.listTitle')">
       <p v-if="loading" class="tp-note">{{ $t("common.loading") }}</p>
-      <p v-else-if="products.length === 0" class="tp-note" data-test="products-empty">
+      <p
+        v-else-if="products.length === 0"
+        class="tp-note"
+        data-test="products-empty"
+      >
         {{ $t("team.products.empty") }}
       </p>
       <ul v-else class="tp-list">
@@ -298,7 +305,7 @@ onMounted(async () => {
           :class="{ 'tp-item--active': p.id === selectedId }"
         >
           <button type="button" class="tp-item__body" @click="select(p.id)">
-            <span class="tp-item__name">{{ p.name }}</span>
+            <span class="tp-item__name">{{ p.name }} / {{ p.key }}</span>
             <span class="tp-item__desc">{{ p.description ?? "" }}</span>
           </button>
           <Badge :variant="p.status === 'active' ? 'success' : 'warning'">
@@ -312,7 +319,11 @@ onMounted(async () => {
     <template v-if="detail">
       <SettingsFormSection :title="$t('team.products.membersTitle')">
         <div v-if="isOwner" class="tp-addrow">
-          <select v-model="addMemberId" class="tp-select" data-test="product-add-member-select">
+          <select
+            v-model="addMemberId"
+            class="tp-select"
+            data-test="product-add-member-select"
+          >
             <option value="" disabled>
               {{ $t("team.products.addMemberPlaceholder") }}
             </option>
@@ -410,7 +421,10 @@ onMounted(async () => {
       <SettingsFormSection :title="$t('team.products.linksTitle')">
         <ul class="tp-links">
           <li v-for="l in links" :key="l.id" class="tp-member">
-            <span class="tp-member__name">{{ $t("team.products.linkProject") }} {{ l.project_id.slice(0, 8) }}</span>
+            <span class="tp-member__name"
+              >{{ $t("team.products.linkProject") }}
+              {{ l.project_id.slice(0, 8) }}</span
+            >
             <span class="tp-member__spacer" />
             <Button
               v-if="isOwner"
@@ -456,13 +470,25 @@ onMounted(async () => {
       "
     >
       <FormField :label="$t('team.onboarding.create.nameLabel')" required>
-        <Input v-model="draftName" :maxlength="120" data-test="product-create-name" />
+        <Input
+          v-model="draftName"
+          :maxlength="120"
+          data-test="product-create-name"
+        />
       </FormField>
       <FormField :label="$t('team.onboarding.create.descLabel')">
-        <Textarea v-model="draftDescription" :rows="3" data-test="product-create-desc" />
+        <Textarea
+          v-model="draftDescription"
+          :rows="3"
+          data-test="product-create-desc"
+        />
       </FormField>
       <FormField :label="$t('team.products.firstOwnerLabel')" required>
-        <select v-model="draftOwnerId" class="tp-select" data-test="product-create-owner">
+        <select
+          v-model="draftOwnerId"
+          class="tp-select"
+          data-test="product-create-owner"
+        >
           <option value="" disabled>
             {{ $t("team.products.firstOwnerPlaceholder") }}
           </option>

@@ -61,6 +61,9 @@ pub enum ProductError {
 pub struct ProductProfile {
     pub id: Uuid,
     pub team_id: Uuid,
+    /// 稳定业务标识（PA-07 §4.8）：全局唯一、创建时自动生成、创建后不可变；
+    /// 仅用于 UI/文档/AI-PM/MCP 引用，一切关联仍走 id（key 不作外键）。
+    pub key: String,
     pub name: String,
     pub description: Option<String>,
     pub status: String,
@@ -145,6 +148,61 @@ async fn audit(
 /// 创建 Product（Team Owner 独占；PA §2：Team Owner 指定首位 Product Owner，
 /// 创建者/Team Owner 均不因组织身份自动成为 Product Owner）。
 /// 同事务：product 行 + product_member owner 行 + 审计。
+/// Product Key 基名派生（PA-07 §4.8）：name 中非 `[A-Za-z0-9]` 连续序列折叠
+/// 为单个 `-`，去首尾 `-` 后大写，截断 64。返回基名可能不足 2 字符（如 name
+/// 不含字母数字），由调用方以 id 兜底。
+fn derive_product_key_base(name: &str) -> String {
+    let collapsed: String = name
+        .to_uppercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let base = collapsed
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    base.chars().take(64).collect()
+}
+
+/// 生成创建用 Product Key：与既有 key 大小写不敏感冲突时追加 `-2`、`-3`…
+/// （茎干截断 55 留足后缀空间，保持格式合法）。基名（含 `P-` + id 兜底形）
+/// 由调用方保证 ≥2 字符；`lower(key)` 唯一索引兜住并发竞态，INSERT 层映射
+/// 为 `Conflict`。
+async fn allocate_product_key(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    base: &str,
+) -> Result<String, ProductError> {
+    let mut candidate = base.to_string();
+    let mut suffix: u32 = 1;
+    loop {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM core.product WHERE lower(key) = lower($1))",
+        )
+        .bind(&candidate)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !taken {
+            return Ok(candidate);
+        }
+        suffix += 1;
+        if suffix > 1000 {
+            return Err(ProductError::Conflict("product key unavailable"));
+        }
+        let stem = base
+            .trim_end_matches('-')
+            .chars()
+            .take(55)
+            .collect::<String>()
+            .trim_end_matches('-')
+            .to_string();
+        if stem.chars().count() < 2 {
+            return Err(ProductError::Conflict("product key unavailable"));
+        }
+        candidate = format!("{stem}-{suffix}");
+    }
+}
+
 pub async fn create_product(
     pool: &PgPool,
     actor: &AuditActor,
@@ -197,16 +255,28 @@ pub async fn create_product(
         ));
     }
 
-    let product_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.product (team_id, tenant_id, name, description) \
-         VALUES ($1, $2, $3, $4) RETURNING id",
+    // Product Key（PA-07 §4.8）：服务层从 name 派生自动生成，创建后不可变；
+    // 基名不足 2 字符（name 无字母数字）时以 `P-` + id 前 8 位十六进制兜底。
+    let product_id = Uuid::new_v4();
+    let mut base = derive_product_key_base(name);
+    if base.chars().count() < 2 {
+        base = format!("P-{}", &product_id.to_string()[..8].to_uppercase());
+    }
+    let product_key = allocate_product_key(&mut tx, &base).await?;
+
+    let inserted: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.product (id, team_id, tenant_id, key, name, description) \
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
     )
+    .bind(product_id)
     .bind(team_id)
     .bind(tenant_id)
+    .bind(&product_key)
     .bind(name)
     .bind(description.map(str::trim).filter(|s| !s.is_empty()))
     .fetch_one(&mut *tx)
     .await?;
+    debug_assert_eq!(inserted, product_id);
 
     sqlx::query(
         "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role, granted_by) \
@@ -238,7 +308,12 @@ pub async fn create_product(
         "product",
         product_id,
         None,
-        Some(json!({ "name": name, "team_id": team_id, "first_owner": first_owner_principal_id })),
+        Some(json!({
+            "name": name,
+            "key": product_key,
+            "team_id": team_id,
+            "first_owner": first_owner_principal_id
+        })),
     )
     .await?;
 
@@ -246,6 +321,7 @@ pub async fn create_product(
     Ok(ProductProfile {
         id: product_id,
         team_id,
+        key: product_key,
         name: name.to_string(),
         description: description.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
         status: "normal".to_string(),
@@ -273,7 +349,7 @@ pub async fn list_products(
     };
     if role == "owner" {
         let rows: Vec<ProductProfile> = sqlx::query_as(
-            "SELECT id, team_id, name, description, status FROM core.product \
+            "SELECT id, team_id, key, name, description, status FROM core.product \
               WHERE team_id = $1 ORDER BY created_at",
         )
         .bind(team_id)
@@ -282,7 +358,7 @@ pub async fn list_products(
         Ok(rows)
     } else {
         let rows: Vec<ProductProfile> = sqlx::query_as(
-            "SELECT p.id, p.team_id, p.name, p.description, p.status \
+            "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status \
                FROM core.product p \
                JOIN core.product_member m ON m.product_id = p.id \
               WHERE p.team_id = $1 AND m.principal_id = $2 \
@@ -303,7 +379,7 @@ pub async fn product_profile(
     principal_id: Uuid,
 ) -> Result<ProductProfile, ProductError> {
     let row: Option<ProductProfile> = sqlx::query_as(
-        "SELECT p.id, p.team_id, p.name, p.description, p.status \
+        "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status \
            FROM core.product p \
           WHERE p.id = $1 AND EXISTS (\
                SELECT 1 FROM core.product_member m \
@@ -714,14 +790,14 @@ pub async fn set_product_lifecycle(
     };
     let mut tx = pool.begin().await?;
 
-    let locked: Option<(Uuid, String, String, Option<String>, Uuid)> = sqlx::query_as(
-        "SELECT tenant_id, name, status, description, team_id \
+    let locked: Option<(Uuid, String, String, Option<String>, Uuid, String)> = sqlx::query_as(
+        "SELECT tenant_id, name, status, description, team_id, key \
            FROM core.product WHERE id = $1 FOR UPDATE",
     )
     .bind(product_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((tenant_id, name, status, description, team_id)) = locked else {
+    let Some((tenant_id, name, status, description, team_id, product_key)) = locked else {
         return Err(ProductError::NotFound);
     };
     let is_owner: bool = sqlx::query_scalar(
@@ -761,6 +837,7 @@ pub async fn set_product_lifecycle(
     Ok(ProductProfile {
         id: product_id,
         team_id,
+        key: product_key,
         name,
         description,
         status: target_status.to_string(),

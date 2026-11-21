@@ -5,7 +5,8 @@
 //! Membership 内部管理（Member 平权加删普通成员 / Team Member 不自动成为
 //! Product 成员）· Owner 保护（末位不可移除/降级 · 任命=继任指定 · 降级仅
 //! Team Owner · 恢复性任命）· 生命周期（Owner 独占 · abandoned 拦 Link ·
-//! noop 409）· 审计。
+//! noop 409）· 审计 · 业务标识 Key（PA-07 §4.8：name 派生 / 大小写不敏感
+//! 冲突后缀 / 无字母数字兜底）。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -261,6 +262,93 @@ async fn create_seeds_first_owner_and_audit(pool: PgPool) {
     .await
     .unwrap();
     assert!(audits >= 2, "product.created + product_member.added audits");
+}
+
+// ═══════════════════════════════════════════════════════════ 业务标识 Key（PA-07 §4.8）
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn product_key_generated_from_name(pool: PgPool) {
+    let (app, _t, team_id, owner_id) = team_world(pool).await;
+    let (st, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/products"),
+        &token_for("usr-owner", 1),
+        Some(json!({
+            "name": "World View",
+            "first_owner_principal_id": owner_id,
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED, "{body}");
+    // 派生规则：非字母数字序列折叠为 '-' → 大写（PA-07 §4.8）。
+    assert_eq!(body["key"], json!("WORLD-VIEW"));
+    // 列表同样携带 key（UI name / KEY 展示的数据源）。
+    let (st, list) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/teams/{team_id}/products"),
+        &token_for("usr-owner", 1),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{list}");
+    assert_eq!(list["items"][0]["key"], json!("WORLD-VIEW"));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn product_key_dedupes_case_insensitively(pool: PgPool) {
+    let (app, _t, team_id, owner_id) = team_world(pool).await;
+    let token = token_for("usr-owner", 1);
+    let uri = format!("/v1/pm/teams/{team_id}/products");
+    let (st, first) = call(
+        &app,
+        "POST",
+        &uri,
+        &token,
+        Some(json!({
+            "name": "Auth Service",
+            "first_owner_principal_id": owner_id,
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED, "{first}");
+    assert_eq!(first["key"], json!("AUTH-SERVICE"));
+    // 同基名（大小写/空白差异）→ 唯一索引口径为 lower(key) → 追加序号。
+    let (st, second) = call(
+        &app,
+        "POST",
+        &uri,
+        &token,
+        Some(json!({
+            "name": "auth   service",
+            "first_owner_principal_id": owner_id,
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED, "{second}");
+    assert_eq!(second["key"], json!("AUTH-SERVICE-2"));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn product_key_falls_back_when_name_not_derivable(pool: PgPool) {
+    let (app, _t, team_id, owner_id) = team_world(pool).await;
+    let (st, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/teams/{team_id}/products"),
+        &token_for("usr-owner", 1),
+        Some(json!({
+            "name": "!!!",
+            "first_owner_principal_id": owner_id,
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED, "{body}");
+    // name 无字母数字 → `P-` + id 前 8 位十六进制兜底，仍满足格式约束。
+    let key = body["key"].as_str().expect("key must be a string");
+    assert_eq!(key.len(), 10, "fallback key shape: {key}");
+    assert!(key.starts_with("P-"), "fallback key shape: {key}");
 }
 
 // ═══════════════════════════════════════════════════════════ Membership 内部管理

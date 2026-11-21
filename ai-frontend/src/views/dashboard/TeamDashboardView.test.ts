@@ -44,6 +44,7 @@ function product(overrides: Record<string, unknown> = {}) {
   return {
     id: PRODUCT_AUTH,
     team_id: TEAM_ID,
+    key: "AUTH",
     name: "Authentication service",
     description: null,
     status: "active",
@@ -140,8 +141,13 @@ beforeEach(() => {
   ]);
   listProducts.mockResolvedValue([
     product(),
-    product({ id: PRODUCT_PORT, name: "Developer portal" }),
-    product({ id: PRODUCT_BILL, name: "Billing API", status: "abandoned" })
+    product({ id: PRODUCT_PORT, key: "PORT", name: "Developer portal" }),
+    product({
+      id: PRODUCT_BILL,
+      key: "BILL",
+      name: "Billing API",
+      status: "abandoned"
+    })
   ]);
 });
 
@@ -177,6 +183,8 @@ describe("TeamDashboardView", () => {
     const wrapper = await mountAt();
     const rows = wrapper.findAll("[data-testid^='team-product-row-']");
     expect(rows).toHaveLength(3);
+    // Product 列按设计稿口径以 name / KEY 呈现。
+    expect(rows[0].text()).toContain("Authentication service / AUTH");
     // AUTH：可读成员表 → Owner 名 + Open Product 按钮。
     expect(rows[0].text()).toContain("Maya Chen");
     expect(

@@ -199,7 +199,7 @@ onMounted(async () => {
               :data-testid="`team-product-row-${row.product.id}`"
             >
               <TableCell class="td-product-name">
-                {{ row.product.name }}
+                {{ row.product.name }} / {{ row.product.key }}
               </TableCell>
               <TableCell>
                 <Badge variant="neutral">

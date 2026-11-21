@@ -19,6 +19,8 @@ import { http } from "@/api/base";
 export interface ProductProfile {
   id: string;
   team_id: string;
+  /** 稳定业务标识（PA-07 §4.8）：全局唯一、创建时自动生成、不可变；引用用 key，关联走 id */
+  key: string;
   name: string;
   description: string | null;
   status: "active" | "abandoned";
