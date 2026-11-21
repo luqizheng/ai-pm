@@ -242,3 +242,63 @@ plan:
   ctxEscalationText: Changing the goal, delivery scope or acceptance criteria requires a human decision before affected work starts.
   ctxInspect: Inspect authorization
   ctxNote: "Status and reason are separate: a waiting task shows the exact dependency or decision holding it."
+
+delivery:
+  loadingEyebrow: Loading verification & delivery · preserve context
+  emptyTitle: No tasks under verification
+  emptyHint: Tasks enter this view at verification; completion is earned by evidence.
+  eyebrow: "Objective verification · {code}"
+  incompleteBadge: Verifying · not complete ({passed}/{total} passed)
+  completeBadge: All criteria passed
+  headline: Completion is earned by evidence
+  headlineMeta: Acceptance baseline cannot be lowered · per-criterion verdicts · evidence attached
+  colCriteria: Acceptance criteria
+  colResult: Result
+  colEvidence: Evidence
+  passed: Passed
+  failed: Failed
+  notCovered: Not covered by any review run
+  noVerdicts: No verdicts recorded
+  showAll: Show all criteria
+  inspectFailed: Show failed only
+  blockedTitle: Delivery is blocked · {passed}/{total} passing
+  blockedDefault: Some acceptance criteria have not passed; AI-PM is fixing and rerunning the failed conditions.
+  artifactsEyebrow: Delivery artifacts
+  noArtifacts: No delivery manifest yet
+  artifactsPreparedOnly: Prepared only · no delivery recorded while acceptance is incomplete
+  artifactsReady: All acceptance criteria passed
+  ctxTitle: Completion policy
+  ctxPolicy: AI-PM may mark this task complete only when every objective acceptance condition passes.
+  ctxResults: Verification results
+  ctxResultsText: "Criteria passed {passed}/{total}"
+  ctxOutstanding: Outstanding issue
+  ctxOutstandingText: "{count} criteria have not passed; AI fixes must rerun the corresponding verification."
+  ctxNoOutstanding: No failed criteria
+  ctxHistory: Delivery history
+  ctxHistoryText: No final delivery is recorded while acceptance is incomplete; history stays traceable.
+  ctxNote: Evidence is attached to the task and delivery record; conversation is not the source of truth.
+
+recovery:
+  loadingEyebrow: Loading exceptions & recovery · preserve context
+  eyebrow: "{decisions} human decisions · {auto} automatic recoveries"
+  decisionBadge: Human decision required
+  severityLine: "Impact {impact} · probability {probability} · affected tasks paused"
+  reviewRequest: Review authorization request
+  routineEyebrow: Routine recovery · no human action needed
+  autoBadge: "Recovering automatically · {count} items"
+  noRoutine: No waiting or blocked tasks
+  limitNote: AI-PM handles ordinary failures within the agreed retry limit. It escalates if recovery fails or risk increases.
+  inspectRecovery: Inspect automatic recovery
+  escalate: Escalate unresolved issue
+  emptyEyebrow: No exceptions
+  emptyHint: Ordinary failures recover autonomously within the retry limit; only major risks reach this queue.
+  ctxTitle: Impact & recommendation
+  ctxImpact: Current impact
+  ctxImpactText: Only the affected tasks are paused; other authorized work continues.
+  ctxRecommends: AI-PM recommends
+  ctxRecommendsText: Prefer the smallest bounded authorization; customer data and production access stay prohibited.
+  ctxAuthority: Your authority
+  ctxAuthorityText: Approve a bounded change, keep work paused, or request another approach. AI-PM cannot grant itself permission.
+  ctxLimit: Recovery limit
+  ctxLimitText: "Retries are bounded\nRecovery window is bounded\nEscalate when unsuccessful"
+  ctxNote: Low-level failures never interrupt you unless they change project impact.

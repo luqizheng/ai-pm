@@ -242,3 +242,63 @@ plan:
   ctxEscalationText: 变更目标、交付范围或验收标准，须在受影响工作开始前获得人类决策。
   ctxInspect: 查看授权边界
   ctxNote: 状态与原因分离：等待中的任务会显示确切的依赖或决策阻塞源。
+
+delivery:
+  loadingEyebrow: 加载验收与交付 · 保留上下文
+  emptyTitle: 暂无可验收任务
+  emptyHint: 进入验证阶段的任务会出现在这里；完成由证据赢得。
+  eyebrow: "目标验证 · {code}"
+  incompleteBadge: 验证中 · 未完成（{passed}/{total} 通过）
+  completeBadge: 全部口径通过
+  headline: 完成由证据赢得
+  headlineMeta: 验收基线不可降低 · 口径逐条裁决 · 证据附于任务
+  colCriteria: 验收口径
+  colResult: 裁决
+  colEvidence: 证据
+  passed: ✓ 通过
+  failed: 未通过
+  notCovered: 未被 review run 覆盖
+  noVerdicts: 暂无裁决记录
+  showAll: 显示全部口径
+  inspectFailed: 只看未通过
+  blockedTitle: 交付被阻塞 · {passed}/{total} 通过
+  blockedDefault: 存在未通过的验收口径；AI-PM 正在修复并重跑失败条件。
+  artifactsEyebrow: 交付产物
+  noArtifacts: 暂无交付清单
+  artifactsPreparedOnly: 仅预备 · 验收未齐不记交付
+  artifactsReady: 验收口径全部通过
+  ctxTitle: 完成策略
+  ctxPolicy: 只有每个客观验收条件全部通过，AI-PM 才可标记任务完成。
+  ctxResults: 验证结果
+  ctxResultsText: "口径通过 {passed}/{total}"
+  ctxOutstanding: 未决问题
+  ctxOutstandingText: "{count} 条口径未通过；AI 修复后须重跑对应验证。"
+  ctxNoOutstanding: 无未通过口径
+  ctxHistory: 交付历史
+  ctxHistoryText: 验收不齐不产生最终交付记录；历史可追溯。
+  ctxNote: 证据挂在任务与交付记录上；对话不是事实源。
+
+recovery:
+  loadingEyebrow: 加载异常与恢复 · 保留上下文
+  eyebrow: "{decisions} 项人类决策 · {auto} 项自动恢复"
+  decisionBadge: 需要人类决策
+  severityLine: "影响 {impact} · 概率 {probability} · 受影响任务暂停"
+  reviewRequest: 审查授权请求
+  routineEyebrow: 常规恢复 · 无需人工动作
+  autoBadge: "自动恢复中 · {count} 项"
+  noRoutine: 暂无等待或受阻任务
+  limitNote: AI-PM 在约定重试上限内处理常规失败；恢复失败或风险升高时升级。
+  inspectRecovery: 查看自动恢复
+  escalate: 升级未决问题
+  emptyEyebrow: 无异常
+  emptyHint: 普通失败在重试上限内由 AI 自主恢复；只有重大风险才进入这里。
+  ctxTitle: 影响与建议
+  ctxImpact: 当前影响
+  ctxImpactText: 仅受影响的任务暂停；其他授权范围内的工作继续推进。
+  ctxRecommends: AI-PM 建议
+  ctxRecommendsText: 优先选择影响最小的受限授权方案；客户数据与生产访问保持禁止。
+  ctxAuthority: 你的权威
+  ctxAuthorityText: 批准受限变更、保持暂停，或要求另一方案——AI-PM 不能给自己授权。
+  ctxLimit: 恢复上限
+  ctxLimitText: "重试有上限\n恢复窗口受限\n失败即升级"
+  ctxNote: 低层失败不会打断你，除非它们改变项目影响。

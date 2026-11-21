@@ -129,6 +129,24 @@ export async function fetchWaitingDecisionCount(
     .length;
 }
 
+/** waiting 队列行（execution_read HumanAttentionQueue.waiting，屏 G 常规恢复段） */
+export interface WaitingRow {
+  task_id: string;
+  task_title: string;
+  reason: string;
+  since?: string | null;
+  deadline?: string | null;
+}
+
+export async function fetchWaitingQueue(
+  projectId: string
+): Promise<WaitingRow[]> {
+  const res = await http.get<{ waiting: WaitingRow[] }>(
+    `/v1/pm/projects/${projectId}/waiting`
+  );
+  return res.waiting ?? [];
+}
+
 function consultationToItem(row: PendingConsultation): DecisionQueueItem {
   return {
     kind: "consultation",
