@@ -131,9 +131,9 @@ async function reload(): Promise<void> {
   }
 }
 
-function openProduct(): void {
-  // Product 管理面 = 团队设置 Products 页（产品详情页随 M 系列另行落地）。
-  void router.push("/settings/team/products");
+function openProduct(row: { product: { id: string } }): void {
+  // 产品详情族（P4-ORG UX 修订）：概览页为产品工作区入口。
+  void router.push(`/settings/team/products/${row.product.id}`);
 }
 
 onMounted(async () => {
@@ -204,7 +204,7 @@ onMounted(async () => {
               <TableCell>
                 <Badge variant="neutral">
                   {{
-                    row.product.status === "abandoned"
+                    row.product.status === "archived"
                       ? $t("team.dashboard.lifecycleAbandoned")
                       : $t("team.dashboard.lifecycleActive")
                   }}
@@ -217,12 +217,12 @@ onMounted(async () => {
                   variant="secondary"
                   size="sm"
                   :data-test="`team-product-open-${row.product.id}`"
-                  @click="openProduct"
+                  @click="openProduct(row)"
                 >
                   {{ $t("team.dashboard.openProduct") }}
                 </Button>
                 <Button
-                  v-else-if="row.product.status !== 'abandoned'"
+                  v-else-if="row.product.status !== 'archived'"
                   variant="secondary"
                   size="sm"
                   disabled

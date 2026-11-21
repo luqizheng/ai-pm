@@ -1,34 +1,159 @@
 products:
-  members: Product members
   title: Products
-  description: Product Membership is managed inside each product; team members do not automatically become product members (PA baseline §2).
-  create: New product
-  createTitle: New product
-  createDesc: Created by the team owner with an explicit first Product Owner; neither creator nor team owner becomes Product Owner automatically.
-  createdToast: Product created
+  tabsLabel: Product domain navigation
+  tabOverview: Overview
+  tabMembers: Members
+  tabProjects: Projects
+  tabRequirements: Requirements / Planning
+  tabKnowledge: Knowledge
+  tabActivity: Activity
+  listSubtitle: "Team: {team} · Tenant: {org}"
+  summaryLine: "{team} · {count} Products"
+  create: Create Product
+  createFailed: Failed to create product
+  cancel: Cancel
+  back: Back
+  loadFailed: Failed to load products
   listTitle: Products
-  empty: No products yet
-  membersTitle: Product members
-  addMember: Add member
-  addMemberPlaceholder: Select a team member
+  colProductKey: Product / key
+  colLifecycle: Lifecycle
+  colOwner: Owner
+  colMembers: Members
+  colProjects: Projects
+  colUpdated: Updated
+  emptyTitle: No products yet
+  emptyHint: Create the first product with an explicit first Product Owner as Team Owner.
+  discoveryTitle: Discovery is not access
+  discoveryDetail: Only metadata allowed by the existing policy is listed. Team Membership alone never unlocks Product details.
+  identityTeamOwner: Team Owner
+  identityTeamMember: Team Member
+  identityAuthorityOwner: Creation requires Team Owner authority.
+  identityAuthorityMember: Product creation requires Team Owner authority; the entry is hidden for members.
+  identityFootnote: "Your Team identity: {identity} · {authority}"
+  # Lifecycle (0044 four values)
+  lifecycleNormal: Active
+  lifecycleSuspended: Suspended
+  lifecycleResuming: Resuming
+  lifecycleArchived: Abandoned
+  # Create flow (C1→C2→C3)
+  stepBasics: Basic information
+  stepOwner: First Owner
+  stepConfirm: Confirm
+  stepBasicsTitle: Create Product
+  stepOwnerTitle: Select first Owner
+  stepReviewTitle: Review Product
+  basicsTitle: Product basics
+  fieldName: Product name · required
+  fieldNameHelp: A clear business collaboration boundary.
+  namePlaceholder: Enter product name
+  fieldKey: Product key · auto-generated
+  fieldKeyHelp: Derived from the name, globally unique (case-insensitive), immutable after creation (PA-07 §4.8); conflicts get numeric suffixes.
+  keyPreviewPlaceholder: Generated from the name
+  fieldTeam: Owning Team · fixed
+  fieldTeamHelp: Exactly one Team. Created by an authorized Team Owner.
+  chooseFirstOwner: Choose first Owner
+  fieldFirstOwner: First Product Owner · required
+  fieldOwnerHelp: Only eligible current members of the owning Team are selectable.
+  ownerPlaceholder: Select a team member
+  eligibleTitle: Eligible Team members
+  candidateSelected: Selected
+  candidateAvailable: Available
+  reviewProduct: Review Product
+  ownerMandatoryTitle: First Owner is mandatory
+  ownerMandatoryDetail: If no eligible person is selected, continue is blocked.
+  reviewKey: Product key
+  reviewTeam: Owning Team
+  reviewOwner: First Product Owner
+  reviewCreator: Creator · no automatic Product role
+  reviewCreatorValue: "{name} · Team Owner"
+  onlyFirstOwnerTitle: Only the explicitly selected first Owner is assigned
+  onlyFirstOwnerDetail: Team Members are not added to the Product. No Project membership or access is created.
+  creatorFootnote: "Creator: {name} · {role}. Creation does not automatically assign Product Owner."
+  # Overview (O1)
+  badgeYouOwner: You · Product Owner
+  badgeYouMember: You · Product Member
+  badgeProductOwner: Product Owner
+  metaOwner: "Product Owner · {name}"
+  metaMembers: "Product Members · {count}"
+  metaProjects: "Associated Projects · {count}"
+  associatedTitle: Associated Projects · independently authorized
+  associatedPlainTitle: Associated Projects
+  associationsEmpty: No associated projects
+  associationsCountLine: "{count} associations · access is evaluated for each Project"
+  openProject: Open Project
+  restricted: Restricted
+  manageMembers: Manage Product Members
+  viewLifecycle: View lifecycle
+  # Members (M1/M2)
+  ownersTitle: "Product Owners · {count}"
+  ownerNoteMain: Lifecycle decisions · Abandon / Restart
+  ownerNoteSub: No Owner appointment or demotion action in this view.
+  noOwnerNote: This product currently has no Product Owner.
+  restorePlaceholder: Select a candidate
+  restoreAction: Restore Product Owner
+  ownerRestoredToast: Product Owner restored
+  membersTitle: "Product Members · {count}"
+  colHumanPrincipal: Human Principal
+  colProductIdentity: Product identity
+  colStatusAction: Status / action
+  identityProductMember: Product Member
+  noMembersNote: No ordinary product members yet.
+  sharedManagementTitle: Daily management is shared
+  sharedManagementDetail: Any Product Member may add or remove ordinary Product Members. Owner identity is not editable here.
+  addMember: Add Product Member
+  addOrdinaryTitle: Add an ordinary Product Member
+  addOrdinaryDetail: Same-Tenant Human Principals only. This does not assign Product Owner or full Project read access.
+  fieldPrincipal: Human Principal · required
+  fieldPrincipalHelp: No cross-Tenant candidates are included.
+  principalPlaceholder: Select a team member
+  fieldIdentity: Product identity
+  fieldIdentityHelp: No other human Product role is available.
+  previewTitle: Result preview
+  previewPerson: Person
+  previewNew: New relationship
+  previewUnchanged: Unchanged
+  previewNewValue: "Product Member · {key}"
+  previewUnchangedValue: Project access / Team affiliation
   memberAddedToast: Member added
-  memberRemovedToast: Member removed
-  appointedToast: Appointed as Product Owner
-  demotedToast: Demoted to Product Member
-  appointOwner: Appoint owner
-  demoteOwner: Demote
-  firstOwnerLabel: First Product Owner
-  firstOwnerPlaceholder: Select the first Product Owner
+  memberRemovedToast: "{name} removed"
+  removeAction: Remove
+  removeConfirmTitle: "Remove Product Member \"{name}\"?"
+  removeConfirmDetail: Removes the member from this Product only. Team Membership and Project access are not changed by this action.
+  reviewedCheckbox: I have reviewed the impact.
+  # Lifecycle (L1/L2)
   lifecycleTitle: Lifecycle
-  abandon: Abandon
-  restart: Restart
-  abandonToast: Product abandoned (read-only, restartable)
-  restartToast: Product restarted
-  lifecycleNote: Abandoned products stop receiving new requirements and business decision tasks; AI stops proactive work. History stays readable; linked projects are untouched.
-  linksTitle: Linked projects
-  linkProject: Project
-  linkCreate: Link
-  linkCreatedToast: Project linked
-  linkEnd: Unlink
-  linkEndedToast: Link removed
-  linkPlaceholder: Project ID
+  lifecycleActiveDesc: This Product is Active. Lifecycle decisions belong to Product Owners, not an exclusive daily administrator.
+  lifecycleArchivedDesc: This Product is Abandoned (read-only). A Product Owner can restart it back to Active.
+  abandonAction: Abandon Product
+  restartAction: Restart Product
+  abandonConfirmTitle: Abandon Product?
+  abandonConfirmDetail: Only this Product becomes Abandoned. Associated Projects remain Active and Agent Runs continue. No Tasks are cancelled.
+  restartConfirmTitle: Restart Product?
+  restartConfirmDetail: Only this Product returns to Active. This does not reopen Projects or change their access, Tasks or Agent Runs.
+  noCascadingTitle: No cascading Project or Agent changes
+  noCascadingDetail: Abandon does not close associated Projects, cancel Tasks or stop Agent Runs. Product and Project lifecycles are independent.
+  contextTitle: Associated execution context · unchanged
+  lifecycleFootnote: Only Active and Abandoned are Product lifecycle values (Suspended / Resuming are presentation states).
+  abandonedToast: Product abandoned (read-only, restartable)
+  restartedToast: Product restarted
+  # Projects (A1/A2)
+  colProject: Project
+  colState: State
+  colProductLinks: Product links
+  colAccessAction: Access / action
+  viewAssociation: View association
+  m2mTitle: A many-to-many association, not a folder
+  m2mDetail: A Product can link to several Projects; a Project can link to several Products. Association does not transfer ownership.
+  readonlyLine1: No assets or knowledge are copied. Product Members are not copied to a Project member list.
+  readonlyLine2: Link / unlink controls are omitted because their authorization has not been explicitly approved.
+  associationDetails: Association details
+  associationCardTitle: "Association · {key} ↔ {project}"
+  rowProduct: Product
+  rowProductValue: "{name} · {key} · {lifecycle}"
+  rowTeam: Owning Team
+  rowProject: Project
+  rowProjectValue: "{name} · {status}"
+  rowOtherProducts: Other associated Product
+  associationOnlyTitle: Association only
+  associationOnlyDetail: Membership, asset ownership, knowledge and lifecycle do not propagate across this link.
+  associationFootnote: Your reading eligibility for the example Project is explicitly granted. Other associated Projects are evaluated independently. Sensitive areas retain their existing restrictions.

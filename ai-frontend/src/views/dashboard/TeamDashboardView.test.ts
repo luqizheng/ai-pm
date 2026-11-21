@@ -146,7 +146,7 @@ beforeEach(() => {
       id: PRODUCT_BILL,
       key: "BILL",
       name: "Billing API",
-      status: "abandoned"
+      status: "archived"
     })
   ]);
 });

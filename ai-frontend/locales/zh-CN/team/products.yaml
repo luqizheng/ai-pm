@@ -1,34 +1,159 @@
 products:
-  members: 产品成员
   title: 产品
-  description: Product Membership 内部管理——Team Member 不自动成为 Product 成员（PA 基线 §2）。
+  tabsLabel: 产品域页面导航
+  tabOverview: 概览
+  tabMembers: 成员
+  tabProjects: 关联项目
+  tabRequirements: 需求 / 规划
+  tabKnowledge: 知识库
+  tabActivity: 活动
+  listSubtitle: 团队：{team} · 租户：{org}
+  summaryLine: "{team} · {count} 个产品"
   create: 新建产品
-  createTitle: 新建产品
-  createDesc: 由团队 Owner 创建并指定首位 Product Owner；创建者与团队 Owner 不因组织身份自动成为 Product Owner。
-  createdToast: 产品已创建
-  listTitle: 产品列表
-  empty: 暂无参与中的产品
-  membersTitle: 产品成员
-  addMember: 添加成员
-  addMemberPlaceholder: 选择团队成员
+  createFailed: 产品创建失败
+  cancel: 取消
+  back: 返回
+  loadFailed: 产品数据加载失败
+  listTitle: 产品
+  colProductKey: 产品 / key
+  colLifecycle: 生命周期
+  colOwner: Owner
+  colMembers: 成员
+  colProjects: 项目
+  colUpdated: 更新
+  emptyTitle: 暂无产品
+  emptyHint: 由团队 Owner 创建第一个产品并指定首位 Product Owner。
+  discoveryTitle: 可见不等于可访问
+  discoveryDetail: 仅列出现有策略允许的元数据；仅凭 Team Membership 不会解锁产品详情。
+  identityTeamOwner: Team Owner
+  identityTeamMember: Team Member
+  identityAuthorityOwner: 创建需要 Team Owner 权限。
+  identityAuthorityMember: 产品创建需要 Team Owner 权限，入口对普通成员不渲染。
+  identityFootnote: 当前身份：{identity} · {authority}
+  # 生命周期（0044 四值化呈现）
+  lifecycleNormal: 生效中
+  lifecycleSuspended: 已挂起
+  lifecycleResuming: 恢复中
+  lifecycleArchived: 已放弃
+  # 创建流程（C1→C2→C3）
+  stepBasics: 基本信息
+  stepOwner: 首位 Owner
+  stepConfirm: 确认
+  stepBasicsTitle: 新建产品
+  stepOwnerTitle: 选择首位 Owner
+  stepReviewTitle: 复核产品
+  basicsTitle: 产品基本信息
+  fieldName: 产品名称 · 必填
+  fieldNameHelp: 清晰的业务协作边界。
+  namePlaceholder: 输入产品名称
+  fieldKey: 产品 Key · 自动生成
+  fieldKeyHelp: 由名称派生、全局唯一（大小写不敏感）、创建后不可变（PA-07 §4.8）；冲突自动追加序号。
+  keyPreviewPlaceholder: 输入名称后自动生成
+  fieldTeam: 所属团队 · 固定
+  fieldTeamHelp: 有且仅有一个团队；由具备权限的 Team Owner 创建。
+  chooseFirstOwner: 选择首位 Owner
+  fieldFirstOwner: 首位 Product Owner · 必填
+  fieldOwnerHelp: 仅可从所属团队的现有成员中选择。
+  ownerPlaceholder: 选择一位团队成员
+  eligibleTitle: 合格的团队成员
+  candidateSelected: 已选
+  candidateAvailable: 可选
+  reviewProduct: 复核产品
+  ownerMandatoryTitle: 首位 Owner 必填
+  ownerMandatoryDetail: 未选择合格成员时，继续按钮保持阻断。
+  reviewKey: 产品 Key
+  reviewTeam: 所属团队
+  reviewOwner: 首位 Product Owner
+  reviewCreator: 创建者 · 不自动获得产品角色
+  reviewCreatorValue: "{name} · Team Owner"
+  onlyFirstOwnerTitle: 仅显式选定的首位 Owner 被授予
+  onlyFirstOwnerDetail: Team 成员不会被加入产品；不创建任何项目成员关系或访问。
+  creatorFootnote: 创建者：{name} · {role}。创建不会自动授予 Product Owner。
+  # 概览页（O1）
+  badgeYouOwner: 我 · Product Owner
+  badgeYouMember: 我 · Product Member
+  badgeProductOwner: Product Owner
+  metaOwner: "Product Owner · {name}"
+  metaMembers: "Product 成员 · {count}"
+  metaProjects: "关联项目 · {count}"
+  associatedTitle: 关联项目 · 独立授权
+  associatedPlainTitle: 关联项目
+  associationsEmpty: 暂无关联项目
+  associationsCountLine: "{count} 条关联 · 逐项目评估访问"
+  openProject: 打开项目
+  restricted: 受限
+  manageMembers: 管理产品成员
+  viewLifecycle: 查看生命周期
+  # 成员页（M1/M2）
+  ownersTitle: "Product Owner · {count}"
+  ownerNoteMain: 生命周期决策 · 放弃 / 重启
+  ownerNoteSub: 此视图不提供 Owner 任命或降级操作。
+  noOwnerNote: 当前没有 Product Owner。
+  restorePlaceholder: 选择恢复人选
+  restoreAction: 恢复 Product Owner
+  ownerRestoredToast: 已恢复 Product Owner
+  membersTitle: "Product 成员 · {count}"
+  colHumanPrincipal: 人类主体
+  colProductIdentity: 产品身份
+  colStatusAction: 状态 / 操作
+  identityProductMember: Product Member
+  noMembersNote: 暂无普通产品成员。
+  sharedManagementTitle: 日常管理平权
+  sharedManagementDetail: 任何 Product 成员都可添加或移除普通产品成员；Owner 身份不在此编辑。
+  addMember: 添加产品成员
+  addOrdinaryTitle: 添加普通产品成员
+  addOrdinaryDetail: 仅限同租户人类主体；此操作不授予 Product Owner 或完整项目读取权限。
+  fieldPrincipal: 人类主体 · 必填
+  fieldPrincipalHelp: 不包含跨租户候选人。
+  principalPlaceholder: 选择团队成员
+  fieldIdentity: 产品身份
+  fieldIdentityHelp: 无其他人类产品角色可选。
+  previewTitle: 结果预览
+  previewPerson: 人员
+  previewNew: 新增关系
+  previewUnchanged: 保持不变
+  previewNewValue: "Product Member · {key}"
+  previewUnchangedValue: 项目访问 / 团队归属
   memberAddedToast: 成员已添加
-  memberRemovedToast: 成员已移除
-  appointedToast: 已任命为 Product Owner
-  demotedToast: 已降级为 Product Member
-  appointOwner: 任命 Owner
-  demoteOwner: 降级
-  firstOwnerLabel: 首位 Product Owner
-  firstOwnerPlaceholder: 选择首位 Product Owner
+  memberRemovedToast: 已移除「{name}」
+  removeAction: 移除
+  removeConfirmTitle: 移除产品成员「{name}」？
+  removeConfirmDetail: 仅将其移出本产品；团队归属与项目访问不因本操作改变。
+  reviewedCheckbox: 我已确认该影响。
+  # 生命周期页（L1/L2）
   lifecycleTitle: 生命周期
-  abandon: 放弃产品
-  restart: 重启产品
-  abandonToast: 产品已放弃（只读，可重启）
-  restartToast: 产品已重启
-  lifecycleNote: 放弃后不再接收新需求、不再产生业务决策任务、AI 不再主动开展业务工作；历史资料与读取保留；不影响关联项目。
-  linksTitle: 关联项目
-  linkProject: 关联项目
-  linkCreate: 关联
-  linkCreatedToast: 项目已关联
-  linkEnd: 解除
-  linkEndedToast: 关联已解除
-  linkPlaceholder: 输入项目 ID
+  lifecycleActiveDesc: 本产品处于生效中。生命周期决策属于 Product Owner，而非唯一的日常管理员。
+  lifecycleArchivedDesc: 本产品已放弃（只读）。可由 Product Owner 重启回到生效中。
+  abandonAction: 放弃产品
+  restartAction: 重启产品
+  abandonConfirmTitle: 放弃产品？
+  abandonConfirmDetail: 仅本产品进入已放弃。关联项目保持生效、Agent Run 继续、不取消任何任务。
+  restartConfirmTitle: 重启产品？
+  restartConfirmDetail: 仅本产品回到生效中。不会重开项目、不改变其访问、任务或 Agent Run。
+  noCascadingTitle: 不级联影响项目与 Agent
+  noCascadingDetail: 放弃不会关闭关联项目、取消任务或停止 Agent Run；产品与项目生命周期相互独立。
+  contextTitle: 关联执行上下文 · 保持不变
+  lifecycleFootnote: 产品生命周期取值仅为 生效中 / 已放弃（呈现态另有挂起与恢复中）。
+  abandonedToast: 产品已放弃（只读，可重启）
+  restartedToast: 产品已重启
+  # 关联页（A1/A2）
+  colProject: 项目
+  colState: 状态
+  colProductLinks: 产品关联
+  colAccessAction: 访问 / 操作
+  viewAssociation: 查看关联
+  m2mTitle: 多对多关联，而非文件夹
+  m2mDetail: 一个产品可关联多个项目；一个项目也可关联多个产品。关联不转移归属。
+  readonlyLine1: 不复制任何资产或知识；产品成员不会复制到项目成员名单。
+  readonlyLine2: 建立与解除关联的控制未随本次修订提供（相关授权尚未显式批准）。
+  associationDetails: 关联详情
+  associationCardTitle: 关联 · {key} ↔ {project}
+  rowProduct: 产品
+  rowProductValue: "{name} · {key} · {lifecycle}"
+  rowTeam: 所属团队
+  rowProject: 项目
+  rowProjectValue: "{name} · {status}"
+  rowOtherProducts: 其他关联产品
+  associationOnlyTitle: 仅限关联本身
+  associationOnlyDetail: 成员、资产归属、知识与生命周期不随此关联传播。
+  associationFootnote: 对示例项目的读取资格是显式授予的；其他关联项目独立评估，敏感区域沿用现有限制。

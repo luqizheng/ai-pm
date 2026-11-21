@@ -17,8 +17,7 @@ import {
   Settings2,
   Sparkles,
   SquareKanban,
-  Terminal,
-  Users
+  Terminal
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -304,9 +303,9 @@ const administrationGroup: NavGroup = {
           path: "/settings/team/products",
           labelKey: "settings.nav.products",
           component: () =>
-            import(
-              "@/views/settings/team/SettingsTeamProductsView.vue"
-            ).then(module => module.default)
+            import("@/views/settings/team/products/ProductsListView.vue").then(
+              module => module.default
+            )
         },
         {
           path: "/settings/team/ai-providers",
@@ -422,7 +421,7 @@ export const auxiliaryNavItems: NavItem[] = [
       import("@/views/project/cognition/CognitionPage.vue").then(
         module => module.default
       )
-    }
+  }
 ];
 
 /** 扁平化后的全部导航项（命令面板与设计套件预览用） */

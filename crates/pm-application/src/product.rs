@@ -21,7 +21,7 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::PgPool;
@@ -67,6 +67,7 @@ pub struct ProductProfile {
     pub name: String,
     pub description: Option<String>,
     pub status: String,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -264,9 +265,9 @@ pub async fn create_product(
     }
     let product_key = allocate_product_key(&mut tx, &base).await?;
 
-    let inserted: Uuid = sqlx::query_scalar(
+    let inserted: (Uuid, DateTime<Utc>) = sqlx::query_as(
         "INSERT INTO core.product (id, team_id, tenant_id, key, name, description) \
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, updated_at",
     )
     .bind(product_id)
     .bind(team_id)
@@ -276,7 +277,8 @@ pub async fn create_product(
     .bind(description.map(str::trim).filter(|s| !s.is_empty()))
     .fetch_one(&mut *tx)
     .await?;
-    debug_assert_eq!(inserted, product_id);
+    debug_assert_eq!(inserted.0, product_id);
+    let updated_at = inserted.1;
 
     sqlx::query(
         "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role, granted_by) \
@@ -325,6 +327,7 @@ pub async fn create_product(
         name: name.to_string(),
         description: description.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
         status: "normal".to_string(),
+        updated_at,
     })
 }
 
@@ -349,7 +352,7 @@ pub async fn list_products(
     };
     if role == "owner" {
         let rows: Vec<ProductProfile> = sqlx::query_as(
-            "SELECT id, team_id, key, name, description, status FROM core.product \
+            "SELECT id, team_id, key, name, description, status, updated_at FROM core.product \
               WHERE team_id = $1 ORDER BY created_at",
         )
         .bind(team_id)
@@ -358,7 +361,7 @@ pub async fn list_products(
         Ok(rows)
     } else {
         let rows: Vec<ProductProfile> = sqlx::query_as(
-            "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status \
+            "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status, p.updated_at \
                FROM core.product p \
                JOIN core.product_member m ON m.product_id = p.id \
               WHERE p.team_id = $1 AND m.principal_id = $2 \
@@ -379,7 +382,7 @@ pub async fn product_profile(
     principal_id: Uuid,
 ) -> Result<ProductProfile, ProductError> {
     let row: Option<ProductProfile> = sqlx::query_as(
-        "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status \
+        "SELECT p.id, p.team_id, p.key, p.name, p.description, p.status, p.updated_at \
            FROM core.product p \
           WHERE p.id = $1 AND EXISTS (\
                SELECT 1 FROM core.product_member m \
@@ -790,14 +793,16 @@ pub async fn set_product_lifecycle(
     };
     let mut tx = pool.begin().await?;
 
-    let locked: Option<(Uuid, String, String, Option<String>, Uuid, String)> = sqlx::query_as(
-        "SELECT tenant_id, name, status, description, team_id, key \
-           FROM core.product WHERE id = $1 FOR UPDATE",
-    )
-    .bind(product_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    let Some((tenant_id, name, status, description, team_id, product_key)) = locked else {
+    let locked: Option<(Uuid, String, String, Option<String>, Uuid, String, DateTime<Utc>)> =
+        sqlx::query_as(
+            "SELECT tenant_id, name, status, description, team_id, key, updated_at \
+               FROM core.product WHERE id = $1 FOR UPDATE",
+        )
+        .bind(product_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some((tenant_id, name, status, description, team_id, product_key, updated_at)) = locked
+    else {
         return Err(ProductError::NotFound);
     };
     let is_owner: bool = sqlx::query_scalar(
@@ -841,6 +846,7 @@ pub async fn set_product_lifecycle(
         name,
         description,
         status: target_status.to_string(),
+        updated_at,
     })
 }
 

@@ -440,6 +440,56 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "team.succession.title" }
   });
 
+  // 产品域页面族（P4-ORG UX 修订 / Figma P1·C1-C3·O1·M1-M2·L1·A1-A2）：
+  // 产品详情族不进侧栏子菜单（导航子树仅保留 Products 列表父项），全部
+  // 手工注册；产品级页签 = Overview | Members | Projects（+planned 三页签）。
+  routes.push(
+    {
+      path: "/settings/team/products/create",
+      component: () =>
+        import("@/views/settings/team/products/ProductCreateView.vue"),
+      meta: { title: "team.products.create" }
+    },
+    {
+      path: "/settings/team/products/:productId",
+      component: () =>
+        import("@/views/settings/team/products/ProductOverviewView.vue"),
+      meta: { title: "team.products.title" }
+    },
+    {
+      path: "/settings/team/products/:productId/members",
+      component: () =>
+        import("@/views/settings/team/products/ProductMembersView.vue"),
+      meta: { title: "team.products.tabMembers" }
+    },
+    {
+      path: "/settings/team/products/:productId/members/add",
+      component: () =>
+        import("@/views/settings/team/products/ProductMemberAddView.vue"),
+      meta: { title: "team.products.addMember" }
+    },
+    {
+      path: "/settings/team/products/:productId/lifecycle",
+      component: () =>
+        import("@/views/settings/team/products/ProductLifecycleView.vue"),
+      meta: { title: "team.products.lifecycleTitle" }
+    },
+    {
+      path: "/settings/team/products/:productId/projects/:linkId",
+      component: () =>
+        import(
+          "@/views/settings/team/products/ProductAssociationDetailView.vue"
+        ),
+      meta: { title: "team.products.associationDetails" }
+    },
+    {
+      path: "/settings/team/products/:productId/projects",
+      component: () =>
+        import("@/views/settings/team/products/ProductProjectsView.vue"),
+      meta: { title: "team.products.tabProjects" }
+    }
+  );
+
   // 收件箱占位退役（Q-10/C5）：旧 /inbox 统一跳通知中心。
   routes.push({
     path: "/inbox",

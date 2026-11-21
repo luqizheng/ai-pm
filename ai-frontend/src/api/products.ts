@@ -16,6 +16,13 @@ import { http } from "@/api/base";
 
 /* --------------------------------- 类型 ----------------------------------- */
 
+/** 生命周期（0044 四值化）：normal/suspended/resuming/archived */
+export type ProductLifecycleStatus =
+  | "normal"
+  | "suspended"
+  | "resuming"
+  | "archived";
+
 export interface ProductProfile {
   id: string;
   team_id: string;
@@ -23,7 +30,8 @@ export interface ProductProfile {
   key: string;
   name: string;
   description: string | null;
-  status: "active" | "abandoned";
+  status: ProductLifecycleStatus;
+  updated_at: string;
 }
 
 export interface ProductMember {
