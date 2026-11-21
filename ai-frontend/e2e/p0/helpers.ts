@@ -148,7 +148,7 @@ export async function registerMockProvider(
   if (!endpoint) throw new Error("P0_MOCK_LLM_URL missing (global-setup must run)");
   // 真 LLM 模式（P0_REAL_LLM_URL）下模型名来自 P0_LLM_MODEL（如 qwen2.5:3b）
   const modelName = process.env.P0_LLM_MODEL ?? "mock-e2e";
-  const created = await api("POST", `/v1/pm/tenants/${owner.tenant_id}/llm-providers`, owner.token, {
+  const created = await api("POST", `/v1/pm/teams/${teamId}/llm-providers`, owner.token, {
     name: "mock-e2e",
     provider_type: "ollama", // 回环端点豁免（见函数注释）
     endpoint,
@@ -163,7 +163,7 @@ export async function registerMockProvider(
   // 状态门：启用 provider（status API；乐观锁 expected_revision，409 重试一次）
   let enabled = false;
   for (let attempt = 0; attempt < 3 && !enabled; attempt += 1) {
-    const list = await api("GET", `/v1/pm/tenants/${owner.tenant_id}/llm-providers`, owner.token);
+    const list = await api("GET", `/v1/pm/teams/${teamId}/llm-providers`, owner.token);
     const row = (list.body.items ?? list.body ?? []).find(
       (item: { id: string }) => item.id === providerId
     );
@@ -173,7 +173,7 @@ export async function registerMockProvider(
     }
     const status = await api(
       "POST",
-      `/v1/pm/tenants/${owner.tenant_id}/llm-providers/${providerId}/status`,
+      `/v1/pm/teams/${teamId}/llm-providers/${providerId}/status`,
       owner.token,
       { action: "enable", expected_revision: row?.revision ?? 0 }
     );
@@ -200,7 +200,7 @@ export async function registerMockProvider(
   // 角色指向它（会话回复解析走 general，分析链走 ai_pm_lead）。
   const modelCreated = await api(
     "POST",
-    `/v1/pm/tenants/${owner.tenant_id}/llm-models`,
+    `/v1/pm/teams/${teamId}/llm-models`,
     owner.token,
     {
       provider_id: providerId,
@@ -220,7 +220,7 @@ export async function registerMockProvider(
   for (let attempt = 0; attempt < 3 && !modelEnabled; attempt += 1) {
     const models = await api(
       "GET",
-      `/v1/pm/tenants/${owner.tenant_id}/llm-models`,
+      `/v1/pm/teams/${teamId}/llm-models`,
       owner.token
     );
     const row = (models.body.items ?? models.body ?? []).find(
@@ -232,7 +232,7 @@ export async function registerMockProvider(
     }
     const patched = await api(
       "PATCH",
-      `/v1/pm/tenants/${owner.tenant_id}/llm-models/${modelRowId}`,
+      `/v1/pm/teams/${teamId}/llm-models/${modelRowId}`,
       owner.token,
       { expected_revision: row?.revision ?? 0, enabled: true }
     );
@@ -247,7 +247,7 @@ export async function registerMockProvider(
   // 授权模型给项目使用（grant；未授权模型配策略被 400 拒绝）
   const granted = await api(
     "PUT",
-    `/v1/pm/tenants/${owner.tenant_id}/llm-model-authorizations`,
+    `/v1/pm/teams/${teamId}/llm-model-authorizations`,
     owner.token,
     { items: [{ model_id: modelRowId, action: "grant" }] }
   );
@@ -257,7 +257,7 @@ export async function registerMockProvider(
     );
   const policies = await api(
     "PUT",
-    `/v1/pm/tenants/${owner.tenant_id}/llm-model-policies`,
+    `/v1/pm/teams/${teamId}/llm-model-policies`,
     owner.token,
     {
       items: [

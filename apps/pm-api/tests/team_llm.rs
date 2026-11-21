@@ -86,6 +86,7 @@ struct World {
     app: Router,
     pool: PgPool,
     tenant_id: Uuid,
+    team_id: Uuid,
     admin_token: String,
     member_token: String,
 }
@@ -190,20 +191,21 @@ async fn world(pool: PgPool) -> World {
         app,
         pool,
         tenant_id,
+        team_id,
         admin_token: token("usr-admin", json!(["tenant_admin"])),
         member_token: token("usr-member", json!([])),
     }
 }
 
-fn base_uri(tenant_id: Uuid) -> String {
-    format!("/v1/pm/tenants/{tenant_id}/llm-providers")
+fn base_uri(team_id: Uuid) -> String {
+    format!("/v1/pm/teams/{team_id}/llm-providers")
 }
 
 async fn create_provider(w: &World, body: Value) -> (StatusCode, Value) {
     call(
         &w.app,
         "POST",
-        &base_uri(w.tenant_id),
+        &base_uri(w.team_id),
         &w.admin_token,
         Some(body),
     )
@@ -218,10 +220,10 @@ async fn member_is_forbidden_on_list_and_write(pool: PgPool) {
     let w = world(pool).await;
 
     for (method, uri, body) in [
-        ("GET", base_uri(w.tenant_id), None),
+        ("GET", base_uri(w.team_id), None),
         (
             "POST",
-            base_uri(w.tenant_id),
+            base_uri(w.team_id),
             Some(json!({
                 "name": "p1", "provider_type": "deepseek",
                 "endpoint": "https://api.deepseek.com/v1"
@@ -269,7 +271,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id),
+        &format!("{}/{}/status", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "action": "enable" })),
     )
@@ -281,7 +283,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/credential", base_uri(w.tenant_id), id),
+        &format!("{}/{}/credential", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "api_key": "sk-secret-9999abcd" })),
     )
@@ -300,7 +302,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id),
+        &format!("{}/{}/status", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "action": "enable" })),
     )
@@ -312,7 +314,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id),
+        &format!("{}/{}/status", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "action": "disable" })),
     )
@@ -324,7 +326,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id),
+        &format!("{}/{}/status", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "action": "archive" })),
     )
@@ -337,7 +339,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id),
+        &format!("{}/{}/status", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "action": "enable" })),
     )
@@ -348,7 +350,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "DELETE",
-        &format!("{}/{}", base_uri(w.tenant_id), id),
+        &format!("{}/{}", base_uri(w.team_id), id),
         &w.admin_token,
         None,
     )
@@ -419,7 +421,7 @@ async fn stale_revision_conflicts_with_409(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PATCH",
-        &format!("{}/{}", base_uri(w.tenant_id), id),
+        &format!("{}/{}", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": 0, "timeout_secs": 30 })),
     )
@@ -450,7 +452,7 @@ async fn delete_requires_archive_and_no_call_records(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/credential", base_uri(w.tenant_id), id),
+        &format!("{}/{}/credential", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "api_key": "sk-x" })),
     )
@@ -461,7 +463,7 @@ async fn delete_requires_archive_and_no_call_records(pool: PgPool) {
         let (status, body) = call(
             &w.app,
             "POST",
-            &format!("{}/{}/status", base_uri(w.tenant_id), id),
+            &format!("{}/{}/status", base_uri(w.team_id), id),
             &w.admin_token,
             Some(json!({ "expected_revision": revision, "action": action })),
         )
@@ -484,7 +486,7 @@ async fn delete_requires_archive_and_no_call_records(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "DELETE",
-        &format!("{}/{}", base_uri(w.tenant_id), id),
+        &format!("{}/{}", base_uri(w.team_id), id),
         &w.admin_token,
         None,
     )
@@ -512,7 +514,7 @@ async fn configuration_changes_are_audited(pool: PgPool) {
     let (status, _row) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/credential", base_uri(w.tenant_id), id),
+        &format!("{}/{}/credential", base_uri(w.team_id), id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "api_key": "sk-a" })),
     )
@@ -710,7 +712,7 @@ async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     .await
     .unwrap();
 
-    let catalog_base = format!("/v1/pm/tenants/{}/llm-models", w.tenant_id);
+    let catalog_base = format!("/v1/pm/teams/{}/llm-models", w.team_id);
 
     // ① 无任何配置 → 显式 general_policy_missing（§6.1 末级）
     let failure = resolve_model_for_role(&w.pool, project_id, "general")
@@ -741,7 +743,7 @@ async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     let (_, e1) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id1),
+        &format!("{}/{}/status", base_uri(w.team_id), id1),
         &w.admin_token,
         Some(json!({ "expected_revision": p1["revision"].as_i64().unwrap(), "action": "enable" })),
     )
@@ -767,7 +769,7 @@ async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     let (_, _) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "model_id": mid1, "action": "grant" }] })),
     )
@@ -775,7 +777,7 @@ async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     let (_, _) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-policies", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "role_key": "general", "model_id": mid1 }] })),
     )
@@ -802,7 +804,7 @@ async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     let (_, e2) = call(
         &w.app,
         "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id2),
+        &format!("{}/{}/status", base_uri(w.team_id), id2),
         &w.admin_token,
         Some(json!({ "expected_revision": p2["revision"].as_i64().unwrap(), "action": "enable" })),
     )

@@ -28,37 +28,40 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::team_llm::audit_actor;
 use crate::team_llm::error_response;
-use crate::team_llm_guard::{err_forbidden, guard_tenant};
+use crate::team_llm_guard::err_forbidden;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-models",
+            "/v1/pm/teams/{team_id}/llm-models",
             get(list_models_handler).post(create_model_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-models/{model_row_id}",
+            "/v1/pm/teams/{team_id}/llm-models/{model_row_id}",
             axum::routing::patch(update_model_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-model-authorizations",
+            "/v1/pm/teams/{team_id}/llm-model-authorizations",
             axum::routing::put(authorizations_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-model-policies",
+            "/v1/pm/teams/{team_id}/llm-model-policies",
             get(team_policies_get_handler).put(team_policies_put_handler),
         )
 }
 
+/// P4-ORG Phase 4b：Team 锚守卫（guard_team 验 Team 存在性与租户归属；
+/// is_admin=Team Owner）。返回租户锚供下游 tenant-scoped 查询。
 async fn require_admin(
+    state: &crate::routes::AppState,
     caller: &AuthedPrincipal,
-    tenant_id: Uuid,
-) -> Result<(), Response> {
-    guard_tenant(caller, tenant_id)?;
+    team_id: Uuid,
+) -> Result<Uuid, Response> {
+    crate::team_llm_guard::guard_team(caller, &state.pool, team_id).await?;
     if !caller.is_admin {
-        return Err(err_forbidden("tenant admin required"));
+        return Err(err_forbidden("team owner required"));
     }
-    Ok(())
+    Ok(caller.tenant_id)
 }
 
 #[derive(Deserialize)]
@@ -72,12 +75,13 @@ struct ListModelsQuery {
 async fn list_models_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     Query(query): Query<ListModelsQuery>,
 ) -> Response {
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     match list_models(&state.pool, tenant_id, query.provider_id).await {
         Ok(mut items) => {
             // q 精确过滤（display_name/model_id 前缀/子串；目录规模小，内存过滤）
@@ -98,13 +102,14 @@ async fn list_models_handler(
 async fn create_model_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     body: Result<Json<CreateModelRequest>, JsonRejection>,
 ) -> Response {
     // 守卫先于 body 提取：权限拒绝（403）优先于媒体类型/JSON 错误（415/400）
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     let Ok(Json(body)) = body else {
         return (
             StatusCode::BAD_REQUEST,
@@ -121,13 +126,14 @@ async fn create_model_handler(
 async fn update_model_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, model_row_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, model_row_id)): Path<(Uuid, Uuid)>,
     body: Result<Json<UpdateModelRequest>, JsonRejection>,
 ) -> Response {
     // 守卫先于 body 提取（同上）
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     let Ok(Json(body)) = body else {
         return (
             StatusCode::BAD_REQUEST,
@@ -150,13 +156,14 @@ struct AuthorizationsBody {
 async fn authorizations_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     body: Result<Json<AuthorizationsBody>, JsonRejection>,
 ) -> Response {
     // 守卫先于 body 提取（同上）
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     let Ok(Json(body)) = body else {
         return (
             StatusCode::BAD_REQUEST,
@@ -173,11 +180,12 @@ async fn authorizations_handler(
 async fn team_policies_get_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     match get_team_policies(&state.pool, tenant_id).await {
         Ok(rows) => (StatusCode::OK, Json(json!({ "items": rows }))).into_response(),
         Err(err) => error_response(err),
@@ -193,13 +201,14 @@ struct TeamPoliciesBody {
 async fn team_policies_put_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     body: Result<Json<TeamPoliciesBody>, JsonRejection>,
 ) -> Response {
     // 守卫先于 body 提取（同上）
-    if let Err(resp) = require_admin(&caller, tenant_id).await {
-        return resp;
-    }
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
     let Ok(Json(body)) = body else {
         return (
             StatusCode::BAD_REQUEST,

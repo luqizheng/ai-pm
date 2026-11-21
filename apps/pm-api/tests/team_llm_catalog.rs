@@ -90,6 +90,7 @@ struct World {
     app: Router,
     pool: PgPool,
     tenant_id: Uuid,
+    team_id: Uuid,
     admin_token: String,
     member_token: String,
 }
@@ -194,6 +195,7 @@ async fn world(pool: PgPool) -> World {
         app,
         pool,
         tenant_id,
+        team_id,
         admin_token: token("usr-admin", json!(["tenant_admin"])),
         member_token: token("usr-member", json!([])),
     }
@@ -206,7 +208,7 @@ async fn create_enabled_provider(w: &World, name: &str) -> Uuid {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-providers", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-providers", w.team_id),
         &w.admin_token,
         Some(json!({
             "name": name, "provider_type": "openai_compatible",
@@ -222,7 +224,7 @@ async fn create_enabled_provider(w: &World, name: &str) -> Uuid {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-providers/{id}/status", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-providers/{id}/status", w.team_id),
         &w.admin_token,
         Some(json!({ "action": "enable", "expected_revision": revision })),
     )
@@ -236,7 +238,7 @@ async fn create_usable_model(w: &World, provider_id: Uuid, model_id: &str) -> Uu
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({
             "provider_id": provider_id,
@@ -252,7 +254,7 @@ async fn create_usable_model(w: &World, provider_id: Uuid, model_id: &str) -> Uu
     let (status, row) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/llm-models/{id}", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models/{id}", w.team_id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "enabled": true })),
     )
@@ -261,7 +263,7 @@ async fn create_usable_model(w: &World, provider_id: Uuid, model_id: &str) -> Uu
     let (status, row) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "model_id": id, "action": "grant" }] })),
     )
@@ -296,7 +298,7 @@ async fn seed_project(w: &World, code: &str) -> Uuid {
 #[sqlx::test(migrations = "../../migrations")]
 async fn catalog_requires_tenant_admin(pool: PgPool) {
     let w = world(pool).await;
-    let base = format!("/v1/pm/tenants/{}", w.tenant_id);
+    let base = format!("/v1/pm/teams/{}", w.team_id);
     for (method, uri) in [
         ("GET", format!("{base}/llm-models")),
         ("POST", format!("{base}/llm-models")),
@@ -312,7 +314,7 @@ async fn catalog_requires_tenant_admin(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "GET",
-        &format!("/v1/pm/tenants/{}/llm-models", Uuid::new_v4()),
+        &format!("/v1/pm/teams/{}/llm-models", Uuid::new_v4()),
         &w.admin_token,
         None,
     )
@@ -334,7 +336,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(payload.clone()),
     )
@@ -348,7 +350,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(payload),
     )
@@ -359,7 +361,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({
             "provider_id": provider_id,
@@ -374,7 +376,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-providers", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-providers", w.team_id),
         &w.admin_token,
         Some(json!({
             "name": "p2", "provider_type": "openai_compatible",
@@ -389,8 +391,8 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
         &w.app,
         "POST",
         &format!(
-            "/v1/pm/tenants/{}/llm-providers/{archived_id}/status",
-            w.tenant_id
+            "/v1/pm/teams/{}/llm-providers/{archived_id}/status",
+            w.team_id
         ),
         &w.admin_token,
         Some(json!({ "action": "enable", "expected_revision": revision })),
@@ -401,7 +403,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-providers/{archived_id}/status", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-providers/{archived_id}/status", w.team_id),
         &w.admin_token,
         Some(json!({ "action": "archive", "expected_revision": enabled["revision"].as_i64().unwrap() })),
     )
@@ -410,7 +412,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({
             "provider_id": archived_id,
@@ -425,8 +427,8 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
         &w.app,
         "GET",
         &format!(
-            "/v1/pm/tenants/{}/llm-models?provider_id={provider_id}",
-            w.tenant_id
+            "/v1/pm/teams/{}/llm-models?provider_id={provider_id}",
+            w.team_id
         ),
         &w.admin_token,
         None,
@@ -444,7 +446,7 @@ async fn model_update_cas_409(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({
             "provider_id": provider_id,
@@ -458,7 +460,7 @@ async fn model_update_cas_409(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/llm-models/{id}", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models/{id}", w.team_id),
         &w.admin_token,
         Some(json!({ "expected_revision": 99, "display_name": "X" })),
     )
@@ -469,7 +471,7 @@ async fn model_update_cas_409(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/llm-models/{id}", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models/{id}", w.team_id),
         &w.admin_token,
         Some(json!({ "expected_revision": 1, "context_window": -5 })),
     )
@@ -479,7 +481,7 @@ async fn model_update_cas_409(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/llm-models/{id}", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models/{id}", w.team_id),
         &w.admin_token,
         Some(json!({
             "expected_revision": 1,
@@ -502,13 +504,13 @@ async fn model_update_cas_409(pool: PgPool) {
 async fn policy_write_requires_usable_model(pool: PgPool) {
     let w = world(pool).await;
     let provider_id = create_enabled_provider(&w, "p1").await;
-    let base = format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id);
+    let base = format!("/v1/pm/teams/{}/llm-model-policies", w.team_id);
 
     // 1) 未启用（默认登记态）→ 400
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({ "provider_id": provider_id, "model_id": "m1", "display_name": "M1" })),
     )
@@ -531,7 +533,7 @@ async fn policy_write_requires_usable_model(pool: PgPool) {
     let (_status, _) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/llm-models/{disabled_id}", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models/{disabled_id}", w.team_id),
         &w.admin_token,
         Some(json!({ "expected_revision": revision, "enabled": true })),
     )
@@ -551,7 +553,7 @@ async fn policy_write_requires_usable_model(pool: PgPool) {
     let (_status, _) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "model_id": disabled_id, "action": "grant" }] })),
     )
@@ -584,7 +586,7 @@ async fn team_policies_put_and_inheritance(pool: PgPool) {
     let w = world(pool).await;
     let provider_id = create_enabled_provider(&w, "p1").await;
     let model_id = create_usable_model(&w, provider_id, "glm-4-flash").await;
-    let base = format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id);
+    let base = format!("/v1/pm/teams/{}/llm-model-policies", w.team_id);
 
     let (status, body) = call(
         &w.app,
@@ -640,7 +642,7 @@ async fn authorization_revoke_reports_impact(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-policies", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "role_key": "general", "model_id": model_id }] })),
     )
@@ -651,7 +653,7 @@ async fn authorization_revoke_reports_impact(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "model_id": model_id, "action": "revoke" }] })),
     )
@@ -665,7 +667,7 @@ async fn authorization_revoke_reports_impact(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "GET",
-        &format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-policies", w.team_id),
         &w.admin_token,
         None,
     )
@@ -683,7 +685,7 @@ async fn authorization_revoke_reports_impact(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PUT",
-        &format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-model-policies", w.team_id),
         &w.admin_token,
         Some(json!({ "items": [{ "role_key": "ai_pm_lead", "model_id": model_id }] })),
     )
@@ -776,7 +778,7 @@ async fn audit_four_columns_and_target_type(pool: PgPool) {
     let (status, row) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-models", w.tenant_id),
+        &format!("/v1/pm/teams/{}/llm-models", w.team_id),
         &w.admin_token,
         Some(json!({ "provider_id": provider_id, "model_id": "m1", "display_name": "M1" })),
     )

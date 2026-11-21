@@ -45,13 +45,17 @@ export interface LlmProvider {
 
 /** 当前主体所属租户（Team ≡ tenant）：Provider 管理面的作用域。 */
 export async function resolveTenantId(): Promise<string> {
-  const me = await http.get<{ tenant_id: string }>("/v1/pm/me");
-  return me.tenant_id;
+  const me = await http.get<{
+    tenant_id: string;
+    memberships?: { team_id: string }[];
+  }>("/v1/pm/me");
+  // P4-ORG Phase 4b：LLM 面路由锚 = core.team.id（/me memberships[0]）。
+  return me.memberships?.[0]?.team_id ?? me.tenant_id;
 }
 
-export function listLlmProviders(tenantId: string) {
+export function listLlmProviders(teamId: string) {
   return http.get<ListResponse<LlmProvider>>(
-    `/v1/pm/tenants/${tenantId}/llm-providers`
+    `/v1/pm/teams/${teamId}/llm-providers`
   );
 }
 
@@ -66,11 +70,11 @@ export interface CreateLlmProviderBody {
 }
 
 export function createLlmProvider(
-  tenantId: string,
+  teamId: string,
   body: CreateLlmProviderBody
 ) {
   return http.post<LlmProvider>(
-    `/v1/pm/tenants/${tenantId}/llm-providers`,
+    `/v1/pm/teams/${teamId}/llm-providers`,
     body
   );
 }
@@ -85,45 +89,45 @@ export interface UpdateLlmProviderBody {
 }
 
 export function updateLlmProvider(
-  tenantId: string,
+  teamId: string,
   providerId: string,
   body: UpdateLlmProviderBody
 ) {
   return http.patch<LlmProvider>(
-    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}`,
+    `/v1/pm/teams/${teamId}/llm-providers/${providerId}`,
     body
   );
 }
 
 /** 替换凭证（替换制轮换：旧凭证留痕，新凭证需重新测试后启用）。 */
 export function replaceLlmCredential(
-  tenantId: string,
+  teamId: string,
   providerId: string,
   body: { expected_revision: number; api_key: string }
 ) {
   return http.post<LlmProvider>(
-    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/credential`,
+    `/v1/pm/teams/${teamId}/llm-providers/${providerId}/credential`,
     body
   );
 }
 
 /** 生命周期显式动作（§6.3）：enable 需已有凭证；测试成功≠自动启用。 */
 export function setLlmProviderStatus(
-  tenantId: string,
+  teamId: string,
   providerId: string,
   action: "enable" | "disable" | "archive",
   expectedRevision: number
 ) {
   return http.post<LlmProvider>(
-    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/status`,
+    `/v1/pm/teams/${teamId}/llm-providers/${providerId}/status`,
     { action, expected_revision: expectedRevision }
   );
 }
 
 /** 删除（仅 archived 且无调用记录的实例；执行记录永久保留）。 */
-export function deleteLlmProvider(tenantId: string, providerId: string) {
+export function deleteLlmProvider(teamId: string, providerId: string) {
   return http.delete<{ deleted: boolean }>(
-    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}`
+    `/v1/pm/teams/${teamId}/llm-providers/${providerId}`
   );
 }
 
@@ -178,8 +182,8 @@ export interface LlmTestResult {
 }
 
 /** 服务端发起连通性探测（使用已保存的 endpoint/model/key）。 */
-export function testLlmProvider(tenantId: string, providerId: string) {
+export function testLlmProvider(teamId: string, providerId: string) {
   return http.post<LlmTestResult>(
-    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/test`
+    `/v1/pm/teams/${teamId}/llm-providers/${providerId}/test`
   );
 }

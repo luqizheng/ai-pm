@@ -1,4 +1,4 @@
-//! `/v1/pm/tenants/{tenant_id}/llm-providers*`：Team-owned Provider 管理面
+//! `/v1/pm/teams/{team_id}/llm-providers*`：Team-owned Provider 管理面
 //! （设计稿 `docs/ui/smark-pm-team-llm-provider-management-v1.md` §6/§12/§16；
 //! DEC-LLM-001~004；核验报告 R-LLM-01 修复载体）。
 //!
@@ -35,28 +35,28 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
 use pm_application::repo::GuardQueryRepo;
-use crate::team_llm_guard::{err_forbidden, err_not_found, guard_tenant};
+use crate::team_llm_guard::{err_forbidden, err_not_found};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-providers",
+            "/v1/pm/teams/{team_id}/llm-providers",
             get(list_handler).post(create_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-providers/{provider_id}",
+            "/v1/pm/teams/{team_id}/llm-providers/{provider_id}",
             axum::routing::patch(update_handler).delete(delete_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-providers/{provider_id}/test",
+            "/v1/pm/teams/{team_id}/llm-providers/{provider_id}/test",
             post(test_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-providers/{provider_id}/credential",
+            "/v1/pm/teams/{team_id}/llm-providers/{provider_id}/credential",
             post(credential_handler),
         )
         .route(
-            "/v1/pm/tenants/{tenant_id}/llm-providers/{provider_id}/status",
+            "/v1/pm/teams/{team_id}/llm-providers/{provider_id}/status",
             post(status_handler),
         )
         // 项目 AI 模型策略（§10.2/§16）：项目在团队范围内指定 Provider。
@@ -214,14 +214,16 @@ pub(crate) fn error_response(err: TeamLlmError) -> Response {
 async fn list_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match list_team_providers(&state.pool, tenant_id).await {
         Ok(items) => {
             let total = items.len();
@@ -238,15 +240,17 @@ async fn list_handler(
 async fn create_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path(tenant_id): Path<Uuid>,
+    Path(team_id): Path<Uuid>,
     Json(body): Json<CreateTeamProviderRequest>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match create_team_provider(&state.pool, &audit_actor(&caller), tenant_id, body).await {
         Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
         Err(err) => error_response(err),
@@ -256,15 +260,17 @@ async fn create_handler(
 async fn update_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, provider_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, provider_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateTeamProviderRequest>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match update_team_provider(
         &state.pool,
         &audit_actor(&caller),
@@ -282,14 +288,16 @@ async fn update_handler(
 async fn delete_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, provider_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, provider_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match delete_team_provider(&state.pool, &audit_actor(&caller), tenant_id, provider_id).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "deleted": true }))).into_response(),
         Err(err) => error_response(err),
@@ -299,14 +307,16 @@ async fn delete_handler(
 async fn test_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, provider_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, provider_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match test_team_provider(&state.pool, &audit_actor(&caller), tenant_id, provider_id).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(err) => error_response(err),
@@ -316,15 +326,17 @@ async fn test_handler(
 async fn credential_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, provider_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, provider_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ReplaceCredentialRequest>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     match replace_team_credential(
         &state.pool,
         &audit_actor(&caller),
@@ -342,15 +354,17 @@ async fn credential_handler(
 async fn status_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
-    Path((tenant_id, provider_id)): Path<(Uuid, Uuid)>,
+    Path((team_id, provider_id)): Path<(Uuid, Uuid)>,
     body: Option<Json<Value>>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    // P4-ORG Phase 4b：Team 锚切换（事实源 core.team_member；is_admin=Team Owner）。
+    if let Err(resp) = crate::team_llm_guard::guard_team(&caller, &state.pool, team_id).await {
         return resp;
     }
     if !caller.is_admin {
-        return err_forbidden("tenant admin required");
+        return err_forbidden("team owner required");
     }
+    let tenant_id = caller.tenant_id;
     let raw = body.map(|Json(value)| value).unwrap_or(Value::Null);
     let request: SetStatusRequest = match serde_json::from_value(raw) {
         Ok(request) => request,
