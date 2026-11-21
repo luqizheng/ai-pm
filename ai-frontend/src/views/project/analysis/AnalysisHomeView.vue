@@ -260,6 +260,22 @@ onBeforeUnmount(() => {
                   >
                     {{ t("analysis.list.incrementalBadge") }}
                   </Badge>
+                  <!-- 双域未决计数（设计稿 Analysis report row：PC n / ProjC n） -->
+                  <span
+                    v-if="
+                      row.status === 'analyzed' &&
+                      (row.pending_proposals > 0 ||
+                        row.projc_pending_proposals > 0)
+                    "
+                    class="an-counts"
+                  >
+                    {{
+                      t("analysis.list.pcProjcCounts", {
+                        pc: row.pending_proposals,
+                        projc: row.projc_pending_proposals
+                      })
+                    }}
+                  </span>
                   <span class="an-meta">
                     <template v-if="row.status === 'analyzing'">
                       {{ row.stage_detail || t("analysis.list.analyzingHint") }}
@@ -284,6 +300,9 @@ onBeforeUnmount(() => {
                       {{ row.error_code || t("analysis.list.failedReason") }}
                     </template>
                     <template v-else>{{ formatTime(row.updated_at) }}</template>
+                  </span>
+                  <span v-if="row.status === 'analyzed'" class="an-continue">
+                    {{ t("analysis.list.continueReview") }}
                   </span>
                   <ChevronRight
                     v-if="row.status !== 'analyzing'"
@@ -386,6 +405,22 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-micro);
   color: var(--text-tertiary);
   text-align: right;
+}
+
+/* 双域未决计数（PC n / ProjC n，mono 口径对齐设计稿 Analysis report row） */
+.an-counts {
+  flex: none;
+  font-size: var(--font-size-micro);
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono, monospace);
+}
+
+/* 继续审阅（设计稿 Continue review 行动文案） */
+.an-continue {
+  flex: none;
+  font-size: var(--font-size-micro);
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .an-chevron {

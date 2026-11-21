@@ -20,6 +20,8 @@ analysis:
     allDisposed: All disposed — ready to close
     closedAt: Closed at {time}
     failedReason: Analysis failed
+    continueReview: Continue review
+    pcProjcCounts: "PC {pc} / ProjC {projc}"
   filter:
     pending: Pending
     decided: Decided
@@ -139,3 +141,50 @@ analysis:
     kbConfirm: Confirm failed (requires an interactive human session; AI / API keys cannot confirm)
     decide: Decision failed (requires a human with governance authorization; rejected on concurrency conflict or frozen report)
     forbidden: No permission — this action requires an interactive human session (AI / API keys cannot perform it)
+  workspace:
+    contentsLabel: REPORT CONTENTS
+    reviewProgressLabel: REVIEW PROGRESS
+    nav:
+      overview: Overview
+      basic: Basic info
+      kb: Report body
+      pcProposals: PC proposals
+      projcProposals: ProjC proposals
+      pcRevisions: PC object revisions
+      projcRevisions: ProjC object revisions
+      evidence: Evidence & sources
+      synthesis: Identity synthesis
+      close: Publication results
+    pendingDecisions: "{n} decisions pending"
+    hintNotPublished: Analysis complete does not mean knowledge is published.
+    contextLabel: AI CONTEXT · NOT VERIFIED
+    contextCoversLabel: WHAT THIS REPORT COVERS
+    domainSplitLabel: RECOMMENDED DOMAIN
+    domainSplitValue: PC / ProjC / KB stay independent
+    domainSplitHint: PC describes product meaning. ProjC describes project implementation. KB requires a reusable practice, not a project-specific fact.
+    confidenceRiskLabel: CONFIDENCE / RISK
+    confidenceRiskHint: Confidence reflects source support, not business approval.
+    sourceSnapshotLabel: SOURCE SNAPSHOT
+    inspectEvidence: Inspect evidence
+    authorityNote: Formal objects and versions remain independent of the other domains.
+    heroCaptionPending: ANALYSIS COMPLETE · HUMAN REVIEW REQUIRED
+    heroCaptionAnalyzing: ANALYSIS IN PROGRESS
+    heroCaptionClosed: REPORT CLOSED · KNOWLEDGE PUBLISHED
+    heroCaptionFailed: ANALYSIS FAILED
+    heroTitle: Understand the code. Decide what becomes knowledge.
+    heroSummary: "AI analyzed the repository snapshot and drafted {pc} PC / {projc} ProjC / {kb} KB recommendation(s). Formal knowledge changes only after explicit domain confirmation."
+    heroSummaryEmpty: AI analyzed the repository snapshot. No recommendations were drafted in this run — observed evidence is listed in the findings section.
+    stepsLabel: Review and land knowledge
+    steps: "1. Inspect evidence → 2. Approve / reject → 3. Publish via report close"
+    reviewPc: Review PC proposals
+    reviewProjc: Review ProjC proposals
+    reviewKb: Review report body
+    viewFindings: View findings
+    heroFootnote: Report closure withdraws unresolved proposals. Approved proposals publish at close — accepting is not publishing.
+    formalObjectLabel: FORMAL OBJECT THAT WILL CHANGE
+    proposedMeaningLabel: PROPOSED PRODUCT MEANING
+    proposedTechLabel: PROPOSED TECHNICAL COGNITION
+    humanDecisionLabel: HUMAN DECISION
+    decisionFootnote: Approval records your decision only. It does not create, update or publish formal knowledge.
+    evidenceRefLabel: "Supporting evidence · {n} item(s)"
+    kbDecisionLabel: KB PUBLICATION · HUMAN CONFIRMATION

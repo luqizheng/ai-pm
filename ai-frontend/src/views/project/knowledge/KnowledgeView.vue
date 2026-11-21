@@ -209,6 +209,11 @@ function openSourceReport(reportId: string): void {
   void router.push(`/project/analysis/reports/${reportId}`);
 }
 
+/** 溯源页跳转（Figma 21/39/40：正式对象 → 报告 → 仓库 → commit 溯源链）。 */
+function openTrace(domain: "kb" | "pc" | "projc", id: string): void {
+  void router.push(`/project/knowledge/objects/${domain}/${id}`);
+}
+
 function shortSha(sha: string): string {
   return sha.slice(0, 12);
 }
@@ -673,6 +678,9 @@ watch(
             <span class="kb-meta">
               {{ t("s01.knowledge.field.revision") }} {{ row.revision_no }} ·
               {{ formatTime(row.published_at ?? row.updated_at) }}
+              <template v-if="row.confirmed_by">
+                · {{ row.confirmed_by }}
+              </template>
             </span>
             <ChevronRight
               class="kb-row-chevron"
@@ -711,6 +719,14 @@ watch(
                       ? t("s01.knowledge.action.confirming")
                       : t("s01.knowledge.action.confirm")
                   }}
+                </Button>
+                <!-- 溯源链入口（Figma 40：KB 对象与修订历史溯源页） -->
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  @click="openTrace('kb', row.document_id)"
+                >
+                  {{ t("s01.knowledge.trace.viewTrace") }}
                 </Button>
               </div>
 
@@ -755,6 +771,9 @@ watch(
             @click="togglePcRow(obj)"
           >
             <span class="pc-name">{{ obj.display_name }}</span>
+            <Badge v-if="obj.revision_no" variant="neutral">
+              v{{ obj.revision_no }}
+            </Badge>
             <span class="pc-type">{{ obj.object_type }}</span>
             <Badge :variant="lifecycleVariant(obj.lifecycle_status)">{{
               t(`s01.knowledge.lifecycle.${obj.lifecycle_status}`)
@@ -808,7 +827,6 @@ watch(
                   {{ pcRev(obj)?.summary }}
                 </p>
                 <MarkdownViewer :model-value="pcRev(obj)?.content ?? ''" />
-                <!-- 来源分析追溯（版本→提案→分析报告反查；闭环溯源） -->
                 <div v-if="objSources(obj).length" class="pc-sources">
                   <span class="pc-type">{{
                     t("s01.knowledge.detail.sourceAnalysis")
@@ -836,6 +854,16 @@ watch(
                     </li>
                   </ul>
                 </div>
+                <!-- 溯源链入口（Figma 21：对象 → 报告 → 仓库 → commit） -->
+                <div class="pc-trace">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    @click="openTrace('pc', obj.object_id)"
+                  >
+                    {{ t("s01.knowledge.trace.viewTrace") }}
+                  </Button>
+                </div>
               </template>
             </template>
           </div>
@@ -856,6 +884,9 @@ watch(
             @click="toggleProjcRow(obj)"
           >
             <span class="pc-name">{{ obj.display_name }}</span>
+            <Badge v-if="obj.revision_no" variant="neutral">
+              v{{ obj.revision_no }}
+            </Badge>
             <span class="pc-type">{{ obj.object_type }}</span>
             <Badge :variant="lifecycleVariant(obj.lifecycle_status)">{{
               t(`s01.knowledge.lifecycle.${obj.lifecycle_status}`)
@@ -936,6 +967,16 @@ watch(
                       }}</span>
                     </li>
                   </ul>
+                </div>
+                <!-- 溯源链入口（Figma 39：ProjC 对象 → 报告 → 仓库 → commit） -->
+                <div class="pc-trace">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    @click="openTrace('projc', obj.object_id)"
+                  >
+                    {{ t("s01.knowledge.trace.viewTrace") }}
+                  </Button>
                 </div>
               </template>
             </template>
@@ -1157,6 +1198,13 @@ watch(
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* 溯源链入口行（Figma 21/39/40） */
+.pc-trace {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: var(--space-2);
+  display: flex;
 }
 
 .impact-panel {

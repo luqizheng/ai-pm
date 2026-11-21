@@ -68,3 +68,17 @@ knowledge:
     run: 摄入为草稿
     running: 解析中…
     hint: 摄入只生成草稿——不会进入检索，需在详情中确认发布后才生效。
+  trace:
+    notFound: 对象不存在或无权访问
+    objectLabel: 正式对象
+    chainLabel: 溯源链 · 精确来源快照
+    chainHint: 每一跳都可解析到原始对象；文件级证据始终保留，行级引用按提供情况展示。
+    confirmedMeta: "{date} 确认 · {by}"
+    updatedMeta: "{date} 更新"
+    reportLabel: 分析报告
+    repositoryLabel: 仓库
+    commitLabel: 来源提交
+    commitImmutable: 不可变分析快照
+    noReportChannel: 非报告通道发布——该对象未登记分析报告跳。
+    revisionsLabel: 修订历史
+    viewTrace: 溯源

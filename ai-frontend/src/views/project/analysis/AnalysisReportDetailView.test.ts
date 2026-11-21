@@ -222,11 +222,10 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     decideProjcProposal.mockResolvedValue({});
     await approve!.trigger("click");
     await flushPromises();
-    expect(decideProjcProposal).toHaveBeenCalledWith(
-      "pjc-prop-1",
-      "proj-1",
-      { action: "approve", expected_version_no: 0 }
-    );
+    expect(decideProjcProposal).toHaveBeenCalledWith("pjc-prop-1", "proj-1", {
+      action: "approve",
+      expected_version_no: 0
+    });
     expect(getAnalysisReport).toHaveBeenCalledTimes(2);
   });
 
@@ -356,7 +355,9 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     expect(wrapper.text()).toContain("技术认知");
     // AI 引用清单（快照通道 description JSON 解析）
     expect(wrapper.text()).toContain("src/order.ts");
-    expect(wrapper.text()).toContain("采集自 abc123def456 · 42 条提交 / 7 个文件");
+    expect(wrapper.text()).toContain(
+      "采集自 abc123def456 · 42 条提交 / 7 个文件"
+    );
     // code 类证据定位（文件:行 + commit）
     expect(wrapper.text()).toContain("crates/order/src/lib.rs:10-24");
     expect(wrapper.text()).toContain("dead0000beef");

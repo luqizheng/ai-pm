@@ -274,6 +274,15 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "analysis.detail.title" }
   });
 
+  // ─── 知识对象与溯源页（Figma 仓库智能画布 21/39/40）───
+  // 不占主导航；入口 = 知识库三域列表详情内的「溯源」动作。domain ∈ kb|pc|projc。
+  routes.push({
+    path: "/project/knowledge/objects/:domain/:objectId",
+    component: () =>
+      import("@/views/project/knowledge/KnowledgeObjectTraceabilityView.vue"),
+    meta: { title: "s01.knowledge.page.title" }
+  });
+
   // Project Setting（V1.0 稿，2026-11-07）：项目配置中心，不占主导航——
   // 入口 = 项目总控台页头「项目设置」（CommandCenterHeader settings 事件）。
   // Git Repositories / Runners 两节由原独立页面迁入（真数据）；General /

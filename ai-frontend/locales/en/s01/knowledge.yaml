@@ -68,3 +68,17 @@ knowledge:
     run: Ingest as draft
     running: Parsing…
     hint: Ingesting only creates a draft — it will not enter retrieval until confirmed in the detail view.
+  trace:
+    notFound: Object does not exist or is not accessible
+    objectLabel: FORMAL OBJECT
+    chainLabel: TRACEABILITY · EXACT SOURCE SNAPSHOT
+    chainHint: Each link resolves to its original object. File-level evidence is preserved; line references are shown where supplied.
+    confirmedMeta: "Confirmed {date} · {by}"
+    updatedMeta: "Updated {date}"
+    reportLabel: ANALYSIS REPORT
+    repositoryLabel: REPOSITORY
+    commitLabel: SOURCE COMMIT
+    commitImmutable: Immutable analysis snapshot
+    noReportChannel: Published outside the report channel — no analysis report hop is recorded for this object.
+    revisionsLabel: REVISION HISTORY
+    viewTrace: Traceability

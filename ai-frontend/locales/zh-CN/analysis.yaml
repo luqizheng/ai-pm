@@ -20,6 +20,8 @@ analysis:
     allDisposed: 已全部处置，可关闭
     closedAt: 关闭于 {time}
     failedReason: 分析失败
+    continueReview: 继续审阅
+    pcProjcCounts: "PC {pc} / ProjC {projc}"
   filter:
     pending: 待决
     decided: 已决
@@ -139,3 +141,50 @@ analysis:
     kbConfirm: 确认失败（需要真人交互登录态；AI / API Key 无确认权）
     decide: 决定失败（需真人与治理授权；并发冲突或报告已冻结时被拒）
     forbidden: 无权限——此操作需要真人交互会话（AI / API Key 无权执行）
+  workspace:
+    contentsLabel: 报告目录
+    reviewProgressLabel: 审阅进度
+    nav:
+      overview: 总览
+      basic: 基本信息
+      kb: 报告正文
+      pcProposals: PC 提案
+      projcProposals: ProjC 提案
+      pcRevisions: PC 对象修订
+      projcRevisions: ProjC 对象修订
+      evidence: 证据与来源
+      synthesis: 身份综合
+      close: 发布结果
+    pendingDecisions: "{n} 项决定待处理"
+    hintNotPublished: 分析完成不等于知识已发布。
+    contextLabel: AI 上下文 · 未验证
+    contextCoversLabel: 本报告覆盖
+    domainSplitLabel: 建议领域
+    domainSplitValue: PC / ProjC / KB 三域独立
+    domainSplitHint: PC 描述产品语义。ProjC 描述项目实现。KB 收录可复用实践而非项目专属事实。
+    confidenceRiskLabel: 置信 / 风险
+    confidenceRiskHint: 置信度反映来源支持度，不等于业务批准。
+    sourceSnapshotLabel: 来源快照
+    inspectEvidence: 查看证据
+    authorityNote: 正式对象与版本在各域之间保持独立。
+    heroCaptionPending: 分析完成 · 待人工审阅
+    heroCaptionAnalyzing: 分析进行中
+    heroCaptionClosed: 报告已关闭 · 知识已发布
+    heroCaptionFailed: 分析失败
+    heroTitle: 理解代码。决定什么成为知识。
+    heroSummary: "AI 已分析仓库快照并起草 {pc} 条 PC / {projc} 条 ProjC / {kb} 条 KB 建议。仅在各域明确确认后才会写入正式知识。"
+    heroSummaryEmpty: AI 已分析仓库快照。本次运行未起草建议——观察到的证据在发现节中列出。
+    stepsLabel: 审阅与知识落地
+    steps: "1. 查看证据 → 2. 批准 / 驳回 → 3. 关闭报告发布"
+    reviewPc: 审阅 PC 提案
+    reviewProjc: 审阅 ProjC 提案
+    reviewKb: 审阅报告正文
+    viewFindings: 查看发现
+    heroFootnote: 报告关闭将撤回未决提案；已批准提案在关闭时统一发布——批准不等于发布。
+    formalObjectLabel: 将变更的正式对象
+    proposedMeaningLabel: 提议的产品语义
+    proposedTechLabel: 提议的技术认知
+    humanDecisionLabel: 人工决定
+    decisionFootnote: 批准仅记录决定本身——不创建、不更新、不发布正式知识。
+    evidenceRefLabel: "支撑证据 · {n} 条"
+    kbDecisionLabel: KB 发布 · 人工确认
