@@ -33,3 +33,23 @@ feeds:
   collapse: 收起
   showing: 已显示 {count} 条
   loadEarlier: 加载更早动态
+  detailTitle: 工作项详情
+  detailEmpty: 事项不存在或不可见
+  detailScopeProject: 项目维度事项
+  detailScopeProduct: 产品维度事项
+  relationsTitle: 关联关系
+  relationsEmpty: 暂无关联事项。
+  relationIncoming: 被关联（{type}）
+  tabTimeline: 活动时间线
+  tabLogs: 执行日志
+  logsEmpty: 暂无执行日志。
+  openActivity: 打开活动 →
+  detailActivityTitle: 活动详情
+  detailEyebrow: 历史活动 / {type}
+  detailMeta: "{time} · {full}"
+  detailChangeTitle: 变更明细
+  detailAffectedTitle: 受影响事项
+  detailAffectedNote: 打开事项查看当前状态与关联关系；本活动是历史记录。
+  detailPersonalNote: 已读仅记录你本人的阅读状态；已读不等于已处理或已批准。
+  closeActivity: 关闭活动
+  openTarget: 打开事项

@@ -33,3 +33,23 @@ feeds:
   collapse: Collapse
   showing: Showing {count} activities
   loadEarlier: Load earlier activities
+  detailTitle: Work item detail
+  detailEmpty: Work item not found or not visible
+  detailScopeProject: Project-scoped item
+  detailScopeProduct: Product-scoped item
+  relationsTitle: Relationships
+  relationsEmpty: No additional Work Item relationships recorded.
+  relationIncoming: Inbound ({type})
+  tabTimeline: Activity timeline
+  tabLogs: Execution logs
+  logsEmpty: No execution logs yet.
+  openActivity: Open activity →
+  detailActivityTitle: Activity detail
+  detailEyebrow: Historical activity / {type}
+  detailMeta: "{time} · {full}"
+  detailChangeTitle: Change summary
+  detailAffectedTitle: Affected Work Item
+  detailAffectedNote: Open the Work Item for its current status and relationships. This is a historical record.
+  detailPersonalNote: Reading changes only your personal read state; it does not complete or approve the work.
+  closeActivity: Close activity
+  openTarget: Open item

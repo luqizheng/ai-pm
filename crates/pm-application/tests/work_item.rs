@@ -715,3 +715,98 @@ async fn my_feed_views_counts_and_mark_all(pool: PgPool) {
     .unwrap();
     assert!(unread_view.is_empty());
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn work_item_detail_relations_and_execution_logs(pool: PgPool) {
+    let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
+    let actor = actor(principal_id);
+    let created = create_task(&pool, task_request(project_id, "Detail task"), &actor)
+        .await
+        .expect("create task");
+    let other_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO delivery.task (id, project_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, 'Related task', 'draft', 1, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
+    )
+    .bind(other_id)
+    .bind(project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let item_a = pm_application::work_item::ensure_work_item_for_target(
+        &mut pool.begin().await.unwrap(),
+        tenant_id,
+        "task",
+        created.id,
+        Some(project_id),
+        "open",
+        Some(principal_id),
+    )
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    let item_b = pm_application::work_item::ensure_work_item_for_target(
+        &mut tx,
+        tenant_id,
+        "task",
+        other_id,
+        Some(project_id),
+        "open",
+        Some(principal_id),
+    )
+    .await
+    .unwrap();
+    add_relation(&mut tx, tenant_id, item_a, item_b, "blocks", "human", None, None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    // 详情：注册行 + 双向关联 + 活动。
+    let (item, relations, activities) =
+        pm_application::work_item::work_item_detail(&pool, tenant_id, item_a, 20)
+            .await
+            .unwrap();
+    assert_eq!(item.title, "Detail task");
+    assert_eq!(relations.len(), 1);
+    assert_eq!(relations[0].direction, "outgoing");
+    assert_eq!(relations[0].other_title, "Related task");
+    assert!(activities.len() >= 1);
+
+    // Execution logs：task_run_event 种子 → 按 task 查询。
+    sqlx::query(
+        "INSERT INTO delivery.task_run_event \
+         (tenant_id, project_id, task_id, run_id, event_type) \
+         VALUES ($1, $2, $3, $4, 'run_started')",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(created.id)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let logs = pm_application::work_item::item_execution_logs(
+        &pool,
+        tenant_id,
+        created.id,
+        50,
+        0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(logs.len(), 1);
+    assert_eq!(logs[0].event_type, "run_started");
+
+    // 单活动：未读 → 读取（read_at 为调用者状态）。
+    let activity = activities.last().unwrap();
+    let row = pm_application::work_item::get_activity(
+        &pool,
+        tenant_id,
+        principal_id,
+        activity.id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(row.summary, activity.summary);
+}

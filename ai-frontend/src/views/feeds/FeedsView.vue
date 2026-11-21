@@ -377,9 +377,20 @@ watch(
         <h3 class="fd-item__title">{{ row.item_title }}</h3>
         <p class="fd-item__summary">{{ row.summary }}</p>
         <div class="fd-item__foot">
-          <button type="button" class="fd-item__link" @click="openTarget(row)">
+          <button
+            type="button"
+            class="fd-item__link"
+            @click="$router.push(`/feeds/activities/${row.id}`)"
+          >
             <FileText :size="13" aria-hidden="true" />
             {{ row.target_type }} · {{ row.item_title }}
+          </button>
+          <button
+            type="button"
+            class="fd-item__target"
+            @click="openTarget(row)"
+          >
+            {{ $t("pm.feeds.openTarget") }} →
           </button>
           <button
             v-if="row.detail"
@@ -610,5 +621,15 @@ watch(
   font-family: var(--font-ui);
   font-size: var(--font-size-micro);
   color: var(--text-tertiary);
+}
+
+.fd-item__target {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
+  cursor: pointer;
 }
 </style>

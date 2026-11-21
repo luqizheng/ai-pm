@@ -740,3 +740,129 @@ pub async fn mark_read_state(
     };
     Ok(result.rows_affected())
 }
+
+// ─────────────────────────────────────────── 详情面（PA-05 UI 屏 04/05/06）
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct WorkItemDetailRow {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub target_type: String,
+    pub target_id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub project_id: Option<Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct RelationViewRow {
+    pub id: Uuid,
+    /// outgoing = 本事项为 source；incoming = 本事项为 target。
+    pub direction: String,
+    pub relation_type: String,
+    pub other_item_id: Uuid,
+    pub other_type: String,
+    pub other_title: String,
+    pub other_status: String,
+    pub origin: String,
+    pub reason: Option<String>,
+}
+
+/// 统一工作项详情（PA-05 UI 屏 04）：注册行 + 双向关联（含对端事项标题/
+/// 状态）+ 最近 Timeline 活动。守卫（项目可见性）由 API 层执行。
+pub async fn work_item_detail(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    item_id: Uuid,
+    activity_limit: i64,
+) -> Result<(WorkItemDetailRow, Vec<RelationViewRow>, Vec<ActivityRow>), WorkItemError> {
+    let item: Option<WorkItemDetailRow> = sqlx::query_as(
+        "SELECT id, tenant_id, target_type, target_id, title, status, project_id, \
+                created_at, updated_at \
+           FROM core.work_item WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(item_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(item) = item else {
+        return Err(WorkItemError::NotFound);
+    };
+    let relations = sqlx::query_as::<_, RelationViewRow>(
+        "SELECT r.id, 'outgoing' AS direction, r.relation_type, \
+                w.id AS other_item_id, w.target_type AS other_type, \
+                w.title AS other_title, w.status AS other_status, r.origin, r.reason \
+           FROM core.work_item_relation r \
+           JOIN core.work_item w ON w.id = r.target_item_id \
+          WHERE r.source_item_id = $1 \
+         UNION ALL \
+         SELECT r.id, 'incoming' AS direction, r.relation_type, \
+                w.id, w.target_type, w.title, w.status, r.origin, r.reason \
+           FROM core.work_item_relation r \
+           JOIN core.work_item w ON w.id = r.source_item_id \
+          WHERE r.target_item_id = $1 \
+         ORDER BY relation_type, other_title",
+    )
+    .bind(item_id)
+    .fetch_all(pool)
+    .await?;
+    let activities =
+        list_activity(pool, tenant_id, Some(item_id), None, None, activity_limit, 0).await?;
+    Ok((item, relations, activities))
+}
+
+/// Execution log 行（PA-05-08 §8.2：详细执行过程留在 task_run_event，
+/// 屏 06 的 Logs 页签数据源；仅 task 事项有执行面）。
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ExecutionLogRow {
+    pub id: Uuid,
+    pub run_id: Uuid,
+    pub event_type: String,
+    pub occurred_at: chrono::DateTime<chrono::Utc>,
+    pub detail: Option<Value>,
+}
+
+pub async fn item_execution_logs(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    task_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<ExecutionLogRow>, WorkItemError> {
+    let rows = sqlx::query_as::<_, ExecutionLogRow>(
+        "SELECT id, run_id, event_type, occurred_at, detail \
+           FROM delivery.task_run_event \
+          WHERE tenant_id = $1 AND task_id = $2 \
+          ORDER BY occurred_at DESC, id DESC LIMIT $3 OFFSET $4",
+    )
+    .bind(tenant_id)
+    .bind(task_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// 单条 Timeline 活动（PA-05 UI 屏 05 Activity detail；含调用者已读状态，
+/// 打开即标已读由 API 层调用 mark_read_state 完成）。
+pub async fn get_activity(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+    activity_id: Uuid,
+) -> Result<FeedRow, WorkItemError> {
+    let row = sqlx::query_as::<_, FeedRow>(
+        &format!(
+            "{FEED_SELECT} WHERE a.tenant_id = $1 AND a.id = $3"
+        ),
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .bind(activity_id)
+    .fetch_optional(pool)
+    .await?;
+    row.ok_or(WorkItemError::NotFound)
+}

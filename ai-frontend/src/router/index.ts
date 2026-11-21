@@ -478,6 +478,23 @@ export function buildRoutes(): RouteRecordRaw[] {
   // Team Owner 继任（P4-ORG UX 修订 V1.0 / Figma T3）：成员页发起的三步
   // 流程页，不占主导航——入口 = 成员页「变更 Team Owner」。助手可见性随
   // /settings/team/members 前缀规则覆盖（navigation.ts ASSISTANT_HIDDEN_RULES）。
+  // PA-05 UI：信息流详情族（屏 04 统一工作项详情 / 屏 05 活动详情）。
+  // 不占主导航——入口 = /feeds 活动卡与关联引用。
+  routes.push(
+    {
+      path: "/feeds/work-items/:itemId",
+      component: () =>
+        import("@/views/feeds/WorkItemDetailView.vue"),
+      meta: { title: "pm.feeds.detailTitle" }
+    },
+    {
+      path: "/feeds/activities/:activityId",
+      component: () =>
+        import("@/views/feeds/ActivityDetailView.vue"),
+      meta: { title: "pm.feeds.detailActivityTitle" }
+    }
+  );
+
   routes.push({
     path: "/settings/team/members/owner-succession",
     component: () =>

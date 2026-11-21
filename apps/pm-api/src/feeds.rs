@@ -25,8 +25,9 @@ use crate::routes::AppState;
 use crate::support::{require_project_visible, ApiError, ApiResult};
 
 use pm_application::work_item::{
-    mark_all_my_feed_read, mark_read_state, my_feed, my_feed_counts, product_feed,
-    project_feed, MyFeedFilter, WorkItemError,
+    get_activity, item_execution_logs, mark_all_my_feed_read, mark_read_state, my_feed,
+    my_feed_counts, product_feed, project_feed, work_item_detail, MyFeedFilter,
+    WorkItemError,
 };
 
 /// WorkItemError → ApiError（NotFound 保持 404 语义；Validation → 400）。
@@ -63,6 +64,12 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/v1/pm/feeds/read-state", post(mark_read_state_handler))
         .route("/v1/pm/feeds/mark-all-read", post(mark_all_read_handler))
+        .route("/v1/pm/feeds/activities/{activity_id}", get(activity_detail_handler))
+        .route("/v1/pm/work-items/{item_id}", get(work_item_detail_handler))
+        .route(
+            "/v1/pm/work-items/{item_id}/execution-logs",
+            get(execution_logs_handler),
+        )
 }
 
 #[derive(Deserialize)]
@@ -255,4 +262,118 @@ async fn mark_read_state_handler(
     )
     .await?;
     Ok(Json(ReadStateResult { updated }))
+}
+
+
+async fn work_item_detail_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(item_id): Path<Uuid>,
+    Query(query): Query<FeedQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let (item, relations, activities) =
+        work_item_detail(&state.pool, principal.tenant_id, item_id, 20)
+            .await
+            .map_err(api_err)?;
+    // 守卫：事项归属项目须对调用者可见（无项目归属的事项仅租户内可读）。
+    if let Some(project_id) = item.project_id {
+        require_project_visible(
+            &state.pool,
+            project_id,
+            principal.tenant_id,
+            principal.principal_id,
+        )
+        .await?;
+    }
+    let _ = query;
+    Ok(Json(serde_json::json!({
+        "item": item,
+        "relations": relations,
+        "activities": activities,
+    })))
+}
+
+async fn execution_logs_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(item_id): Path<Uuid>,
+    Query(query): Query<FeedQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let (item, _relations, _activities) =
+        work_item_detail(&state.pool, principal.tenant_id, item_id, 0)
+            .await
+            .map_err(api_err)?;
+    if let Some(project_id) = item.project_id {
+        require_project_visible(
+            &state.pool,
+            project_id,
+            principal.tenant_id,
+            principal.principal_id,
+        )
+        .await?;
+    }
+    if item.target_type != "task" {
+        return Err(ApiError::BadRequest("execution logs exist for tasks only"));
+    }
+    let rows = item_execution_logs(
+        &state.pool,
+        principal.tenant_id,
+        item.target_id,
+        query.limit.clamp(1, 200),
+        query.offset.max(0),
+    )
+    .await
+    .map_err(api_err)?;
+    Ok(Json(serde_json::json!({ "items": rows })))
+}
+
+async fn activity_detail_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(activity_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let row = get_activity(
+        &state.pool,
+        principal.tenant_id,
+        principal.principal_id,
+        activity_id,
+    )
+    .await
+    .map_err(api_err)?;
+    // 守卫：活动归属项目须可见（无项目归属 → Product 维度，租户内可读）。
+    if let Some(project_id) = row.project_id {
+        require_project_visible(
+            &state.pool,
+            project_id,
+            principal.tenant_id,
+            principal.principal_id,
+        )
+        .await?;
+    }
+    // 打开即标已读（PA-05-09：Reading changes only the caller's read state）。
+    mark_read_state(
+        &state.pool,
+        principal.tenant_id,
+        principal.principal_id,
+        &[row.item_id],
+        true,
+    )
+    .await
+    .map_err(api_err)?;
+    Ok(Json(serde_json::json!({
+        "id": row.id,
+        "item_id": row.item_id,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "item_title": row.item_title,
+        "activity_type": row.activity_type,
+        "actor_type": row.actor_type,
+        "actor_id": row.actor_id,
+        "summary": row.summary,
+        "detail": row.detail,
+        "project_id": row.project_id,
+        "product_id": row.product_id,
+        "created_at": row.created_at,
+        "read_at": row.read_at,
+    })))
 }
