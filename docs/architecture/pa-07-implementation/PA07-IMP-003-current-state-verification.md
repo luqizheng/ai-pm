@@ -91,7 +91,7 @@ Git compare `75094e1...6ed0f1a` 显示 E2 修复前后的差异仅涉及：
 
 ### 测试执行状态
 
-测试源码已补充，并新增 `.github/workflows/pa07-blast-radius.yml` 自动执行三组定向回归测试。但截至本次复核，GitHub Actions 尚未返回该工作流的运行记录，相关 commit status 仍为 `pending` 且没有状态检查记录；本次会话也未能在本地运行 Cargo。因此本报告只确认代码、测试源码和 CI 工作流已提交，并完成静态交叉核对；**不宣称测试已通过**。合并/发布前仍需在可运行 Rust 工具链和 PostgreSQL 测试环境中执行：
+测试源码已补充，并新增 `.github/workflows/pa07-blast-radius.yml` 自动执行三组定向回归测试。首次运行（`44929432574`）因仓库 `.cargo/config.toml` 默认启用 `sccache`、而 GitHub hosted runner 未安装该程序，在第一条 Cargo 命令启动前失败；这不是 Rust 测试断言失败。随后工作流已在 `6339ef3` 中设置 `RUSTC_WRAPPER=env` 绕过本地缓存包装器，第二次运行 `44929550299` 已启动，当前仍在执行第一组测试，尚无最终结论。本次会话未能在本地运行 Cargo，因此**不宣称测试已通过**。合并/发布前仍需在可运行 Rust 工具链和 PostgreSQL 测试环境中执行：
 
 - `cargo test -p pm-domain impact_count_uses_batch_cardinality_and_single_commands_count_one`
 - `cargo test -p pm-ai create_tasks_batch_cardinality_drives_blast_radius_threshold`
