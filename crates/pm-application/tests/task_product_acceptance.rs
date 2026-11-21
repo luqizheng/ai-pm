@@ -58,7 +58,7 @@ async fn seed_task_product(pool: &PgPool, fx: &Fx, task_id: Uuid, name: &str) ->
              SELECT tenant_id, $1 || '-team' FROM delivery.task WHERE id = $2 RETURNING tenant_id, id \
          ), p AS ( \
              INSERT INTO core.product (team_id, tenant_id, key, name, status) \
-             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'normal' FROM t RETURNING id \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), $1, 'normal' FROM t RETURNING id \
          ) SELECT id FROM p",
     )
     .bind(name)
@@ -243,7 +243,7 @@ async fn acceptance_requires_active_link(pool: PgPool) {
              SELECT tenant_id, 'stranger-team' FROM delivery.task WHERE id = $1 RETURNING tenant_id, id \
          ), p AS ( \
              INSERT INTO core.product (team_id, tenant_id, key, name, status) \
-             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'normal' FROM t RETURNING id \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), $1, 'normal' FROM t RETURNING id \
          ) SELECT id FROM p",
     )
     .bind(task)

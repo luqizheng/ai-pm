@@ -68,7 +68,7 @@ async fn seed_task_product(pool: &PgPool, f: &Fx, task_id: Uuid, name: &str) -> 
              SELECT tenant_id, $1 || '-team' FROM delivery.task WHERE id = $2 RETURNING tenant_id, id \
          ), p AS ( \
              INSERT INTO core.product (team_id, tenant_id, key, name, status) \
-             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'normal' FROM t RETURNING id \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), $1, 'normal' FROM t RETURNING id \
          ) SELECT id FROM p",
     )
     .bind(name)
@@ -206,7 +206,7 @@ async fn product_link_withdraw_is_soft_and_relinkable(pool: PgPool) {
              SELECT tenant_id, 'link-team' FROM core.project WHERE id = $1 RETURNING tenant_id, id \
          ), p AS ( \
              INSERT INTO core.product (team_id, tenant_id, key, name, status) \
-             SELECT id, tenant_id, 'link-prod', 'normal' FROM t RETURNING id, tenant_id \
+             SELECT id, tenant_id, 'P-' || upper(substring(gen_random_uuid()::text from 1 for 8)), 'link-prod', 'normal' FROM t RETURNING id, tenant_id \
          ), pm AS ( \
              INSERT INTO core.product_member (product_id, principal_id, tenant_id, role) \
              SELECT id, $2, tenant_id, 'owner' FROM p RETURNING product_id \
