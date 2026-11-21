@@ -5,7 +5,8 @@
 - **仓库：** `luqizheng/ai-pm`
 - **分支：** `master`
 - **原始差异复核 HEAD：** `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb`
-- **代码修复核对 HEAD：** `4c34d1550968bbcdf051ba3791e8901481131ac8`
+- **blast-radius 逻辑核对 HEAD：** `4c34d1550968bbcdf051ba3791e8901481131ac8`
+- **测试源码最终 HEAD：** `75e696954d37f3a10e05ce099c7abd909d4888f7`
 - **原始审计基准：** `75094e1c2b88719d34364373b338609ed3805b32`
 - **复核方式：** Git compare、提交 diff、当前源码、测试源码和相关规范交叉核对
 - **范围限制：** 本报告只核验原始 IMP-002 之后的提交差异及其中可确认的门禁问题；不是对 IMP-001~019 的全量重新实跑。
@@ -74,6 +75,7 @@ Git compare `75094e1...6ed0f1a` 显示 E2 修复前后的差异仅涉及：
 - `a69297284b75262cb75c8ae04bb6843073f1d985`：编排器对整轮 proposals 的 `impact_count()` 做饱和求和，并继续将聚合值传给 self-review。
 - `e0986bebcd617918c4ee4b343954034b58b891f7`：增加 self-review 回归测试，验证单条 CreateTasks 提案含 10 个 Task 不因 blast radius 升级，含 11 个 Task 会升级。
 - `4c34d1550968bbcdf051ba3791e8901481131ac8`：将整轮聚合抽为 `total_blast_radius()`，新增 6 + 5 个 Task 分属两条提案时合计 11 的单元测试。
+- `75e696954d37f3a10e05ce099c7abd909d4888f7`：整理并扩展 `impact_count()` 单测，覆盖四种批量命令（Task / Milestone / Requirement / Document）及单对象命令。
 - `crates/pm-ai/src/self_review.rs`：风险判断顺序保持不变，red line 仍优先于低置信度和 blast radius；函数只接收聚合整数，不读取命令内容。
 - `crates/pm-application/src/policy_engine.rs`、`policies/ai-pm-ai-lead-v2.yaml` 和 policy 测试副本的注释已同步，明确阈值按整轮实际影响工作项数量计算。
 
