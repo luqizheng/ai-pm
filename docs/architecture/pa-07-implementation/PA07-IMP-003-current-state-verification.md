@@ -21,14 +21,14 @@
 
 ## 2. 原始审计与提交差异
 
-截至本次复核的 master HEAD `3d0513d0572dbc65ef84f03dfd3d9c1cdaf9061e`，Git compare `75094e1...3d0513d` 显示后续共有 15 个提交、14 个变更文件。与 PA-07 实施代码有关的变化集中在：
+截至本次复核的 master HEAD `015e524a5c361be022cf38efdd00126e47ad8fbf`，Git compare `75094e1...015e524` 显示后续共有 17 个提交、15 个变更文件。与 PA-07 实施代码有关的变化集中在：
 
 - `crates/pm-application/src/command_executor/transition.rs` 与 `crates/pm-application/tests/command_executor.rs`：E2 Ready actor 守卫和边界测试。
 - `crates/pm-domain/src/command.rs`：命令影响条目数计算及领域单测。
 - `crates/pm-ai/src/orchestrator.rs` 与 `crates/pm-ai/src/self_review.rs`：批量影响范围聚合、阈值和跨提案聚合测试。
 - `crates/pm-application/src/policy_engine.rs`、`crates/pm-application/tests/policy_engine.rs`、`policies/ai-pm-ai-lead-v2.yaml`：策略说明注释同步。
 
-其余变更为 PA-07 文档整理。对照 IMP-002 的原始代码核对基准，未发现其余 IMP-001~019 对应实施模块在这 12 个后续提交中发生代码变更；但“没有后续 diff”不等于本次重新运行或重新验证了这些模块，其状态仍明确标为 inherited。
+新增 `.github/workflows/pa07-blast-radius.yml`，为三组关键回归测试建立定向 GitHub Actions 工作流。其余变更为 PA-07 文档整理。对照 IMP-002 的原始代码核对基准，未发现其余 IMP-001~019 对应实施模块在这 12 个后续提交中发生代码变更；但“没有后续 diff”不等于本次重新运行或重新验证了这些模块，其状态仍明确标为 inherited。
 
 Git compare `75094e1...6ed0f1a` 显示 E2 修复前后的差异仅涉及：
 
@@ -91,7 +91,7 @@ Git compare `75094e1...6ed0f1a` 显示 E2 修复前后的差异仅涉及：
 
 ### 测试执行状态
 
-测试源码已补充，但本次会话没有成功运行 Cargo 测试；GitHub 对相关提交返回的 commit status 为 `pending` 且没有状态检查记录。因此本报告只确认代码和测试源码已提交，并完成静态交叉核对；**不宣称测试已通过**。合并/发布前仍需在可运行 Rust 工具链和 PostgreSQL 测试环境中执行：
+测试源码已补充，并新增 `.github/workflows/pa07-blast-radius.yml` 自动执行三组定向回归测试。但截至本次复核，GitHub Actions 尚未返回该工作流的运行记录，相关 commit status 仍为 `pending` 且没有状态检查记录；本次会话也未能在本地运行 Cargo。因此本报告只确认代码、测试源码和 CI 工作流已提交，并完成静态交叉核对；**不宣称测试已通过**。合并/发布前仍需在可运行 Rust 工具链和 PostgreSQL 测试环境中执行：
 
 - `cargo test -p pm-domain impact_count_uses_batch_cardinality_and_single_commands_count_one`
 - `cargo test -p pm-ai create_tasks_batch_cardinality_drives_blast_radius_threshold`
