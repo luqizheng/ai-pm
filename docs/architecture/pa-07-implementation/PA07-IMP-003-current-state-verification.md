@@ -20,7 +20,16 @@
 
 ## 2. 原始审计与提交差异
 
-Git compare `75094e1...6ed0f1a` 显示：
+截至文档整理后的 master HEAD `b6a42a6dd240dd6db605e5a00e2368378938bd8d`，Git compare `75094e1...b6a42a6` 显示后续共有 12 个提交、14 个变更文件。与 PA-07 实施代码有关的变化集中在：
+
+- `crates/pm-application/src/command_executor/transition.rs` 与 `crates/pm-application/tests/command_executor.rs`：E2 Ready actor 守卫和边界测试。
+- `crates/pm-domain/src/command.rs`：命令影响条目数计算及领域单测。
+- `crates/pm-ai/src/orchestrator.rs` 与 `crates/pm-ai/src/self_review.rs`：批量影响范围聚合、阈值和跨提案聚合测试。
+- `crates/pm-application/src/policy_engine.rs`、`crates/pm-application/tests/policy_engine.rs`、`policies/ai-pm-ai-lead-v2.yaml`：策略说明注释同步。
+
+其余变更为 PA-07 文档整理。对照 IMP-002 的原始代码核对基准，未发现其余 IMP-001~019 对应实施模块在这 12 个后续提交中发生代码变更；但“没有后续 diff”不等于本次重新运行或重新验证了这些模块，其状态仍明确标为 inherited。
+
+Git compare `75094e1...6ed0f1a` 显示 E2 修复前后的差异仅涉及：
 
 - 后续共有两个提交。
 - 变更文件为：
@@ -28,7 +37,7 @@ Git compare `75094e1...6ed0f1a` 显示：
   - `crates/pm-application/tests/command_executor.rs`
   - `docs/architecture/pa-07-implementation/PA07-IMP-002-implementation-audit.md`
 
-因此，原始 IMP-002 的 E2 结论必须按后续代码修复更新；其余原始实施判定不能自动升级为新的 HEAD 核验结论。
+因此，原始 IMP-002 的 E2 结论必须按后续代码修复更新；blast-radius 相关代码也已在后续提交修改。其余原始实施判定不能自动升级为新的 HEAD 核验结论。
 
 ## 3. E2 命令通道缺口
 
