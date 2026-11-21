@@ -1,5 +1,7 @@
 # PA07-IMP-001：Product / Project / Task-Product Schema 与权限核对报告
 
+> <span>HISTORICAL — 历史核对快照</span>：本报告只描述 HEAD `ecb1ce2`、migrations 0001–0041（2026-11-20）时的 Schema 与权限状态。报告中的“缺失 / 待核 / 待裁决”不得直接当作当前缺陷或当前待决事项。后续实施核对见 [PA07-IMP-002](PA07-IMP-002-implementation-audit.md)，该审计基准为 `75094e1`；其后差异见 [PA07-IMP-003](PA07-IMP-003-current-state-verification.md)。
+
 - **任务：** PA07-IMP-001（PA-07 开发实施规范 §10 P0 第 1 项）
 - **日期：** 2026-11-20
 - **核对基准：** HEAD `ecb1ce2`，migrations 0001–0041，`apps/pm-api/src`、`crates/pm-application/src`

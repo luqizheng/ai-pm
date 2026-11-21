@@ -15,7 +15,7 @@
 | 了解 Task / Run / Workflow / Product 执行编排 | [PA-07 执行编排基线](architecture/smark-pm-architecture-decisions/PA-07-task-execution-orchestration-cross-product-collaboration-v1.0.md) |
 | 了解 Agent Team、专业 Agent 与 Runner Runtime | [PA-07 Agent Team 与 Runtime](architecture/smark-pm-architecture-decisions/PA-07-agent-team-and-execution-runtime-v1.0.md) |
 | 查找 PA-07 工程落地映射与实施任务 | [PA-07 Developer Implementation Specification](architecture/smark-pm-architecture-decisions/PA-07-developer-implementation-specification-v1.0.md) |
-| 查找 PA-07 已完成的代码核对 | [PA07-IMP-001 Schema Mapping](architecture/pa-07-implementation/PA07-IMP-001-schema-mapping.md) |
+| 查找 PA-07 实施核对与最新差异复核 | [PA-07 实施证据索引](architecture/pa-07-implementation/README.md)（含 IMP-001/002/003） |
 | 查找 S01–S05 产品场景与 UI 规格 | [scenarios/](scenarios/) |
 | 查找验收记录 | [acceptance/](acceptance/) |
 | 查找历史审查、代码事实和差距证据 | [audit/](audit/) |

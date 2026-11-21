@@ -2,12 +2,15 @@
 
 - **任务：** PA-07 检查（用户 2026-11-21）——对照基线核查实施现状 + PA-06 改动（f39618e）× PA-07 语义一致性
 - **日期：** 2026-11-21
-- **核对基准：** HEAD `75094e1`（已 push），migrations 0001–0052，基线=PA-07 dev spec V1.0 §10/§11 与 PA07-IMP-001 核对报告（2026-11-20 快照 ecb1ce2 / migrations 0001–0041）
+- **原始核对基准：** HEAD `75094e1c2b88719d34364373b338609ed3805b32`，migrations 0001–0052；基线=PA-07 Developer Implementation Specification V1.0 §10/§11 与 PA07-IMP-001（HEAD `ecb1ce2` / migrations 0001–0041）
+- **后续差异核对：** HEAD `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb`（2026-11-22）；详见 [PA07-IMP-003](PA07-IMP-003-current-state-verification.md)
 - **方法：** 逐项代码证据核查（两次独立盘点）+ PA-07 关键测试面实跑（10 套件 100/100 绿）
 
 ## 1. 总体判定
 
-**P0 全部闭环，P1 部分落地，P2 未动；门禁语义完好；发现 1 个 P1 级新缺口（E2 第三入口）与 1 个 P2 级门禁语义弱化（批量 blast_radius）。**
+**以下 IMP-001~019 统计和原始问题发现均是 HEAD `75094e1` 的历史审计结论，不代表该 HEAD 之后的当前状态。** 原始审计发现 E2 命令通道缺口；该缺口已由后续提交 `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb` 修复并有新增边界测试。原始审计发现的批量 `blast_radius` 弱化问题在当前 HEAD 仍待处理，见 §4 与 PA07-IMP-003。
+
+**原始基准统计：P0 全部闭环，P1 部分落地，P2 未动；发现 E2 缺口（后续已修复）与批量 blast_radius 问题（当前仍 OPEN）。**
 
 PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关闭（task_revision=0042、dependency 条件=0043、run 门禁快照=0044、task_product=0044/0045、human_consultation=0046、link 软删=0047、product key=0049）；快照的 3 项待裁决全部有结果落地（Product 四态按建议、link 软删、D6 维持严格侧）。
 
@@ -52,7 +55,7 @@ PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关�
 
 | # | 级别 | 问题 | 建议 |
 |---|---|---|---|
-| ~~P1~~ | **已修复（2026-11-22）** | ~~E2「AI 永不置 ready」命令通道第三入口无执法~~ → `apply_task_transition` 单点执法：迁入 Ready 仅允许 Human（人类面/E5/红线批准）与 Service（依赖解锁 D7/D8），AiPm/DevAgent 一律 `CommandError::Validation("E2: ...")` 且状态/revision 不变；边界测试 3 条（AiPm 拒/DevAgent 拒/Human 放）+ 既有 7 处 AiPm+Ready 机械测试改 Human；12 套件 135/135 绿 | 已随本报告实施 |
+| P1 | **RESOLVED — 后续提交修复** | E2「AI 永不置 ready」命令通道缺口已由 `6ed0f1a5e7339cd701e538c2a13513cd9c0e9adb` 在 `apply_task_transition` 单点封堵；AiPm/DevAgent 拒绝，Human/Service 保持合法路径；新增 3 条边界测试。修复细节和验证范围见 PA07-IMP-003。 | 当前已关闭，不再列为待修复项 |
 | P2 | 中 | 红线摘除后批量门禁弱化：blast_radius=proposals.len()（orchestrator.rs:237，self_review 不读 payload）→ 单条 CreateTasks 提案含 N 任务时 radius=1 永不升级，AiPm 可 auto_apply 最多 200 任务；解析层无 kind 白名单。我们写入 yaml/policy_engine 的注释「超大批量仍走 escalate」只在逐条 create_task 形状下成立 | ProjectCommand 加纯函数 item_count() 并入 blast_radius；或修正注释口径 |
 | P3 | 低 | Human Consultation decision 未执法 Product Membership（仅 human+项目可见；product_scope 无比对）——与 DR-PA-06 资格项 OPEN 自洽，窄于 PA-07 §7 文本 | 文档对齐或批次 B 补 Membership 比对 |
 | P4 | 低 | `source='platform_flow'` 成死值（API 接受但平台主体必 403）——与 §7「平台流程」主体词冲突，已有文档背书 | API 注释标注「仅人类代录语义」或后续轮次明确平台流程主体 |
@@ -65,4 +68,11 @@ PA07-IMP-001 快照列出的全部 P0 缺口已由迁移 0042–0047 一批关�
 
 ## 6. 结论
 
-PA-07 P0 目标已全部闭环且质量有据（迁移 0042–0047 + 单点门禁 + 竞态测试）；f39618e 的 PA-06 落地未破坏 PA-07 门禁语义，§11 CLOSED 的落地方式与文档一致。需要立即跟进的是 **P1 命令通道 E2 缺口**（授权边界，建议随 PA-06 批次 C 一起修）与 **P2 批量 blast_radius 语义**；❌ 五项执行安全/运维债务维持原 P1/P2 排期推进。
+本报告的 IMP-001~019 统计仍然只对应原始 HEAD `75094e1`，不得当作 `6ed0f1a` 的全量重新审计结果。E2 命令通道缺口已由 `6ed0f1a` 关闭，不再需要作为当前缺陷跟进。当前仍需处理的是 **P2 批量 blast_radius 语义**；原审计中的五项执行安全/运维债务及五项部分完成项仍沿用原始判定，除非后续证据报告明确更新。最新差异与当前证据见 [PA07-IMP-003](PA07-IMP-003-current-state-verification.md)。
+
+
+## 7. 后续状态说明（2026-11-22）
+
+本报告创建后，`master` 从原始审计基准 `75094e1` 前进两个提交至 `6ed0f1a`。Git compare 确认两者之间仅涉及：`crates/pm-application/src/command_executor/transition.rs`、`crates/pm-application/tests/command_executor.rs` 和本审计文件。E2 的代码修复及测试证据详见 PA07-IMP-003。提交说明报告 12 个测试套件 135/135 通过；该数字是提交所附测试结果，本次文档审查未在本地重新执行。
+
+批量 `blast_radius` 问题仍为 OPEN：编排器当前按 proposal 数量计算半径，而 `CreateTasks` 命令可包含多个 Task。其影响面、证据和修复建议见 PA07-IMP-003。不得将此问题与 E2 修复混为一谈。

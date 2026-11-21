@@ -15,7 +15,25 @@
 | [PA-06-AI Agent 与人类的协作边界](PA-06-agent-human-collaboration.md) | 自主权限、事项管理、正式知识修改、任务调度、交付验收和异常处理 |
 | [PA-07-Task Execution Orchestration 与跨 Product 协作 V1.0](PA-07-task-execution-orchestration-cross-product-collaboration-v1.0.md) | Task / Run / Workflow、Task Dependency、Task Decision Review、Human Consultation、Product 生命周期和跨 Product 协作 |
 | [PA-07-Agent Team 与执行 Runtime V1.0](PA-07-agent-team-and-execution-runtime-v1.0.md) | 单一逻辑 Project AI-PM、按需专业 Agent、多 Agent 并行、Workstream / Agent Work Unit、Runner / Harness / Session / Job / Process、MCP 通信边界和知识写入协调 |
-| [PA-07 开发实施规范 V1.0](PA-07-developer-implementation-specification-v1.0.md) | schema 映射、数据模型、事务/API/事件契约、实施任务（IMP-001~019）与测试矩阵 |
+| [PA-07 开发实施规范 V1.0](PA-07-developer-implementation-specification-v1.0.md) | PA-07 的目标实施契约；不代表对应功能已实现 |
+
+## PA-07 基线、实施规范与实施证据
+
+PA-07 是一套执行架构，由两份互补基线共同构成，而不是两套独立架构：
+
+- **Task Execution / Cross-Product Collaboration** 定义 Task、Revision、Dependency、Workflow、Orchestrator、Run、Product 门禁、验收、恢复和跨 Product 协作，回答任务如何被计划、编排、执行和验收。
+- **Agent Team / Execution Runtime** 定义 Project AI-PM、专业 Agent、Workstream、逻辑 Agent Work Unit、Runner、Provider Adapter、Harness、Session、Job、Process、Workspace 与 MCP 边界，回答 AI-PM 如何组织工程执行、工程工作如何运行。
+- Agent Team / Runtime 必须服从 Task Execution 的任务、授权、状态和验收契约；它不建立第二套 Task / Run 状态体系，也不扩大 Agent 权限。
+
+**文档权威分工：**
+
+| 文档 | 定位 | 能证明什么 |
+|---|---|---|
+| 两份 PA-07 架构基线 | 已批准架构规则 | 系统应遵循的业务与技术边界 |
+| Developer Implementation Specification | 目标实施契约 | 实现应满足的 Schema、API、事务、事件、权限和测试要求 |
+| `pa-07-implementation/PA07-IMP-*` | 实施核对与证据 | 特定 commit 下代码、migration、测试的实际状态 |
+
+**实施规范不是完成报告，实施证据也不能擅自改变架构基线。** 早期审计必须连同其核对 HEAD 阅读；当前状态以最新复核报告及其明确的 HEAD 为准。实施证据入口见 [PA-07 实施证据索引](../pa-07-implementation/README.md)。
 
 ## 基线状态说明
 
