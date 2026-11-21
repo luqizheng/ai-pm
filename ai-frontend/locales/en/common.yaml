@@ -1,5 +1,6 @@
 common:
   back: Back
+  loading: Loading…
   delete: Delete
   submit: Submit
   cancel: Cancel
