@@ -18,6 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
+use crate::pm_write::PmWriteError;
 use crate::work_item::{
     blocker_status_semantic, ensure_work_item, issue_status_semantic, record_activity,
     risk_status_semantic, WorkItemError,
@@ -29,8 +30,25 @@ pub enum WorkDomainError {
     NotFound,
     #[error("{0}")]
     Validation(&'static str),
+    /// 调用者非人类 principal（PA06-IMP-001 A2，2026-11-21）：REST 人类面
+    /// 显式执法——PA-06-02 授权 Agent 走自己的通道（MCP 工具，批次 C2），
+    /// 人类 REST 面与之分流，不依赖「agent 凭据进不来 REST」的认证拓扑。
+    #[error("{0}")]
+    Forbidden(&'static str),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
+}
+
+/// 人类 principal 门（复用 [`crate::requirement::require_human`] 单点判定）。
+async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), WorkDomainError> {
+    match crate::requirement::require_human(pool, actor).await {
+        Ok(()) => Ok(()),
+        Err(PmWriteError::Forbidden(m)) | Err(PmWriteError::NotFound(m)) => {
+            Err(WorkDomainError::Forbidden(m))
+        }
+        Err(PmWriteError::Db(err)) => Err(WorkDomainError::Db(err)),
+        Err(_) => Err(WorkDomainError::Forbidden("human principal required")),
+    }
 }
 
 impl From<WorkItemError> for WorkDomainError {
@@ -74,6 +92,7 @@ pub async fn create_issue(
     severity: Option<&str>,
     actor: &AuditActor,
 ) -> Result<Uuid, WorkDomainError> {
+    require_human(pool, actor).await?;
     let title = title.trim();
     if title.is_empty() {
         return Err(WorkDomainError::Validation("title is required"));
@@ -122,6 +141,7 @@ pub async fn transition_issue(
     reason: Option<&str>,
     actor: &AuditActor,
 ) -> Result<(), WorkDomainError> {
+    require_human(pool, actor).await?;
     if !matches!(to, "resolved" | "cancelled") {
         return Err(WorkDomainError::Validation("target must be resolved|cancelled"));
     }
@@ -216,6 +236,7 @@ pub async fn create_risk(
     probability: Option<&str>,
     actor: &AuditActor,
 ) -> Result<Uuid, WorkDomainError> {
+    require_human(pool, actor).await?;
     let title = title.trim();
     if title.is_empty() {
         return Err(WorkDomainError::Validation("title is required"));
@@ -265,6 +286,7 @@ pub async fn transition_risk(
     to: &str,
     actor: &AuditActor,
 ) -> Result<(), WorkDomainError> {
+    require_human(pool, actor).await?;
     if !matches!(to, "mitigating" | "closed") {
         return Err(WorkDomainError::Validation(
             "target must be mitigating|closed",
@@ -358,6 +380,7 @@ pub async fn create_blocker(
     blocked_task_id: Option<Uuid>,
     actor: &AuditActor,
 ) -> Result<Uuid, WorkDomainError> {
+    require_human(pool, actor).await?;
     let title = title.trim();
     if title.is_empty() {
         return Err(WorkDomainError::Validation("title is required"));
@@ -415,6 +438,7 @@ pub async fn clear_blocker(
     blocker_id: Uuid,
     actor: &AuditActor,
 ) -> Result<(), WorkDomainError> {
+    require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
     let row: Option<(Uuid, String, String)> = sqlx::query_as(
         "SELECT project_id, title, status FROM delivery.blocker \

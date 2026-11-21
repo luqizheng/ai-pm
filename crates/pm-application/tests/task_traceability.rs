@@ -79,6 +79,16 @@ async fn seed_task_product(pool: &PgPool, f: &Fx, task_id: Uuid, name: &str) -> 
     add_task_product(pool, SYSTEM_TENANT, task_id, product_id, None, &actor(f))
         .await
         .unwrap();
+    // DR-PA-06 验收守卫（PA06-IMP-001 A1）：验收人须为目标 Product 成员。
+    sqlx::query(
+        "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role) \
+         SELECT $2, $1, p.tenant_id, 'owner' FROM core.product p WHERE p.id = $2",
+    )
+    .bind(f.actor_id)
+    .bind(product_id)
+    .execute(pool)
+    .await
+    .unwrap();
     product_id
 }
 

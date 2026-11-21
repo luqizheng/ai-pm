@@ -35,6 +35,8 @@ impl From<TaskProductError> for ApiError {
             TaskProductError::ProductNotActive(code) => ApiError::Conflict(code),
             TaskProductError::Duplicate => ApiError::Conflict("TASK_PRODUCT_EXISTS"),
             TaskProductError::LinkNotFound => ApiError::NotFound("task_product_not_found"),
+            // DR-PA-06 验收守卫：非人类 principal / 非 Product 成员 403。
+            TaskProductError::Forbidden(m) => ApiError::Forbidden(m),
             TaskProductError::Db(err) => ApiError::Internal(err),
         }
     }

@@ -11,7 +11,6 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
-use pm_application::pm_write::PmWriteError;
 use pm_application::task_products::{record_product_acceptance, ProductAcceptanceInput};
 use pm_application::PolicyEngine;
 use pm_domain::{ProjectCommand, TaskStatus, SYSTEM_TENANT};
@@ -75,7 +74,17 @@ async fn seed_task_product(pool: &PgPool, fx: &Fx, task_id: Uuid, name: &str) ->
     .execute(pool)
     .await
     .unwrap();
-    let _ = fx;
+    // DR-PA-06 验收守卫（PA06-IMP-001 A1）：验收人须为目标 Product 成员——
+    // 夹具把 bootstrap 人类播为该 Product 的 Owner。
+    sqlx::query(
+        "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role, granted_by) \
+         SELECT p.id, $1, p.tenant_id, 'owner', $1 FROM core.product p WHERE p.id = $2",
+    )
+    .bind(fx.actor_id)
+    .bind(product_id)
+    .execute(pool)
+    .await
+    .unwrap();
     product_id
 }
 
@@ -269,8 +278,106 @@ async fn acceptance_requires_active_link(pool: PgPool) {
     )
     .await
     .unwrap_err();
+    // PA06-IMP-001 A1：授权（Product Membership）先于资源语义——非成员在
+    // 关联存在性检查之前即被拒（不向非成员泄露关联状态）。
     assert!(
-        matches!(err, pm_application::task_products::TaskProductError::LinkNotFound),
+        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
+        "got {err:?}"
+    );
+}
+
+/// DR-PA-06 验收守卫（PA06-IMP-001 A1，2026-11-21）：正式产品验收=目标
+/// Product 成员专属——人类但非该 Product 成员 → Forbidden；agent 主体 →
+/// Forbidden（PA-06-05 §7.2：agent 不得代替业务验收，与 DR-PA-06 衔接见
+/// PA06-IMP-001 §3 分层）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn acceptance_requires_target_product_membership(pool: PgPool) {
+    let f = fx(&pool, "AC-G1").await;
+    let task = seed_reviewing_task(&pool, &f, "G1").await;
+    let product = seed_task_product(&pool, &f, task, "prod-g").await;
+
+    // 同项目人类成员但未加入该 Product → 拒。
+    let outsider = Uuid::new_v4();
+    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Outsider')")
+        .bind(outsider)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let outsider_actor = pm_application::actor::AuditActor {
+        principal_id: outsider,
+        identity_id: None,
+        client: None,
+        auth_mode: None,
+        claimed_device_id: None,
+    };
+    let err = record_product_acceptance(
+        &pool,
+        SYSTEM_TENANT,
+        task,
+        ProductAcceptanceInput {
+            product_id: product,
+            task_revision_id: None,
+            result: "approved".to_string(),
+            condition_scope: "product_specific".to_string(),
+            evidence_ref: None,
+            source: "human".to_string(),
+            note: None,
+        },
+        Some(outsider),
+        &outsider_actor,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
+        "got {err:?}"
+    );
+
+    // agent 主体即使被播为成员也不得代替验收。
+    let agent = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(agent)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.product_member (product_id, principal_id, tenant_id, role) \
+         SELECT $2, $1, p.tenant_id, 'member' FROM core.product p WHERE p.id = $2",
+    )
+    .bind(agent)
+    .bind(product)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let agent_actor = pm_application::actor::AuditActor {
+        principal_id: agent,
+        identity_id: None,
+        client: None,
+        auth_mode: None,
+        claimed_device_id: None,
+    };
+    let err = record_product_acceptance(
+        &pool,
+        SYSTEM_TENANT,
+        task,
+        ProductAcceptanceInput {
+            product_id: product,
+            task_revision_id: None,
+            result: "approved".to_string(),
+            condition_scope: "product_specific".to_string(),
+            evidence_ref: None,
+            source: "human".to_string(),
+            note: None,
+        },
+        Some(agent),
+        &agent_actor,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
         "got {err:?}"
     );
 }

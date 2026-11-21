@@ -17,7 +17,7 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
 use pm_application::repo::GuardQueryRepo;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{require_human_principal, require_project_visible, ApiError, ApiResult};
 use pm_application::pm_write::{self, CreateTaskRequest, MarkTasksReadyRequest, UpdateTaskRequest};
 use pm_application::supervision::{DecideRequest, Decision, SupervisionError};
 
@@ -176,6 +176,10 @@ pub(crate) async fn create_task_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Json(body): Json<CreateTaskRequest>,
 ) -> ApiResult<Response> {
+    // PA-06-02（2026-11-21 裁决）：Agent 授权走自己的通道（discovery 分解链/MCP）
+    // 建 Task；REST 是人类面——显式人类 principal 门（原闸在服务层
+    // pm_write::create_task，C1 放开后闸位上移到通道面）。
+    require_human_principal(&state.pool, &principal).await?;
     if let Some(project_id) = body.project_id {
         project_in_tenant(&state.pool, project_id, principal.tenant_id).await?;
     }

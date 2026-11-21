@@ -58,12 +58,12 @@ red_lines:                   # pre-confirmation required, per role
     required_role: platform_admin
   - command: spend_above_quota
     required_role: quota_approver
-  # 冷启动导入：4 个批量命令共用 project_import 红线语义，执行前须 owner 确认。
+  # 冷启动导入：批量命令共用 project_import 红线语义，执行前须 owner 确认。
+  # create_tasks 不在此列（PA-06-04，2026-11-21 裁决 PA06-IMP-001 §6-1）：
+  # AI 提案建任务=执行性事项自主授权，超大批量仍走 escalate（blast_radius>10）。
   - command: create_milestones
     required_role: project_owner
   - command: create_requirements
-    required_role: project_owner
-  - command: create_tasks
     required_role: project_owner
   - command: write_documents
     required_role: project_owner

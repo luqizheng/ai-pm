@@ -15,5 +15,7 @@ async fn core_schema_ready(pool: sqlx::PgPool) {
     //   tenant_invitation_link_redemption（0044，Team Onboarding）
     // + product / product_project_link / team / team_member（0038，P4-ORG 组织模型）
     // + product_member（0040，Product 域成员）
-    assert_eq!(n, 18);
+    // + work_item / work_item_relation / work_item_activity /
+    //   work_item_read_state（0051，PA-05 统一事项注册表；此前漏更计数=存量红）
+    assert_eq!(n, 22);
 }

@@ -1,8 +1,10 @@
 //! `/v1/pm/projects/{project_id}/{issues|risks|blockers}`：Issue / Risk /
 //! Blocker 领域对象（PA-05-01 收尾，2026-11-21 V1 最小集）。
 //!
-//! 守卫同 human_consultations 口径：项目可见性（require_project_visible，
-//! 不可见 404 不泄露存在性）即读写边界；终态完整性由 DB CHECK 强制。
+//! 守卫：项目可见性（require_project_visible，不可见 404 不泄露存在性）+
+//! 服务层人类 principal 门（PA06-IMP-001 A2，2026-11-21：REST=人类面显式
+//! 执法；PA-06-02 授权 Agent 的自主管理通道归 MCP 工具面，后续批次 C2）。
+//! 终态完整性由 DB CHECK 强制。
 
 use axum::{
     extract::{Path, Query, State},
@@ -25,6 +27,7 @@ impl From<WorkDomainError> for ApiError {
         match e {
             WorkDomainError::NotFound => ApiError::NotFound("not_found"),
             WorkDomainError::Validation(m) => ApiError::BadRequest(m),
+            WorkDomainError::Forbidden(m) => ApiError::Forbidden(m),
             WorkDomainError::Db(err) => ApiError::Internal(err),
         }
     }

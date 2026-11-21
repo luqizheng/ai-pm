@@ -137,6 +137,33 @@ pub(crate) async fn require_human_decision_context(
     Ok(())
 }
 
+/// 人类 principal 门（DR-PA-06 第一轮验收守卫 / PA-06 协作边界，2026-11-21）。
+///
+/// 与 [`require_human_decision_context`] 的差别：不要求交互式会话——只查库
+/// `core.principal.kind='human'`（不信任 token 声明），用于「人类面通道」的
+/// 显式执法（REST 建任务、验收裁决、consultation 决策等）；agent 与服务主体
+/// 一律 403。授权原则：PA-06-02 授权 Agent 走**自己的通道**（MCP/AI 链），
+/// REST 人类面与 agent 通道分流执法。
+pub(crate) async fn require_human_principal(
+    pool: &sqlx::PgPool,
+    principal: &crate::auth::AuthedPrincipal,
+) -> ApiResult<()> {
+    let kind = repos::identity_repo(pool)
+        .principal_kind(principal.principal_id)
+        .await
+        .map_err(|err| {
+            ApiError::Text(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("identity lookup failed: {err}"),
+            )
+        })?;
+    if kind.as_deref() == Some("human") {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden("this action requires a human principal"))
+    }
+}
+
 impl From<pm_application::outbox_ops::ReplayError> for ApiError {
     fn from(e: pm_application::outbox_ops::ReplayError) -> Self {
         match e {

@@ -11,6 +11,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
+use crate::pm_write::PmWriteError;
 use crate::product::ProductError;
 
 /// `GET /v1/pm/tasks/{task_id}/products` 的元素（含已撤回的历史行）。
@@ -35,6 +36,9 @@ pub enum TaskProductError {
     Duplicate,
     /// 关联不存在或已撤回（幂等删除时也返回该值区分）。
     LinkNotFound,
+    /// 调用者非人类 principal 或非该 Product 成员（DR-PA-06 第一轮验收守卫，
+    /// PA06-IMP-001 G-04：验收权=人类 Product Member 专属，agent 不得代替）。
+    Forbidden(&'static str),
     Db(sqlx::Error),
 }
 
@@ -365,6 +369,35 @@ pub async fn record_product_acceptance(
     };
     if !["human", "platform_flow"].contains(&source.as_str()) {
         return Err(TaskProductError::ProductNotActive("invalid_source"));
+    }
+
+    // DR-PA-06 验收守卫（PA06-IMP-001 G-04，2026-11-21）：正式产品验收 =
+    // 人类 Product Member 专属，Agent 不得代替（PA-06-05 §7.2/§7.4 与
+    // DR-PA-06 的衔接见 PA06-IMP-001 §3）。① 人类 principal 查库执法
+    // （不信任 token 声明）；② 调用者必须是目标 Product 的有效成员
+    // （第一轮资格项=Product Membership；「有效业务访问资格」维持台账号 6
+    // OPEN 留接口）。唯一调用方为 REST 人类面（拓扑上 agent 不可达），
+    // 本守卫把「拓扑排除」升级为显式执法。
+    crate::requirement::require_human(pool, actor).await.map_err(|e| match e {
+        PmWriteError::Forbidden(m) => TaskProductError::Forbidden(m),
+        PmWriteError::NotFound(m) => TaskProductError::Forbidden(m),
+        PmWriteError::Db(err) => TaskProductError::Db(err),
+        _ => TaskProductError::Forbidden("human principal required"),
+    })?;
+    let member: Option<i32> = sqlx::query_scalar(
+        "SELECT 1 FROM core.product_member pm \
+         JOIN core.product p ON p.id = pm.product_id \
+          WHERE pm.product_id = $1 AND pm.principal_id = $2 AND p.tenant_id = $3",
+    )
+    .bind(input.product_id)
+    .bind(accepted_by.unwrap_or(actor.principal_id))
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?;
+    if member.is_none() {
+        return Err(TaskProductError::Forbidden(
+            "acceptance requires membership in the target product",
+        ));
     }
 
     let mut tx = pool.begin().await?;

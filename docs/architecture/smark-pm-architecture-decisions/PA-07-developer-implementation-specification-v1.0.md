@@ -327,6 +327,8 @@ Outbox 与业务状态更新同事务写入；消费端按 event_id 幂等。事
 
 这属于正式权限边界，不由 PA-07 技术授权自动解决。
 
+> **裁决落地（2026-11-21，CLOSED）**：有权人类已裁决=按上位基线 PA-06-02/04（选择 A：Agent 在已确认目标与约束内自主创建 Task）放开。`pm_write::create_task` 的人类闸移除，闸位上移至 REST 人类面（`pm_writes::create_task_handler` 显式人类 principal 门）；红线单摘除 `create_tasks`（导入提案自身的 owner 确认流不受影响）。AI 建任务落 draft 态，`draft→ready` E2 真人闸与 run 启动门禁不变。记录见 PA06-IMP-001 §6-1。
+
 ## 12. 测试矩阵与验收门槛
 
 ### 12.1 单元与领域测试

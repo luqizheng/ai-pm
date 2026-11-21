@@ -269,3 +269,44 @@ async fn blocker_references_task_and_clears(pool: PgPool) {
         .unwrap();
     assert_eq!(rows.len(), 1);
 }
+
+/// PA06-IMP-001 A2（2026-11-21）：REST 人类面显式执法——agent 主体
+/// （dev_agent/ai_pm）创建/迁移执行性事项一律 Forbidden；PA-06-02 授权
+/// Agent 的自主管理通道归 MCP 工具面（批次 C2），REST 面不共用。
+#[sqlx::test(migrations = "../../migrations")]
+async fn agent_principal_is_rejected_on_human_rest_face(pool: PgPool) {
+    let (tenant_id, project_id, human_id) = seed_world(&pool).await;
+    let agent_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) \
+         VALUES ($1, 'dev_agent', 'Dev Agent')",
+    )
+    .bind(agent_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let agent = actor(agent_id);
+
+    assert!(matches!(
+        create_issue(&pool, tenant_id, project_id, "agent issue", None, None, &agent).await,
+        Err(WorkDomainError::Forbidden(_))
+    ));
+    assert!(matches!(
+        create_risk(&pool, tenant_id, project_id, "agent risk", None, None, None, &agent).await,
+        Err(WorkDomainError::Forbidden(_))
+    ));
+    assert!(matches!(
+        create_blocker(&pool, tenant_id, project_id, "agent blocker", None, None, &agent).await,
+        Err(WorkDomainError::Forbidden(_))
+    ));
+
+    // 人类创建后，agent 也不得迁移（resolve/clear 同为人类面动作）。
+    let actor = actor(human_id);
+    let issue_id = create_issue(&pool, tenant_id, project_id, "human issue", None, None, &actor)
+        .await
+        .unwrap();
+    assert!(matches!(
+        transition_issue(&pool, tenant_id, issue_id, "resolved", Some("done"), &agent).await,
+        Err(WorkDomainError::Forbidden(_))
+    ));
+}

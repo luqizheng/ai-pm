@@ -30,7 +30,7 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::repo::acceptance_read::AcceptanceReadRepo;
 use crate::support::repos::acceptance_read_repo;
-use crate::support::{require_project_visible, ApiResult};
+use crate::support::{require_human_principal, require_project_visible, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -80,14 +80,22 @@ async fn decision_handler(
     Path(approval_id): Path<Uuid>,
     Json(body): Json<DecisionBody>,
 ) -> Response {
-    require_project_visible(
+    // DR-PA-06 / PA06-IMP-001 G-04（2026-11-21）：审批裁决=验收动作，归人类
+    // Product Member——显式人类 principal 门 + 项目可见性（原实现把可见性
+    // 检查 `.ok()` 吞掉，本批次修复为真守卫）。
+    if let Err(err) = require_project_visible(
         &state.pool,
         body.project_id,
         principal.tenant_id,
         principal.principal_id,
     )
     .await
-    .ok();
+    {
+        return err.into_response();
+    }
+    if let Err(err) = require_human_principal(&state.pool, &principal).await {
+        return err.into_response();
+    }
 
     let request = pm_application::review::ReviewDecisionRequest {
         project_id: body.project_id,

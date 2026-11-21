@@ -298,3 +298,13 @@ PA-06 确立的协作模式是：
 
 系统不应将 Agent 设计成每一步都等待人类批准的执行工具，也不应允许 Agent
 越权改变正式业务目标和关键决策。
+
+## 12. 落地记录（PA06-IMP-001，2026-11-21）
+
+盘点报告：`docs/architecture/pa-06-implementation/PA06-IMP-001-collaboration-boundary-audit.md`（六条决策 × 执法现状；差距 G-01~G-06；批次 A/B/C）。要点：
+
+- **PA-06-03 唯一无代码差距条**：需求/设计/ADR/K4 的草稿自主、定稿人类确认链路已完整。
+- **PA-06-05 × DR-PA-06 衔接（消除评审遗留条件）**：按验收分层裁决——技术验收/客观业务验收=Agent 链内行为（`apply_task_transition` + acceptance_gate）；正式产品验收（`task_product_acceptance`/Issue 验收）=人类 Product Member 专属。主观业务验收经升级请求链（批次 B 打通 interaction→human_consultation）。
+- **批次 A（已落地，2026-11-21）**：①`record_product_acceptance` 服务层守卫=人类 principal（查库）+ 目标 Product Membership（DR-PA-06 第一轮守卫；资格项维持台账号 6 OPEN）②`pm_reviews` 审批裁决端点修复被 `.ok()` 吞掉的项目可见性检查+补人类门③Issue/Risk/Blocker 服务层人类门（REST=人类面显式执法，为 C2 的 MCP agent 通道分流做准备）④consultation start/decide/cancel/supersede 补项目可见性，decide/cancel/supersede 补人类门。
+- **裁决 G-01（CLOSED，2026-11-21 用户裁决）**：按 PA-06-02/04 放开 decompose 链正式建 Task（落 draft，`draft→ready` E2 真人闸不变）；红线单摘除 `create_tasks`（导入提案 owner 确认流不受影响）；PA-07 §11 BLOCKED_HUMAN_DECISION 同步注记 CLOSED。
+- **待办批次**：B=升级链打通（五要素决策上下文 §8.5、决策回读 §8.6）；C2=MCP Issue/Risk/Blocker 工具（agent 自主管理）；C3=agent 普通关联建立通道（`remove_relation` 维持不暴露）。

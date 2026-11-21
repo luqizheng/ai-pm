@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{require_human_principal, require_project_visible, ApiError, ApiResult};
 
 impl From<ConsultationError> for ApiError {
     fn from(e: ConsultationError) -> Self {
@@ -145,11 +145,42 @@ async fn list_handler(
     Ok(Json(rows))
 }
 
+/// 咨询单的项目边界（PA06-IMP-001 G-06，2026-11-21）：start/decide/cancel/
+/// supersede 原先只做 tenant 级隔离，本批次补齐项目可见性——口径对齐
+/// create/list（不可见 404 不泄露存在性）。decide/cancel/supersede 是正式
+/// 人类决策动作（DR-PA-06：人工决策归 Product Member，agent 不得代替），
+/// 另加显式人类 principal 门。
+async fn require_consultation_visible(
+    state: &AppState,
+    id: Uuid,
+    principal: &AuthedPrincipal,
+) -> ApiResult<Uuid> {
+    let project_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT project_id FROM governance.human_consultation \
+          WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(principal.tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|err| ApiError::Internal(err))?;
+    let project_id = project_id.ok_or(ApiError::NotFound("consultation_not_found"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    Ok(project_id)
+}
+
 async fn start_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Response> {
+    require_consultation_visible(&state, id, &principal).await?;
     let actor = principal.audit_actor();
     human_consultation::start_consultation(&state.pool, principal.tenant_id, id, &actor).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -161,6 +192,8 @@ async fn decide_handler(
     Path(id): Path<Uuid>,
     Json(body): Json<DecideBody>,
 ) -> ApiResult<Response> {
+    require_consultation_visible(&state, id, &principal).await?;
+    require_human_principal(&state.pool, &principal).await?;
     let actor = principal.audit_actor();
     // 决定人 = 当前调用主体（API 面不接受代填决定人）。
     human_consultation::decide_consultation(
@@ -181,6 +214,8 @@ async fn cancel_handler(
     Path(id): Path<Uuid>,
     Json(body): Json<CancelBody>,
 ) -> ApiResult<Response> {
+    require_consultation_visible(&state, id, &principal).await?;
+    require_human_principal(&state.pool, &principal).await?;
     let actor = principal.audit_actor();
     human_consultation::cancel_consultation(
         &state.pool,
@@ -199,6 +234,8 @@ async fn supersede_handler(
     Path(id): Path<Uuid>,
     Json(body): Json<SupersedeBody>,
 ) -> ApiResult<Response> {
+    require_consultation_visible(&state, id, &principal).await?;
+    require_human_principal(&state.pool, &principal).await?;
     let actor = principal.audit_actor();
     let new_id = human_consultation::supersede_consultation(
         &state.pool,
