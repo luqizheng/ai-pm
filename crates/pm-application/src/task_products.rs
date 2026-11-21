@@ -154,6 +154,9 @@ pub async fn add_task_product(
         serde_json::json!({ "product_id": product_id, "scope": scope }),
     )
     .await?;
+    // PA-05-05/08：业务归属建立 → Timeline 活动（挂 product_id，Product Feed
+    // 数据源）；与审计同事务。
+    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(product_id), "relation_changed", "Task linked to product", actor.principal_id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -203,6 +206,8 @@ pub async fn withdraw_task_product(
         serde_json::json!({ "product_id": product_id, "reason": reason }),
     )
     .await?;
+    // PA-05-05/08：撤回也挂 product_id（Product Feed 可见撤回历史活动）。
+    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(product_id), "relation_changed", "Task product withdrawn", actor.principal_id).await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -421,8 +426,62 @@ pub async fn record_product_acceptance(
         }),
     )
     .await?;
+    // PA-05-05/07 §8.1：验收是 Timeline 必录活动（挂 product_id）。
+    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(input.product_id), "acceptance_recorded", "Product acceptance recorded", actor.principal_id).await?;
     tx.commit().await?;
     Ok(acceptance_id)
+}
+
+/// PA-05 接线辅助：任务自愈注册 + 记一条挂 product_id 的 Timeline 活动。
+/// 活动失败不吞（同事务回滚，与审计同一致性）；错误并入本域错误面。
+#[allow(clippy::too_many_arguments)]
+async fn wire_product_activity(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    task_id: Uuid,
+    product_id: Option<Uuid>,
+    activity_type: &str,
+    summary: &str,
+    actor_id: Uuid,
+) -> Result<(), TaskProductError> {
+    let item_id = crate::work_item::ensure_work_item_for_target(
+        tx,
+        tenant_id,
+        "task",
+        task_id,
+        Some(project_id),
+        "open",
+        Some(actor_id),
+    )
+    .await
+    .map_err(work_item_err)?;
+    crate::work_item::record_activity(
+        tx,
+        tenant_id,
+        item_id,
+        Some(project_id),
+        product_id,
+        activity_type,
+        "human",
+        Some(actor_id),
+        summary,
+        None,
+        None,
+    )
+    .await
+    .map(|_| ())
+    .map_err(work_item_err)
+}
+
+fn work_item_err(err: crate::work_item::WorkItemError) -> TaskProductError {
+    match err {
+        crate::work_item::WorkItemError::Db(e) => TaskProductError::Db(e),
+        crate::work_item::WorkItemError::NotFound => TaskProductError::TaskNotFound,
+        crate::work_item::WorkItemError::Validation(m) => TaskProductError::Db(
+            sqlx::Error::Configuration(m.into()),
+        ),
+    }
 }
 
 /// Product 验收完成门禁（PA07-IMP-005；PA-07 §13「整体 Completed 条件」）：

@@ -253,4 +253,4 @@ My Feed 根据 Product Membership 和事项路由生成。同一事件涉及多�
 
 验收：`pm-application/tests/work_item.rs` 6/6 绿（注册幂等不覆盖状态/迁移语义变化/钉版 implements+幂等/四维查询/关系校验与解除/创建接线）；受影响面回归 48 例绿（command_executor 10 + task_dependency 9 + requirement_basis 8 + design_s03 4 + state_transition_guard 17）。
 
-后续批次（未实施）：批次 C = 三 Feed API + 前端页 + 已读状态读写面；Issue/Risk/Blocker 实体（PA-05-01 遗留领域对象）随后续批次显式加入；产品维度活动（product_id 列已预留，接线随 Task-Product 链路补）。
+批次 C 已实施（2026-11-21）：三 Feed API（my/project/product）+ read-state 写面 + Personal Home 切统一 My Feed 源 + 产品概览页 Activity 区 + 未读徽标。product_id 列接线已随 Task-Product 链路补齐（add/withdraw 关联与验收记录三个写入点挂 product_id 的 Timeline 活动，Product Feed 由此有真实数据源）。仅余：Project Feed 前端挂载（总控台活动区为自有实现，待重构窗口切统一源）；Issue/Risk/Blocker 实体（PA-05-01 遗留领域对象）随后续批次显式加入。

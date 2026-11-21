@@ -593,3 +593,67 @@ async fn project_and_product_feeds_scope_correctly(pool: PgPool) {
         .unwrap();
     assert_eq!(rows.len(), 1);
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn task_product_link_lands_on_product_feed(pool: PgPool) {
+    let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
+    let actor = actor(principal_id);
+    let created = create_task(&pool, task_request(project_id, "Scoped task"), &actor)
+        .await
+        .expect("create task");
+    // team + product（status normal = active 闸放行）。
+    let team_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO core.team (id, tenant_id, name) VALUES ($1, $2, 'T')")
+        .bind(team_id)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let product_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.product (id, team_id, tenant_id, key, name, status) \
+         VALUES ($1, $2, $3, 'SCOPED', 'Scoped Product', 'normal')",
+    )
+    .bind(product_id)
+    .bind(team_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    pm_application::task_products::add_task_product(
+        &pool,
+        tenant_id,
+        created.id,
+        product_id,
+        Some("common"),
+        &actor,
+    )
+    .await
+    .expect("link");
+
+    // Product Feed 出现 relation_changed 活动（product_id 接线生效）。
+    let rows = product_feed(&pool, tenant_id, principal_id, product_id, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].activity_type, "relation_changed");
+    assert_eq!(rows[0].product_id, Some(product_id));
+    assert_eq!(rows[0].target_type, "task");
+
+    // 撤回 → 第二条活动同样落 Product Feed。
+    pm_application::task_products::withdraw_task_product(
+        &pool,
+        tenant_id,
+        created.id,
+        product_id,
+        "no longer in scope",
+        &actor,
+    )
+    .await
+    .expect("withdraw");
+    let rows = product_feed(&pool, tenant_id, principal_id, product_id, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+}
