@@ -17,8 +17,10 @@
 //!    `Escalate { reason: format!("blast_radius_above_{threshold}") }`.
 //! 4. Otherwise → `Auto`.
 //!
-//! `blast_radius` is a batch-level parameter (M1 passes `proposals.len()`;
-//! Task 14 wires it) applied independently to every non-red-line proposal.
+//! `blast_radius` is a batch-level parameter: M1 passes the saturating sum of
+//! `ProjectCommand::impact_count()` across all proposals. Batch commands contribute
+//! their collection cardinality; single-object commands contribute one. The gate
+//! receives only this aggregate meta-fact and never reads command payload content.
 //!
 //! Everything here is a pure function: no IO, no reads of command payloads —
 //! the gate routes on proposal meta-facts only, so model-controlled bytes

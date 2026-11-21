@@ -77,6 +77,20 @@ impl ProjectCommand {
         }
     }
 
+    /// Number of work items affected by this command, used by the AI-PM
+    /// blast-radius gate. Batch commands count their entries; single-object
+    /// commands count as one. Only collection cardinality is inspected — no
+    /// model-controlled item content participates in policy routing.
+    pub fn impact_count(&self) -> usize {
+        match self {
+            ProjectCommand::CreateMilestones { milestones } => milestones.len(),
+            ProjectCommand::CreateRequirements { requirements } => requirements.len(),
+            ProjectCommand::CreateTasks { tasks } => tasks.len(),
+            ProjectCommand::WriteDocuments { documents } => documents.len(),
+            _ => 1,
+        }
+    }
+
     pub fn reversibility(&self) -> Reversibility {
         match self {
             ProjectCommand::SignAcceptance { .. } | ProjectCommand::ChangePolicy { .. } => {
@@ -225,6 +239,55 @@ mod tests {
                 "create_tasks",
                 "write_documents",
             ]
+        );
+    }
+
+    #[test]
+    fn impact_count_uses_batch_cardinality_and_single_commands_count_one() {
+        let task = TaskDraft {
+            key: "T".to_string(),
+            title: "Task".to_string(),
+            description: String::new(),
+            priority: "normal".to_string(),
+            milestone_key: None,
+            requirement_key: None,
+            assignee_role: None,
+            confidence: crate::proposal::Confidence::High,
+            evidence: Vec::new(),
+        };
+        assert_eq!(ProjectCommand::CreateTasks { tasks: vec![task; 11] }.impact_count(), 11);
+        assert_eq!(
+            ProjectCommand::CreateMilestones {
+                milestones: vec![
+                    MilestoneDraft { key: "M1".into(), name: "One".into(), planned_at: None },
+                    MilestoneDraft { key: "M2".into(), name: "Two".into(), planned_at: None },
+                ],
+            }.impact_count(),
+            2
+        );
+        assert_eq!(
+            ProjectCommand::CreateRequirements {
+                requirements: vec![
+                    RequirementDraft {
+                        key: "R1".into(), code: "R1".into(), title: "One".into(),
+                        markdown: String::new(), priority: "normal".into(),
+                        confidence: crate::proposal::Confidence::High, evidence: Vec::new(),
+                    },
+                    RequirementDraft {
+                        key: "R2".into(), code: "R2".into(), title: "Two".into(),
+                        markdown: String::new(), priority: "normal".into(),
+                        confidence: crate::proposal::Confidence::High, evidence: Vec::new(),
+                    },
+                ],
+            }.impact_count(),
+            2
+        );
+        assert_eq!(
+            ProjectCommand::CreateTask {
+                project_id: ProjectId::nil(), title: "Single".into(),
+                description: String::new(), assignee_id: None,
+            }.impact_count(),
+            1
         );
     }
 

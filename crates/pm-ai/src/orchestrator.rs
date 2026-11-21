@@ -234,9 +234,18 @@ impl Orchestrator {
         .await?;
 
         // Step 6: validate and persist every proposal.
-        let blast_radius = result.proposals.len();
-        let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(blast_radius);
-        let mut routable: Vec<bool> = Vec::with_capacity(blast_radius);
+        // Blast radius is the total number of affected work items, not the
+        // number of proposal envelopes: a single CreateTasks may contain up
+        // to MAX_BATCH_ITEMS tasks. impact_count() reads only collection
+        // cardinality, never model-controlled payload content.
+        let proposal_count = result.proposals.len();
+        let blast_radius = result
+            .proposals
+            .iter()
+            .map(|proposal| proposal.command.impact_count())
+            .fold(0usize, usize::saturating_add);
+        let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(proposal_count);
+        let mut routable: Vec<bool> = Vec::with_capacity(proposal_count);
         for (seq, proposal) in result.proposals.iter().enumerate() {
             // `rollback_command` is registered in the handler map, but its
             // entry point is `compensate`, never `execute` — a rollback is

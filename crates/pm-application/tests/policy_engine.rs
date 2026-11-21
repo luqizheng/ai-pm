@@ -39,7 +39,7 @@ red_lines:                   # pre-confirmation required, per role
   - command: spend_above_quota
     required_role: quota_approver
   # 冷启动导入：批量命令共用 project_import 红线语义，执行前须 owner 确认。
-  # create_tasks 不在此列（PA-06-04，2026-11-21 裁决 PA06-IMP-001 §6-1）。
+  # create_tasks 不在此列（PA-06-04）；其批量影响量按实际条目数进入 blast_radius，>10 时升级。
   - command: create_milestones
     required_role: project_owner
   - command: create_requirements
