@@ -18,11 +18,13 @@
 //! 4. Otherwise → `Auto`.
 //!
 //! `blast_radius` is a batch-level parameter — the orchestrator passes
-//! [`round_blast_radius`]: the sum of every proposal's actual affected-item
-//! count (`ProjectCommand::item_count`, PA07-IMP-002 §4 P2), NOT the
-//! proposal count. It is applied to every non-red-line proposal in the
-//! round, so splitting one 11-task `CreateTasks` into eleven single-task
-//! proposals cannot slip under the threshold: the round still sums to 11.
+//! [`round_blast_radius`]: the saturating sum of every proposal's actual
+//! affected-item count (`ProjectCommand::item_count`, PA07-IMP-002 §4 P2),
+//! NOT the proposal count. Batch commands contribute their collection
+//! cardinality; single-object commands contribute one. It is applied to every
+//! non-red-line proposal in the round, so splitting one 11-task `CreateTasks`
+//! into eleven single-task proposals cannot slip under the threshold: the
+//! round still sums to 11.
 //!
 //! Everything here is a pure function: no IO — the gate routes on proposal
 //! meta-facts only (plus the payload-derived item count of the command
@@ -45,7 +47,7 @@ pub fn round_blast_radius(proposals: &[Proposal]) -> usize {
     proposals
         .iter()
         .map(|proposal| proposal.command.item_count())
-        .sum()
+        .fold(0usize, |total, count| total.saturating_add(count))
 }
 
 /// Per-proposal routing verdict produced by [`review_proposals`].

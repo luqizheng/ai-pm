@@ -5,6 +5,7 @@
 - **核对基准：** HEAD `6ed0f1a` + 本批修复（blast radius / IMP-008 / IMP-009 / CI 工作流，随本报告同批提交）；migrations 0001–0053
 - **方法：** 逐项代码证据核对（双代理独立盘点 ❌/⚠️ 十项 + P0 项锚点复核）+ 全量真实测试（本地私有 Registry 环境）
 - **上游：** [PA07-IMP-002-implementation-audit.md](PA07-IMP-002-implementation-audit.md)（2026-11-21，基准 75094e1 的历史审计）；本报告为当前 HEAD 的差异核对，历史审计结论未重验处标 INHERITED
+- **版本 lineage：** github/master 曾有一份同名单行版差异复核（`015e524a..d5dbd78`，仅 diff 范围、测试未本地执行、IMP 其余标 INHERITED；其 §6 明确建议「后续对全部 IMP-001~019 逐项重核」）。本报告即那份建议的落实：全项重验 + 真实测试执行，取代该单行版；其独有事实（CI 两轮运行记录）已并入 §5。并行实现的 `impact_count()`/`total_blast_radius()` 与本批 `item_count()`/`round_blast_radius()` 语义等价，合并裁决=保留后者命名，采纳其 saturating_add 加固与 policy 注释更新。
 
 ## 1. 本批代码变更（相对 6ed0f1a）
 
@@ -74,7 +75,7 @@
 
 ## 5. CI 工作流核验
 
-任务书所述 `.github/workflows/pa07-blast-radius.yml` **在 6ed0f1a 不存在**（origin 与本地均无）——本批新建（内容见 §1）。核验结论：
+任务书所述 `.github/workflows/pa07-blast-radius.yml` **在 6ed0f1a 的 origin/本地均不存在**——前一并行会话已在 github/master 建立首版（`015e524a`，ubuntu-latest）并经历两轮真实 CI：首次运行 `44929432574` 死于 sccache 包装缺失（任何 Cargo 命令前，非测试断言失败）→ `6339ef3a` 以 `RUSTC_WRAPPER=env` 修复；第二次运行 `44929550299` 启动后即受私有 registry 网络限制（hosted runner 不可达 192.168.2.103:16444）。本批合并裁决=保留其触发结构/权限/透传机制，runs-on 落 self-hosted 标签（终态内容见 §1）。核验结论：
 
 - **YAML 语法：** 解析通过。
 - **触发条件：** workflow_dispatch + pull_request（路径过滤命中 blast radius 相关五文件+工作流自身）。
