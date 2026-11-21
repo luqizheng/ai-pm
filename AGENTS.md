@@ -35,4 +35,15 @@
    顶栏「助手」按钮、AI Chat 列、右上下文栏、壳根 `data-ai-panel` / `data-context`。
    详细步骤与验收见 `ai-frontend/AGENTS.md` §壳的约定。
 
+6. **跑测试：Q10 系列用例必须从全量中排除，单独跑。**
+   `q10_*` 测试（`crates/pm-application/tests/q10_race_closure.rs` / `q10_r3_snapshot_check.rs` /
+   `q10_classify_matrix.rs`，P3-D04 历史链竞态类）在多包并行全量时会因 DB 资源竞争轮询挂死
+   （2026-11-21 实测：四包全量挂死 >10min 两次；同用例单独跑 18/18 约 9s 全绿）。
+   写法：
+   - 全量：`cargo test -p pm-api -p pm-application -p pm-infrastructure -p pm-mcp --no-fail-fast -- --skip q10`
+   - 单独：`cargo test -p pm-application --test q10_race_closure --test q10_r3_snapshot_check --test q10_classify_matrix`
+   （注意 `--skip q10` 传给 libtest 须放在 `--` 之后。）
+   附：全量遇测试 exe 链接 `permission denied` = 残留测试进程占用产物，先
+   `Get-CimInstance Win32_Process | Where-Object {$_.Path -like '*target*debug*'}` 杀进程再编。
+
 <!-- 后续规则按序号追加到这里 -->
