@@ -158,10 +158,11 @@ pub async fn record_finding_verification(
     let Some((project_id, project_status)) = session_row else {
         return Err(DiscoveryError::SessionNotFound);
     };
-    if project_status == "archived" {
-        // 归档项目只读（I2-C §4「Project 非 archived」）：零写入。
+    if project_status == "closed" {
+        // 关闭项目只读（I2-C §4「Project 非 closed」；P4-ORG Phase 5 状态域
+        // archived→closed）：零写入。
         return Err(DiscoveryError::Validation(
-            "project is archived; findings are read-only".to_string(),
+            "project is closed; findings are read-only".to_string(),
         ));
     }
 

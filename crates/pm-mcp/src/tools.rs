@@ -1135,7 +1135,7 @@ pub async fn discovery_get_context(
         .map_err(map_knowledge_error)?;
     let repositories: Vec<(Uuid, String, String, String)> = sqlx::query_as(
         "SELECT id, name, url, status FROM integration.project_repository \
-         WHERE tenant_id = $1 AND project_id = $2 AND status <> 'archived' \
+         WHERE tenant_id = $1 AND project_id = $2 AND status <> 'closed' \
          ORDER BY created_at",
     )
     .bind(tenant_id)

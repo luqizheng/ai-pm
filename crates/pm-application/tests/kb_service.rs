@@ -805,7 +805,7 @@ async fn l1_gate_db_rejects_unreviewed_version_and_mutation(pool: PgPool) {
 async fn writes_are_closed_on_archived_project(pool: PgPool) {
     let fx = seed(&pool, "KP3-ARC").await;
     let (source_id, memory_id, rev1, _) = propose_first(&pool, &fx, "arc").await;
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(fx.project_id)
         .execute(&pool)
         .await

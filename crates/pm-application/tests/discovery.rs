@@ -1228,7 +1228,7 @@ async fn i2_e_archived_project_rejects_decisions(pool: PgPool) {
     .await
     .unwrap();
 
-    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE core.project SET status = 'closed' WHERE id = $1")
         .bind(fx.project_id)
         .execute(&pool)
         .await
