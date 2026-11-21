@@ -255,40 +255,76 @@ mod tests {
             confidence: crate::proposal::Confidence::High,
             evidence: Vec::new(),
         };
-        assert_eq!(ProjectCommand::CreateTasks { tasks: vec![task; 11] }.impact_count(), 11);
-        assert_eq!(
-            ProjectCommand::CreateMilestones {
-                milestones: vec![
-                    MilestoneDraft { key: "M1".into(), name: "One".into(), planned_at: None },
-                    MilestoneDraft { key: "M2".into(), name: "Two".into(), planned_at: None },
-                ],
-            }.impact_count(),
-            2
-        );
-        assert_eq!(
-            ProjectCommand::CreateRequirements {
-                requirements: vec![
-                    RequirementDraft {
-                        key: "R1".into(), code: "R1".into(), title: "One".into(),
-                        markdown: String::new(), priority: "normal".into(),
-                        confidence: crate::proposal::Confidence::High, evidence: Vec::new(),
-                    },
-                    RequirementDraft {
-                        key: "R2".into(), code: "R2".into(), title: "Two".into(),
-                        markdown: String::new(), priority: "normal".into(),
-                        confidence: crate::proposal::Confidence::High, evidence: Vec::new(),
-                    },
-                ],
-            }.impact_count(),
-            2
-        );
-        assert_eq!(
-            ProjectCommand::CreateTask {
-                project_id: ProjectId::nil(), title: "Single".into(),
-                description: String::new(), assignee_id: None,
-            }.impact_count(),
-            1
-        );
+        let tasks = ProjectCommand::CreateTasks {
+            tasks: vec![task; 11],
+        };
+        assert_eq!(tasks.impact_count(), 11);
+
+        let milestones = ProjectCommand::CreateMilestones {
+            milestones: vec![
+                MilestoneDraft {
+                    key: "M1".into(),
+                    name: "One".into(),
+                    planned_at: None,
+                },
+                MilestoneDraft {
+                    key: "M2".into(),
+                    name: "Two".into(),
+                    planned_at: None,
+                },
+            ],
+        };
+        assert_eq!(milestones.impact_count(), 2);
+
+        let requirements = ProjectCommand::CreateRequirements {
+            requirements: vec![
+                RequirementDraft {
+                    key: "R1".into(),
+                    code: "R1".into(),
+                    title: "One".into(),
+                    markdown: String::new(),
+                    priority: "normal".into(),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                },
+                RequirementDraft {
+                    key: "R2".into(),
+                    code: "R2".into(),
+                    title: "Two".into(),
+                    markdown: String::new(),
+                    priority: "normal".into(),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                },
+            ],
+        };
+        assert_eq!(requirements.impact_count(), 2);
+
+        let documents = ProjectCommand::WriteDocuments {
+            documents: vec![
+                DocumentDraft {
+                    doc_key: "one".into(),
+                    doc_type: "knowledge".into(),
+                    markdown: String::new(),
+                    change_summary: None,
+                },
+                DocumentDraft {
+                    doc_key: "two".into(),
+                    doc_type: "knowledge".into(),
+                    markdown: String::new(),
+                    change_summary: None,
+                },
+            ],
+        };
+        assert_eq!(documents.impact_count(), 2);
+
+        let single = ProjectCommand::CreateTask {
+            project_id: ProjectId::nil(),
+            title: "Single".into(),
+            description: String::new(),
+            assignee_id: None,
+        };
+        assert_eq!(single.impact_count(), 1);
     }
 
     #[test]
