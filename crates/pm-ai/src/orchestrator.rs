@@ -243,7 +243,7 @@ impl Orchestrator {
             .proposals
             .iter()
             .map(|proposal| proposal.command.impact_count())
-            .fold(0usize, usize::saturating_add);
+            .fold(0usize, |total, count| total.saturating_add(count));
         let mut proposal_ids: Vec<ProposalId> = Vec::with_capacity(proposal_count);
         let mut routable: Vec<bool> = Vec::with_capacity(proposal_count);
         for (seq, proposal) in result.proposals.iter().enumerate() {
