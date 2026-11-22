@@ -278,6 +278,25 @@ async fn continue_command_spawns_session_and_injects_reply() {
     let command_id = Uuid::new_v4();
     Mock::given(method("POST"))
         .and(path("/mcp"))
+     Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_poll_commands" }
+        })))
+        .respond_with(structured(json!({ "commands": [{
+            "command_id": command_id,
+            "command_type": "agent.task.continue",
+            "payload": {
+                "response": { "answer": "Use the safer migration path." },
+                "guard": { "continuation_start_frozen": false }
+            }
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
         .and(body_partial_json(json!({
             "method": "tools/call",
             "params": {
@@ -317,19 +336,10 @@ async fn continue_command_spawns_session_and_injects_reply() {
     };
     let reply = json!({ "answer": "Use the safer migration path." });
 
-    ai_pm_runner::runner_loop::execute_command(
-        &cfg,
-        &client,
-        &mut run,
-        json!({
-            "command_id": command_id,
-            "command_type": "agent.task.continue",
-            "payload": {
-                "response": reply,
-                "guard": { "continuation_start_frozen": false }
-            }
-        }),
-    ).await;
+    run.last_command_poll = Instant::now() - Duration::from_secs(10);
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("tick should poll and execute continue command");
 
     assert!(!run.awaiting_continue);
     assert!(run.process.as_ref().and_then(|p| p.child.id()).is_some());
