@@ -43,7 +43,8 @@ jobs:
       - name: Verify Windows OS-backed mirror lock semantics
         run: cargo test -p pm-infrastructure --lib active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale --locked
 
-  public-registry-build:    runs-on: ubuntu-latest
+  public-registry-build:
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
       postgres:
