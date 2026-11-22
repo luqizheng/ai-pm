@@ -26,8 +26,8 @@
 
 - workflow 已使用 `Swatinem/rust-cache@v2`，不重复叠加相同用途的缓存动作。
 - 仓库已有 `.config/nextest.toml`、`scripts/test.sh` 和 `scripts/test-timing.sh`，说明 Nextest 已是本地测试工具链的一部分；Hosted workflow 尚未使用它。
-- `scripts/setup-test-db.sh` 已定义仅供可丢弃测试集群使用的 PostgreSQL durability 调优，以及 `max_locks_per_transaction` 调整。
-- `scripts/seed-test-template.sh` / `seed_template1` example 已支持将当前分支的 SQLx migrations 预装到 PostgreSQL 的 template1，避免每个 SQLx 测试重复重放全部迁移。此操作只允许用于每个 Job 独立、临时、可丢弃的 CI 测试集群。
+- `scripts/setup-test-db.sh` 已定义仅供可丢弃测试集群使用的 PostgreSQL durability 调优，以及 `max_locks_per_transaction` 调整；该脚本绑定本地容器名，因此 Hosted workflow 直接对每个临时 service container 执行等价的 `ALTER SYSTEM` 配置并重启。
+- 仓库另有 template1 迁移播种工具，但第一轮 Hosted 优化不启用它：避免每个 shard 为播种程序重复编译；先用独立数据库 + 低并发验证稳定性，后续根据耗时数据再决定是否把播种二进制加入 archive。
 - 仓库既有本地性能记录（20 核机器、fast profile）为：默认测试库 421 秒；durability 调优后 319 秒；再使用模板库后 172 秒。此数据不是 GitHub Hosted Linux 基线，只用于确认数据库初始化是值得优化的热点。
 
 ## 3. 优化设计
@@ -37,7 +37,7 @@
 3. 将 Linux 测试二进制构建一次，生成 Nextest archive；四个 Linux shard 下载同一 archive，避免每个 shard 独立重新编译全部测试二进制。
 4. 使用 Nextest `hash:1/4` 至 `hash:4/4` 分片。每个测试用例由且仅由一个 shard 执行；不使用 `fast` profile，不排除 Q10、e2e 或其他测试。
 5. doctests 单独执行一次，因为 Nextest 不执行 Rust doctests。
-6. 每个 shard 使用独立 PostgreSQL 16 临时容器，使用仓库已有的测试库调优脚本，并只在该临时数据库上播种 template1；不触碰持久化或共享数据库。
+6. 每个 shard 使用独立 PostgreSQL 16 临时容器；只对临时容器启用 fsync/full_page_writes/synchronous_commit 调优并提高 max_locks_per_transaction，不触碰持久化或共享数据库。
 7. 移除完整 workspace 测试之后重复执行的定向测试命令；这些测试目标仍由完整 Nextest workspace archive 覆盖。保留静态门禁和 Windows 检查。
 8. 对比优化前后的同类 Hosted run：总墙钟、archive 构建、doctests、四个 shard 中最慢者、数据库准备、Actions 分钟数，以及所有测试是否通过。
 
@@ -53,4 +53,4 @@
 
 ## 5. 资源策略
 
-使用 4 个 Linux test shard，每个 shard 限制为 2 个测试线程，避免单个 PostgreSQL 实例被过度并发压垮。四个 shard 各自拥有隔离的临时 PostgreSQL 容器。通过单次 archive 构建减少重复编译；接受四个并行 runner 的短时资源占用，以换取更短的 PR 等待时间。
+使用 4 个 Linux test shard，每个 shard 限制为 2 个测试线程，避免单个 PostgreSQL 实例被过度并发压垮。四个 shard 各自拥有隔离的临时 PostgreSQL 容器。通过单次 archive 构建减少重复编译；首轮暂不启用 template1 播种，避免为每个 shard 重复编译播种工具。接受四个并行 runner 的短时资源占用，以换取更短的 PR 等待时间。
