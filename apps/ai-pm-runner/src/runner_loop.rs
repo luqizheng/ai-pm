@@ -252,11 +252,51 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
 
     let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await;
     let mut logged_awaiting = false;
+    let mut lease_lost_cleanup_pending = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
 
-
-
     loop {
+        // A lease-loss cleanup state blocks heartbeat/commands and all new claims.
+        // Keep retrying termination (or lease reacquisition for a recovered Run)
+        // until the old execution is safely stopped or supervision is restored.
+        if lease_lost_cleanup_pending {
+            let has_local_child = active.as_ref().and_then(|run| run.process.as_ref()).is_some();
+            let cleanup_result = match active.as_mut() {
+                Some(run) if has_local_child => match run.process.as_mut() {
+                    Some(process) => adapter::terminate_spawned(process).await.map(|_| ()),
+                    None => Ok(()),
+                },
+                Some(run) => reacquire_active_run(cfg, client, run).await.map(|_| ()),
+                None => Ok(()),
+            };
+            match cleanup_result {
+                Ok(()) => {
+                    if has_local_child {
+                        if let Some(run) = active.as_ref() {
+                            let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
+                        }
+                        active = None;
+                    } else if let Some(run) = active.as_ref() {
+                        let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
+                    }
+                    lease_lost_cleanup_pending = false;
+                }
+                Err(error) => {
+                    if let Some(run) = active.as_ref() {
+                        if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &error.to_string()) {
+                            tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
+                        }
+                        tracing::error!(run = %run.run_id, error = %error, "lease-loss cleanup remains unresolved; retaining supervision slot and blocking new claims");
+                    }
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    continue;
+                }
+            }
+            if active.is_none() {
+                continue;
+            }
+        }
+
         // ① 进程收割与退出判定。
         if let Some(run) = active.as_mut() {
             let outcome = match run.process.as_mut() {
@@ -322,21 +362,11 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                                 run = %run.run_id,
                                 "lease reacquire failed; terminating and reaping local Agent before releasing supervision"
                             );
-                            match run.process.as_mut() {
-                                Some(process) => match adapter::terminate_spawned(process).await {
-                                    Ok(outcome) => {
-                                        tracing::warn!(run = %run.run_id, pid = process.pid, session = %process.session_id, outcome = outcome.as_str(), "Agent terminated and reaped after lease reacquisition failure");
-                                        active = None;
-                                    }
-                                    Err(stop_error) => {
-                                        if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &stop_error.to_string()) {
-                                            tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
-                                        }
-                                        tracing::error!(run = %run.run_id, pid = process.pid, session = %process.session_id, error = %stop_error, "Agent termination unconfirmed; retaining Child handle and blocking new claims");
-                                    }
-                                },
-                                None => tracing::error!(run = %run.run_id, "lease reacquisition failed for recovered Run; retaining supervision slot"),
+                            lease_lost_cleanup_pending = true;
+                            if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &reacquire_error.to_string()) {
+                                tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
                             }
+                            tracing::error!(run = %run.run_id, "lease reacquisition failed; entering fail-closed cleanup state and blocking new claims");
                             continue;
                         }
                     }
@@ -381,9 +411,7 @@ fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(),
         "recorded_at": chrono::Utc::now().to_rfc3339(),
     });
     let path = directory.join("cleanup-needs-human.json");
-    let temporary = directory.join("cleanup-needs-human.json.tmp");
-    std::fs::write(&temporary, serde_json::to_vec_pretty(&evidence)?)?;
-    std::fs::rename(temporary, path)
+    std::fs::write(path, serde_json::to_vec_pretty(&evidence)?)
 }
 /// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
 async fn reacquire_active_run(
