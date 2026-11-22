@@ -97,6 +97,8 @@ jobs:
       # it also runs in the full workspace suite below.
       - name: Verify ADR-06a shared document container boundary
         run: cargo test -p kb-pc-contracts --test guard_ai_container_users --locked
+      - name: Verify audit actor identity coverage
+        run: cargo test -p pm-application --test audit_actor_coverage --locked
       - name: Run full workspace test suite
         run: cargo test --workspace --locked
       - name: Run Runner integration tests
