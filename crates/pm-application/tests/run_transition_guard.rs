@@ -14,6 +14,7 @@ struct Fx {
     task_id: Uuid,
     delivery_run_id: Uuid,
     review_run_id: Uuid,
+    human_id: Uuid,
 }
 
 async fn seed(pool: &PgPool, code: &str) -> Fx {
@@ -76,6 +77,7 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
         task_id,
         delivery_run_id,
         review_run_id,
+        human_id: boot.human_id,
     }
 }
 
@@ -270,4 +272,35 @@ async fn concurrent_terminal_writers_cannot_overwrite_each_other(pool: PgPool) {
     .await
     .unwrap();
     assert!(final_status == "succeeded" || final_status == "failed");
+}
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn project_archive_cancels_active_reviewer_run(pool: PgPool) {
+    let fx = seed(&pool, "PA08-RG-ARCHIVE").await;
+    sqlx::query("UPDATE delivery.task_run SET status = 'running' WHERE id = $1")
+        .bind(fx.review_run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    pm_application::archive::close_project(
+        &pool,
+        &pm_application::run_dispatch::NoopExecutor,
+        &pm_application::actor::AuditActor::principal(fx.human_id),
+        SYSTEM_TENANT,
+        fx.project_id,
+        "pa08-review-run-archive",
+    )
+    .await
+    .unwrap();
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(fx.review_run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "cancelled");
 }
