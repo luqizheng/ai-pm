@@ -132,15 +132,40 @@ async fn main() {
         let mut stats_ticks = 0u32;
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
         let mode = pm_application::run_dispatch::DispatchMode::from_env();
+        let executor_mode = std::env::var("AI_PM_RUN_EXECUTOR");
+        let codex_executor_enabled = matches!(executor_mode.as_deref(), Ok("codex") | Ok("mock"));
         let run_executor: Arc<dyn pm_application::run_dispatch::RunExecutor> =
-            match std::env::var("AI_PM_RUN_EXECUTOR").as_deref() {
-                Ok("codex") | Ok("mock") => {
-                    Arc::new(pm_infrastructure::codex_executor::CodexExecutor::from_env(
-                        dispatch_pool.clone(),
-                    ))
-                }
-                _ => Arc::new(pm_application::run_dispatch::NoopExecutor),
+            if codex_executor_enabled {
+                Arc::new(pm_infrastructure::codex_executor::CodexExecutor::from_env(
+                    dispatch_pool.clone(),
+                ))
+            } else {
+                Arc::new(pm_application::run_dispatch::NoopExecutor)
             };
+        // PA08-04: discovery is metadata-only and always safe to run. Actual
+        // filesystem deletion requires the explicit opt-in below and a Codex
+        // executor; the default remains dry-run (stage candidates, delete none).
+        let reclamation_enabled = std::env::var("AI_PM_WORKSPACE_RECLAMATION_ENABLED")
+            .map(|value| value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let reclamation_retention_days = std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
+            .ok()
+            .and_then(|value| value.parse::<i32>().ok())
+            .unwrap_or(pm_application::workspace_reclamation::DEFAULT_RETENTION_DAYS);
+        let workspace_reclaimer: Option<
+            Arc<dyn pm_application::workspace_reclamation::WorkspaceReclaimer>,
+        > = if codex_executor_enabled {
+            Some(Arc::new(
+                pm_infrastructure::codex_executor::CodexExecutor::from_env(dispatch_pool.clone()),
+            ))
+        } else {
+            None
+        };
+        tracing::info!(
+            enabled = reclamation_enabled,
+            retention_days = reclamation_retention_days,
+            "workspace reclamation policy loaded (deletion defaults off)"
+        );
         // 启动时一次孤儿 reconcile（T-030 §3 异常路径②）；失败只告警。
         match pm_application::run_executor::reconcile_orphans(
             &dispatch_pool,
@@ -241,6 +266,51 @@ async fn main() {
                         }
                     }
                     Err(e) => tracing::warn!(error = %e, "comm_overview failed"),
+                }
+
+                match pm_application::workspace_reclamation::stage_candidates(
+                    &dispatch_pool,
+                    reclamation_retention_days,
+                )
+                .await
+                {
+                    Ok(staged) if staged > 0 => {
+                        tracing::info!(staged, "workspace reclamation candidates staged");
+                    }
+                    Ok(_) => {}
+                    Err(error) => tracing::warn!(
+                        error = %error,
+                        "workspace reclamation candidate discovery failed"
+                    ),
+                }
+
+                if reclamation_enabled {
+                    if let Some(reclaimer) = workspace_reclaimer.as_deref() {
+                        match pm_application::workspace_reclamation::run_worktree_reclamation_round(
+                            &dispatch_pool,
+                            reclaimer,
+                            reclamation_retention_days,
+                        )
+                        .await
+                        {
+                            Ok(report) if report.claimed > 0 => tracing::info!(
+                                claimed = report.claimed,
+                                completed = report.completed,
+                                failed = report.failed,
+                                skipped = report.skipped,
+                                "Run worktree reclamation round"
+                            ),
+                            Ok(_) => {}
+                            Err(error) => tracing::warn!(
+                                error = %error,
+                                "Run worktree reclamation round failed"
+                            ),
+                        }
+                    } else {
+                        tracing::warn!(
+                            "workspace reclamation enabled but Codex executor is not configured"
+                        );
+                    }
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
