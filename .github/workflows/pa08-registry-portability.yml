@@ -110,6 +110,11 @@ jobs:
   linux-test-archive:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # CI executes the test binaries; full DWARF is not required for coverage or
+    # assertions and inflates the multi-GB archive downloaded by every shard.
+    # Keep debug assertions/overflow checks at Cargo's test-profile defaults.
+    env:
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
