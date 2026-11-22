@@ -237,7 +237,6 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         &root,
         &[],
         None,
-        &[],
     ).expect("spawn long-lived child");
 
     let mut run = ActiveRun {
