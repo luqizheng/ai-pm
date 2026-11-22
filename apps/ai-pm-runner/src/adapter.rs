@@ -305,6 +305,14 @@ pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
     let expected = report.record.identity_hint.as_deref().ok_or_else(|| {
         AdapterError::Invalid("orphan process has no identity anchor; refusing unsafe termination".into())
     })?;
+    #[cfg(unix)]
+    if !expected.starts_with("proc-start-") {
+        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Unix host".into()));
+    }
+    #[cfg(windows)]
+    if !expected.starts_with("win-ft-") {
+        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Windows host".into()));
+    }
     let Some(actual) = process_identity_hint(report.record.pid) else {
         return Ok(());
     };
