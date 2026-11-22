@@ -898,12 +898,29 @@ async fn record_termination(
         // 心跳丢失 / 进展停滞：执行类失败（Agent 死锁 / 长期停滞），终态 failed。
         _ => "failed",
     };
+    let run_kind_text: Option<String> = sqlx::query_scalar(
+        "SELECT run_kind FROM delivery.task_run WHERE id = $1 AND project_id = $2",
+    )
+    .bind(run_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(run_kind_text) = run_kind_text else {
+        return Ok(false);
+    };
+    let run_kind = crate::run_transition_guard::RunKind::parse(&run_kind_text)
+        .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+    if run_kind == crate::run_transition_guard::RunKind::Review && reason_code != "project_closed" {
+        return Err(RunDispatchError::Transition(
+            "Reviewer Run cancellation is only permitted during Project archival".into(),
+        ));
+    }
     let mut tx = pool.begin().await?;
     let target_status = crate::run_transition_guard::RunStatus::parse(terminal)
         .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let from_status = match crate::run_transition_guard::lock_and_validate_transition(
         &mut tx, project_id, run_id,
-        crate::run_transition_guard::RunKind::Delivery,
+        run_kind,
         target_status,
     ).await {
         Ok(status) => status,
