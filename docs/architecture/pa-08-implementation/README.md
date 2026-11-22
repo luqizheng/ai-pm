@@ -10,7 +10,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 | ID | Workstream | Priority | Status |
 |---|---|---:|---|
 | PA08-00 | Baseline & inventory | P1 | IN PROGRESS |
-| PA08-01 | Registry portability | Foundation | IN PROGRESS |
+| PA08-01 | Registry portability | Foundation | IMPLEMENTED_UNVERIFIED |
 | PA08-02 | Runner lifecycle test harness | P1 | PLANNED |
 | PA08-03 | Run transition guard | P1 | PLANNED |
 | PA08-04 | Workspace / mirror reclamation | P1 | PLANNED |
