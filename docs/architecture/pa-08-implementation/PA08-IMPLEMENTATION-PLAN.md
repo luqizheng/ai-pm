@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle harness in progress)
+- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle harness verified; PA08-03 inventory started)
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -48,17 +48,17 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Hosted verification: [GitHub Actions Run #4](https://github.com/luqizheng/ai-pm/actions/runs/44967203110) completed successfully. Locked metadata, all four registry-source checks, and `cargo check --workspace --locked` passed.
 - Follow-up CI portability: `.github/workflows/pa07-blast-radius.yml` was moved from the now-unavailable `self-hosted, internal-registry` labels to `ubuntu-latest` for both jobs. The prior queued runs were infrastructure-blocked, not test failures; the new Hosted regression run is [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44968929358). PostgreSQL integration still explicitly skips unless `AIPM_TEST_DATABASE_URL` is configured.
 
-### PA08-02 — Runner lifecycle test harness — IN PROGRESS
+### PA08-02 — Runner lifecycle test harness — VERIFIED (initial acceptance slice)
 - Keep the production Runner state machine and MCP contract authoritative; add the smallest test seams needed rather than rewriting the execution model.
 - Initial integration slice added at `apps/ai-pm-runner/tests/pa08_lifecycle.rs`: production `claim_and_start` is exercised against scripted Wiremock MCP responses for ready-task discovery, claim, run-context retrieval, lease-owner routing identity, and real child-process spawn/cleanup. Empty-queue behavior is also covered.
 - A production `tick` test advances elapsed-time fields directly and verifies heartbeat renewal followed by command polling through the real MCP client, without wall-clock sleeps.
 - CI now runs `cargo test -p ai-pm-runner --tests --locked` after the workspace build. The initial claim/spawn + empty-queue slice passed [Run #7](https://github.com/luqizheng/ai-pm/actions/runs/44968483995); the expanded tick test passed in [Run #10](https://github.com/luqizheng/ai-pm/actions/runs/44968579673).
 - Runner does not call `pm_submit_result`: Agent submits delivery through MCP directly. Tests must not invent a Runner-side submit step; cover Agent submission separately at its protocol/contract boundary.
-- Additional command-path tests now exercise real child-process termination + ack through production polling, continue spawning + human-reply injection through production polling, and frozen-guard refusal. The corrected command-path suite passed in Hosted CI [Run #19](https://github.com/luqizheng/ai-pm/actions/runs/44968871944): workspace build and Runner integration tests both succeeded. The earlier [Run #14](https://github.com/luqizheng/ai-pm/actions/runs/44968788640) caught the extra `spawn_agent` argument and was fixed in commit `0281c40f940e703d6d7ede14bcf63b27eea9b73d`. A further reliability defect was found during this work: the heartbeat clock advanced before Platform confirmed renewal, delaying retries after transient HTTP failure. The update now advances the clock only after success, with a 503 regression test; validation is running in [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44969004043). Remaining coverage: restart recovery/reacquire, transport and lease failures, spawn failure, and delayed/duplicate responses.
+- Additional command-path tests exercise real child-process termination + ack through production polling, continue spawning + human-reply injection through production polling, and frozen-guard refusal. The command-path suite passed in [Run #19](https://github.com/luqizheng/ai-pm/actions/runs/44968871944). Heartbeat retry hardening (clock advances only after Platform confirms renewal) and its HTTP 503 regression test passed in [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44969004043). Restart recovery/reacquire, empty discovery, and spawn failure are now covered by production-path tests and passed in [Run #28](https://github.com/luqizheng/ai-pm/actions/runs/44969367934), including `cargo check --workspace --locked` and `cargo test -p ai-pm-runner --tests --locked`. This verifies the Runner lifecycle slice implemented so far; delayed/duplicate command responses and broader lease/transport failure injection remain follow-up coverage.
 - Next refactor target: isolate time/scheduling decisions and process lifecycle operations behind narrow seams only where needed by the remaining tests. Do not introduce production sleeps or a parallel test-only state machine.
 
-### PA08-03 — Run transition guard
-- 盘点所有 Run 状态写入点，建立唯一应用层转换守卫；状态值必须映射现有 Run 状态机，不另造简化状态枚举。
+### PA08-03 — Run transition guard — INVENTORY STARTED
+- Static write-path inventory committed at `PA08-03-RUN-TRANSITION-INVENTORY.md`; it distinguishes Delivery Runs from Reviewer Runs sharing `delivery.task_run` and records existing conditional SQL/lock protections.
 - 守卫统一校验合法边、终态不可覆盖、lease token / generation fencing、幂等重复事件及状态版本。
 - 数据库事务内完成锁定、校验和写入；禁止将外部进程/网络操作放入状态事务。
 - 将现有 claim、executor、lease、archive 写路径逐一迁入；保留必要的事务边界和审计/outbox 语义。
@@ -113,4 +113,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 仍在实施中；新增测试已进入 Runner CI，但在该测试运行成功前不视为通过。其余工作流尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；其余待补的延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 已完成静态写路径盘点，尚未修改生产状态写入。其余工作流尚未开始。本文件状态以代码、测试和 CI 证据为准。
