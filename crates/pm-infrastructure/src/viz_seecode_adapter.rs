@@ -51,7 +51,10 @@ impl SeeCodeAdapter {
             args,
             timeout: self.timeout,
             max_output_bytes: self.max_output_bytes,
-            extra_env: vec![],
+            extra_env: vec![(
+                "SEECODE_FONT_CACHE".to_string(),
+                font_cache_dir().to_string_lossy().into_owned(),
+            )],
             workdir: Some(workdir),
             payload_file: None,
         }
@@ -79,6 +82,16 @@ impl SeeCodeAdapter {
 /// Node 可执行名（Windows 是 `node.exe`，由 PATH 解析）。
 fn node_program() -> String {
     "node".to_string()
+}
+
+/// SeeCode CLI 的字体字节缓存目录（宿主视角的稳定路径）。
+///
+/// Google Fonts 对同一 css2 URL 每次请求返回字节不同的子集，会把「同输入
+/// 必须同输出」的渲染契约打破（回归基线的前提）。CLI 端按 URL 缓存字体
+/// 字节；而沙箱把子进程的 TMPDIR/TMP/TEMP/HOME 全部映射进每次渲染即焚的
+/// workdir，所以必须用 extra_env 把缓存目录显式钉在宿主临时目录上。
+fn font_cache_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("seecode-font-cache")
 }
 
 /// 从 CLI 的 JSON 单行输出里取 `out` 字段（相对/绝对路径都接受）。
