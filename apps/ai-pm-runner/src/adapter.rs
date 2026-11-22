@@ -305,8 +305,12 @@ pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
     let expected = report.record.identity_hint.as_deref().ok_or_else(|| {
         AdapterError::Invalid("orphan process has no identity anchor; refusing unsafe termination".into())
     })?;
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     if !expected.starts_with("proc-start-") {
+        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Unix host".into()));
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    if !expected.starts_with("ps-start-") {
         return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Unix host".into()));
     }
     #[cfg(windows)]
@@ -578,7 +582,7 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
             ))
         }
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
         // comm 可含空格/括号：取最后一个 ')' 之后；其后首字段 = state（第 3 列），
@@ -587,12 +591,22 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
         let fields: Vec<&str> = after.split_whitespace().collect();
         fields.get(19).map(|value| format!("proc-start-{value}"))
     }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "lstart=", "-p", &pid.to_string()])
+            .output()
+            .ok()?;
+        if !output.status.success() { return None; }
+        let started = String::from_utf8(output.stdout).ok()?.trim().to_string();
+        if started.is_empty() { None } else { Some(format!("ps-start-{started}")) }
+    }
 }
 
 /// Whether the process can still execute. Unix zombies are already stopped even
 /// though `/proc/{pid}` remains until the original parent reaps the exit status.
 fn process_is_running(pid: u32) -> bool {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
             return false;
@@ -601,6 +615,15 @@ fn process_is_running(pid: u32) -> bool {
             return false;
         };
         after.split_whitespace().next() != Some("Z")
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        let Ok(output) = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output() else { return false; };
+        if !output.status.success() { return false; }
+        let state = String::from_utf8_lossy(&output.stdout);
+        !state.trim().is_empty() && !state.trim().starts_with('Z')
     }
     #[cfg(windows)]
     {
