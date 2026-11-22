@@ -671,3 +671,87 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     .unwrap();
     assert_eq!(audits, 1, "only the accepted abandon transition is audited");
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
+    let w = product_world(pool.clone()).await;
+    let owner_token = token_for("usr-owner", 1);
+    let endpoint = format!("/v1/pm/products/{}/lifecycle", w.product_id);
+
+    for (action, expected_status) in [
+        ("suspend", "suspended"),
+        ("resume", "resuming"),
+        ("complete_resume", "normal"),
+    ] {
+        let (status, body) = call(
+            &w.app,
+            "POST",
+            &endpoint,
+            &owner_token,
+            Some(json!({ "action": action })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{action}: {body}");
+        assert_eq!(body["status"], json!(expected_status));
+    }
+
+    // A second resume cannot skip the Suspended state.
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "resume" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
+
+    // Archived is terminal for ordinary lifecycle actions.
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "abandon" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], json!("archived"));
+
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "complete_resume" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
+
+    let final_status: String =
+        sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
+            .bind(w.product_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(final_status, "archived");
+
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.tenant_audit_log \
+          WHERE action = 'product.lifecycle_changed' AND target_id = $1",
+    )
+    .bind(w.product_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 4, "invalid transitions must not write audit rows");
+}
