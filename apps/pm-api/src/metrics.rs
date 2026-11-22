@@ -146,5 +146,12 @@ mod tests {
         assert!(out.contains("ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
         assert!(out.contains("ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"));
         assert!(!out.contains("status="));
+        assert!(out.ends_with('\n'), "Prometheus exposition must end with a real newline");
+        assert!(out.lines().any(|line| line == "# HELP ai_pm_workspace_reclaimed_bytes_total Cumulative logical file bytes removed by workspace reclamation."));
+        assert!(out.lines().any(|line| line == "# TYPE ai_pm_workspace_reclaimed_bytes_total counter"));
+        assert!(out.lines().any(|line| line == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
+        assert!(out.lines().any(|line| line == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"));
+        assert!(!out.contains("\\\\n"), "must not emit literal backslash-n sequences");
+        assert!(!out.contains("\\\\\""), "labels must contain literal quotes, not escaped backslash-quote");
     }
 }
