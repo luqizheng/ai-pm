@@ -144,10 +144,22 @@ async fn main() {
             };
         // PA08-04: discovery is metadata-only and always safe to run. Actual
         // filesystem deletion requires the explicit opt-in below and a Codex
-        // executor; the default remains dry-run (stage candidates, delete none).
-        let reclamation_enabled = std::env::var("AI_PM_WORKSPACE_RECLAMATION_ENABLED")
+        // executor; the default is non-destructive discovery (stage ledger candidates, delete no files).
+        let reclamation_requested = std::env::var("AI_PM_WORKSPACE_RECLAMATION_ENABLED")
             .map(|value| value.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        // Local worktrees are host-owned. Deletion is enabled only when the
+        // operator explicitly confirms a shared workspace root (or a single
+        // worker owns the entire workspace volume).
+        let reclamation_shared_root = std::env::var("AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT")
+            .map(|value| value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let reclamation_enabled = reclamation_requested && reclamation_shared_root;
+        if reclamation_requested && !reclamation_shared_root {
+            tracing::warn!(
+                "workspace reclamation requested but shared-root acknowledgement is missing; deletion remains disabled"
+            );
+        }
         let reclamation_retention_days = std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
             .ok()
             .and_then(|value| value.parse::<i32>().ok())
