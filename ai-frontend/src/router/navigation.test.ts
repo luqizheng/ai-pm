@@ -108,9 +108,12 @@ describe("navigation", () => {
     for (const path of auxPaths) {
       expect(mainPaths).not.toContain(path);
     }
-    // PLANNED 占位项显式标记（Product Cognition；能力不得伪装已上线）
-    const planned = auxiliaryNavItems.filter(i => i.planned).map(i => i.path);
-    expect(planned).toEqual(["/project/product-cognition"]);
+    // Product Cognition 已接入真实页面；V1 不再把它标为 PLANNED。
+    const productCognition = auxiliaryNavItems.find(
+      i => i.path === "/project/product-cognition"
+    );
+    expect(productCognition?.planned).not.toBe(true);
+    expect(productCognition?.component).toBeTypeOf("function");
   });
 
   it("所有导航项的 path 唯一且以 / 开头", () => {
