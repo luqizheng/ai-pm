@@ -65,21 +65,23 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Real PostgreSQL evidence: [Run #52](https://github.com/luqizheng/ai-pm/actions/runs/44970075346) passed guard integration + unit tests; [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926) passed again with the active Reviewer archive cancellation scenario.
 - Latest Project-scoped infrastructure exhaustion compare-and-set hardening is pending [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176). Remaining gates: claim-vs-archive and stale lease token/generation concurrency tests.
 
-### PA08-04 — Workspace / mirror reclamation — RUN WORKTREE PATH VERIFIED; MIRROR DELETE DEFERRED
+### PA08-04 — Workspace / mirror reclamation — WORKER WIRED; DEFAULT-OFF; HOSTED VERIFYING
 - Added migrations `0054` and `0055`: atomic process-cleanup claims with lease/fencing, and a separate worktree/mirror reclamation ledger.
 - Candidate staging is idempotent and metadata-only. Default retention is 30 days; Run worktrees require terminal retention and completed process cleanup; archived mirrors require no active Run or unfinished cleanup reference.
-- CodexExecutor now has guarded worktree/mirror primitives: canonical path checks, symlink rejection, shared mirror lock, Git worktree remove/prune, and linked-worktree refusal before mirror deletion.
-- The Worker stages candidates periodically but deletes nothing by default. Run-worktree deletion requires explicit enablement plus shared-root acknowledgement and an absolute workspace root. It claims only Run worktrees, revalidates eligibility/fencing, and records completion only after filesystem success.
-- Mirror candidates are not claimed or deleted yet; add Repository row-lock coordination for archive/unarchive before enabling mirror deletion.
-- Real PostgreSQL and filesystem/real-Git tests passed in Hosted [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988).
-- Remaining PA08-04 gates: operational needs-human query/requeue, mirror lifecycle concurrency guard, and observability integration.
+- CodexExecutor has guarded worktree/mirror primitives: canonical path checks, symlink rejection, shared mirror lock, Git worktree remove/prune, and linked-worktree refusal before mirror deletion.
+- Worker now runs both Run-worktree and Repository-mirror rounds. Mirror reclamation locks the Repository row and keeps that transaction open through the filesystem adapter, serializing against Repository archive/update writes; the existing mirror lock and Git linked-worktree checks remain in force.
+- File deletion is disabled by default. Enablement requires `AI_PM_WORKSPACE_RECLAMATION_ENABLED=true`, `AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT=true`, and an absolute `AI_PM_WORKSPACE_ROOT`. The Worker performs fenced claims and a second DB eligibility check before filesystem operations.
+- Added `needs_human` listing and explicit operator requeue application operations. Backlog/bytes metrics remain PA08-06.
+- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). The expanded mirror-lock and worker integration suite is being revalidated in [Run #131](https://github.com/luqizheng/ai-pm/actions/runs/44974426580); Run #130 caught a stale assertion in the mirror staging test, which was corrected before the latest run.
+- Remaining PA08-04 gates: confirm latest Hosted CI success and integrate reclamation backlog/bytes into PA08-06 observability.
 
-### PA08-05 — Product lifecycle integrity
-- 先从 PA-07 目标状态图映射当前字段与迁移；不把业务 lifecycle 与 execution state 混为一谈。
-- 对所有状态转换校验源状态、目标状态和允许的操作者/前置条件；非法跳转返回稳定错误且无副作用。
-- 通过事务锁/版本检查处理 Product 状态变化与 Run claim/start 竞争。
-- 补齐 IMP-003 §12.3 场景 4–6 以及重复请求、并发暂停/恢复、恢复中再次暂停的 E2E。
-- 不批量改写 Task 状态；Product 状态与 Task/Run 状态继续隔离。
+### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFYING
+- Added an explicit source-state/action matrix from PA-07 §§4/11/12: `normal → suspended → resuming → normal`, with `resuming → suspended` for a renewed pause and `abandon → archived` from non-archived states.
+- Archived is terminal for ordinary lifecycle operations. Removed the legacy `restart` shortcut because it allowed `archived → normal`, contrary to PA-07 §12. Resume must not bypass Portfolio Review.
+- Product Owner authorization, Product row lock, source-state validation, status update, and lifecycle audit remain one transaction. Invalid transitions have no DML or audit side effects.
+- Added API integration coverage for the complete suspend/resume sequence, invalid source-state actions, archived terminal behavior, and audit invariance. See [PA08-05 Product Lifecycle Inventory](PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md).
+- Hosted verification: [Run #133](https://github.com/luqizheng/ai-pm/actions/runs/44974739861) is in progress. Concurrency coverage for Product lifecycle vs Run claim/start remains to be completed.
+
 
 ### PA08-06 — Runtime observability
 - 提供可抓取的 Prometheus 格式指标或仓库既有指标协议；优先复用现有依赖和运行时。
@@ -117,4 +119,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 的 Run worktree 回收路径已实现并通过 Hosted Run #117；生产删除默认关闭，mirror 仅登记候选、尚不自动删除。PA08-05 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 已接入 Run worktree 与 Repository mirror 两种回收轮次，生产删除默认关闭；扩展镜像锁与 Worker 验证正在 Hosted CI 中进行。PA08-05 已实现 PA-07 Product 状态源状态校验，Hosted CI 与并发覆盖仍在进行；PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
