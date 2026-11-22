@@ -648,7 +648,7 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     assert_eq!(body["message"], json!("product_abandoned"));
 
     // PA-07 §12: Archived is not ordinarily restorable. The legacy
-    // restart action must not bypass Suspended -> Resuming -> Normal.
+    // restart alias is valid only from Resuming -> Normal.
     let (st, body) = call(
         &w.app,
         "POST",
@@ -657,8 +657,11 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
         Some(json!({ "action": "restart" })),
     )
     .await;
-    assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(body["status"], json!("error"));
+    assert_eq!(st, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
 
     // 生命周期审计。
     let audits: i64 = sqlx::query_scalar(
