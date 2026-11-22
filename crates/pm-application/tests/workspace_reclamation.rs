@@ -274,3 +274,78 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
     assert!(row.1.is_none());
     assert_eq!(row.2, format!("git-mirror/{}", fx.repository_id));
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-FENCING").await;
+    sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let first = pm_application::workspace_reclamation::claim_batch(&pool)
+        .await
+        .unwrap();
+    assert_eq!(first.len(), 1);
+    let old = first[0].clone();
+    assert!(
+        pm_application::workspace_reclamation::revalidate_candidate(&pool, &old, 30)
+            .await
+            .unwrap()
+    );
+
+    sqlx::query(
+        "UPDATE delivery.workspace_reclamation SET next_retry_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(old.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let second = pm_application::workspace_reclamation::claim_batch(&pool)
+        .await
+        .unwrap();
+    assert_eq!(second.len(), 1);
+    let current = second[0].clone();
+    assert_ne!(old.claim_token, current.claim_token);
+
+    let old_token = old.claim_token.unwrap();
+    let current_token = current.claim_token.unwrap();
+    assert!(
+        !pm_application::workspace_reclamation::mark_completed(&pool, old.id, old_token)
+            .await
+            .unwrap(),
+        "stale claimant cannot complete a newer claim"
+    );
+    assert!(
+        !pm_application::workspace_reclamation::revalidate_candidate(&pool, &old, 30)
+            .await
+            .unwrap(),
+        "stale claimant must fail the second eligibility check"
+    );
+    assert!(
+        pm_application::workspace_reclamation::revalidate_candidate(&pool, &current, 30)
+            .await
+            .unwrap()
+    );
+    assert!(
+        pm_application::workspace_reclamation::mark_failed(
+            &pool,
+            current.id,
+            current_token,
+            "simulated filesystem failure",
+            60,
+        )
+        .await
+        .unwrap()
+    );
+}
