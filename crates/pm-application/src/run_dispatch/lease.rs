@@ -121,7 +121,7 @@ pub(crate) async fn requeue_with_backoff(
                 next_dispatch_at = now() + make_interval(secs => \
                     LEAST($3::float8, power(2, dispatch_attempts))::float8), \
                 release_reason = $2 \
-          WHERE id = $1",
+          WHERE id = $1 AND status = 'queued'",
     )
     .bind(run_id)
     .bind(reason)
@@ -134,6 +134,7 @@ pub(crate) async fn requeue_with_backoff(
 /// 同事务内把 Run 重置回可领取的 `queued`（不递增 dispatch_attempts）。
 pub(crate) async fn requeue_for_redispatch(
     tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
     run_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     let from_status = crate::run_transition_guard::lock_and_validate_transition(
