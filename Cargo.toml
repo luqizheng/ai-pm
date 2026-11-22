@@ -77,21 +77,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Dev dependencies
 wiremock = "0.6"
-# lmms 基座 crates（kellnr 私有 registry；token 在 ~/.cargo/credentials.toml [registries.kellnr]）
+# lmms 基座 crates（公开 crates.io 发行版）
 #
-# 2026-11-09 起改走 kellnr 发行版，本仓不再维护 vendor/ 源码快照。两条理由：
-#   ① 快照必漂移——本次核对发现仓内快照（common-jwt 取自 lmms @5022fd76）已
-#      落后于 lmms 现行源码，而 kellnr 上的 1.6.0 更旧（common-jwt 的 per-tenant
-#      铸造缓存整块缺失）；快照与发行版两头都不准。
-#   ② 违背上游规约——lmms AGENTS.md「跨仓库分发」明写：发版 = 镜像 + 各种包，
-#      下游走包升级，不做源码级同步。Rust 侧发布目标就是 kellnr。
-# 升级方式：lmms 发新版 → cargo update -p digua_file_sdk（等 kellnr 索引可见）。
-#
-# TLS 后端：本仓 reqwest 钉 native-tls（Windows schannel / Linux openssl，零 C
-# 编译依赖），所以这四个 crate 一律 default-features = false + tls-native。
-# lmms 1.7.0 起把 TLS 后端做成可选 feature 轴（默认仍是 tls-rustls）；不关
-# default features 的话 reqwest 会被 union 上 rustls-tls-webpki-roots，把
-# aws-lc-sys（cmake + C 编译器）拖进本仓的构建机与容器镜像。
-digua_common_jwt = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
-digua_common_consul = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
-digua_file_sdk = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
+# lmms 发版后，下游通过 crates.io 版本升级；不做源码级同步。
+# 所有依赖保持 default-features = false + tls-native，避免意外引入
+# rustls/aws-lc-sys 构建链并保持 reqwest 的 native-tls 后端一致。
+digua_common_jwt = { version = "1.7.0", default-features = false, features = ["tls-native"] }
+digua_common_consul = { version = "1.7.0", default-features = false, features = ["tls-native"] }
+digua_file_sdk = { version = "1.7.0", default-features = false, features = ["tls-native"] }
