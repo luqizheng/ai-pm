@@ -267,15 +267,8 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
             }
         }
     }
-    // I1：启动自检——轻量调用验证凭据；401/403 即退出（不进入 401 循环）。
-    if let Err(e) = client.list_ready_tasks(cfg.project_id).await {
-        if e.is_unauthorized() {
-            tracing::error!(error = %e, "credential self-check failed; exiting (supervisor will restart after human action)");
-            return Err(e);
-        }
-        tracing::warn!(error = %e, "startup probe failed (non-credential); continuing");
-    }
-
+    // pm_discover_runs is both the authenticated startup probe and the recovery
+    // gate. Do not list or claim Tasks until recovery state is explicitly known.
     let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await?;
     let mut logged_awaiting = false;
     let mut lease_lost_cleanup_pending = false;
