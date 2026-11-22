@@ -494,7 +494,8 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
         .respond_with(structured(json!({ "runs": [{
             "run_id": run_id,
             "task_id": task_id,
-            "interaction_id": interaction_id
+            "interaction_id": interaction_id,
+            "lease_generation": 13
         }] })))
         .expect(1)
         .mount(&server).await;
@@ -538,6 +539,50 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
     assert!(recovered.process.is_none(), "recovery must not invent a local child handle");
     assert!(recovered.awaiting_continue);
     assert!(root.join(run_id.to_string()).is_dir());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A replacement Runner must reject a reacquire response that does not advance
+/// the discovered generation; the old Agent must remain fenced out.
+#[tokio::test]
+async fn restart_recovery_rejects_non_advancing_lease_generation() {
+    let server = MockServer::start().await;
+    let task_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "runs": [{
+            "run_id": run_id,
+            "task_id": task_id,
+            "lease_generation": 14
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_reacquire_lease",
+                "arguments": { "project_id": Uuid::nil(), "run_id": run_id }
+            }
+        })))
+        .respond_with(structured(json!({
+            "lease_token": "stale-generation-token",
+            "lease_generation": 14,
+            "worker_id": "client:pa08-test-device"
+        })))
+        .expect(1)
+        .mount(&server).await;
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let error = recover_inflight_run(&cfg, &client).await.expect_err("same generation must not fence old Agent");
+    assert!(error.to_string().contains("did not fence prior generation"));
     let _ = std::fs::remove_dir_all(root);
 }
 
