@@ -154,10 +154,15 @@ async fn main() {
         let reclamation_shared_root = std::env::var("AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT")
             .map(|value| value.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        let reclamation_enabled = reclamation_requested && reclamation_shared_root;
-        if reclamation_requested && !reclamation_shared_root {
+        let reclamation_root_is_absolute = std::path::Path::new(
+            &pm_application::run_dispatch::workspace_root_from_env(),
+        )
+        .is_absolute();
+        let reclamation_enabled =
+            reclamation_requested && reclamation_shared_root && reclamation_root_is_absolute;
+        if reclamation_requested && !reclamation_enabled {
             tracing::warn!(
-                "workspace reclamation requested but shared-root acknowledgement is missing; deletion remains disabled"
+                "workspace reclamation requested without shared-root acknowledgement and absolute workspace root; deletion remains disabled"
             );
         }
         let reclamation_retention_days = std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
