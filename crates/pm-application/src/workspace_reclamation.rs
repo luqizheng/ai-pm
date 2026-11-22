@@ -130,7 +130,10 @@ pub async fn stage_candidates(
                        ) \
                    ) \
             ) \
-         ON CONFLICT DO NOTHING",
+         ON CONFLICT (repository_id) WHERE resource_kind = 'repository_mirror' \
+         DO UPDATE SET status = 'pending', attempts = 0, next_retry_at = now(), \
+                       claim_token = NULL, last_error = NULL, completed_at = NULL, updated_at = now() \
+         WHERE workspace_reclamation.status = 'completed'",
     )
     .bind(retention_days)
     .execute(&mut *tx)
