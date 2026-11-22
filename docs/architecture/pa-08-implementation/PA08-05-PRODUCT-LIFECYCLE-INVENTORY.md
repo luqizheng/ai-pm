@@ -21,14 +21,14 @@ Relevant baseline: PA-07 §§4, 11, and 12. In particular, a Product leaving `su
 | normal | abandon | archived | Allowed |
 | suspended | resume | resuming | Allowed |
 | suspended | abandon | archived | Allowed |
-| resuming | complete_resume | normal | Allowed |
+| resuming | complete_resume / restart | normal | Allowed (`restart` is a compatibility alias) |
 | resuming | suspend | suspended | Allowed (a new pause event) |
 | resuming | abandon | archived | Allowed |
 | archived | any ordinary lifecycle action | — | Rejected |
 
 All other source/action combinations are rejected with `product_lifecycle_transition_invalid`. Repeating an action whose target equals the current state remains a `product_lifecycle_noop` conflict. Unknown actions return validation error.
 
-The legacy `restart` action was removed. It previously allowed `archived → normal`, contradicting PA-07 §12. It must not be used as a shortcut around the mandatory `suspended → resuming → normal` recovery process. No archived Product restoration API is introduced.
+The legacy `restart` action is retained only as a compatibility alias for `resuming → normal`, matching migration 0044 while preserving PA-07's mandatory `suspended → resuming → normal` sequence. It is rejected from `normal`, `suspended`, and `archived`; in particular it cannot restore an archived Product. No archived Product restoration API is introduced.
 
 ## 3. Transaction and authorization boundary
 
