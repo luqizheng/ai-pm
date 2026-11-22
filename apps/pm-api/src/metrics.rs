@@ -56,25 +56,25 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
     }
 
     let reclamation: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT resource_kind, status, count(*)::bigint \\
-           FROM delivery.workspace_reclamation \\
+        "SELECT resource_kind, status, count(*)::bigint \
+           FROM delivery.workspace_reclamation \
           GROUP BY resource_kind, status ORDER BY resource_kind, status",
     )
     .fetch_all(pool)
     .await?;
-    out.push_str("# HELP ai_pm_workspace_reclamation_backlog Number of reclamation records by resource kind and status.\\n");
-    out.push_str("# TYPE ai_pm_workspace_reclamation_backlog gauge\\n");
+    out.push_str("# HELP ai_pm_workspace_reclamation_backlog Number of reclamation records by resource kind and status.\n");
+    out.push_str("# TYPE ai_pm_workspace_reclamation_backlog gauge\n");
     for (kind, status, count) in reclamation {
         let kind = escape_label(&kind);
         let status = escape_label(&status);
         out.push_str(&format!(
-            "ai_pm_workspace_reclamation_backlog{{resource_kind=\\\"{kind}\\\",status=\\\"{status}\\\"}} {count}\\n"
+            "ai_pm_workspace_reclamation_backlog{{resource_kind=\"{kind}\",status=\"{status}\"}} {count}\n"
         ));
     }
 
     let reclaimed: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT resource_kind, total_reclaimed_bytes \\
-           FROM delivery.workspace_reclamation_totals \\
+        "SELECT resource_kind, total_reclaimed_bytes \
+           FROM delivery.workspace_reclamation_totals \
           ORDER BY resource_kind",
     )
     .fetch_all(pool)
@@ -117,12 +117,12 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
 }
 
 fn append_reclaimed_bytes_metric(out: &mut String, reclaimed: &[(String, i64)]) {
-    out.push_str("# HELP ai_pm_workspace_reclaimed_bytes_total Cumulative logical file bytes removed by workspace reclamation.\\n");
-    out.push_str("# TYPE ai_pm_workspace_reclaimed_bytes_total counter\\n");
+    out.push_str("# HELP ai_pm_workspace_reclaimed_bytes_total Cumulative logical file bytes removed by workspace reclamation.\n");
+    out.push_str("# TYPE ai_pm_workspace_reclaimed_bytes_total counter\n");
     for (kind, total_bytes) in reclaimed {
         let kind = escape_label(kind);
         out.push_str(&format!(
-            "ai_pm_workspace_reclaimed_bytes_total{{resource_kind=\\\"{kind}\\\"}} {total_bytes}\\n"
+            "ai_pm_workspace_reclaimed_bytes_total{{resource_kind=\"{kind}\"}} {total_bytes}\n"
         ));
     }
 }
