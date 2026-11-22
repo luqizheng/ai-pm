@@ -2,7 +2,7 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_context::{get_run_context, hash_lease_token, LeaseError};
-use pm_application::run_dispatch::{claim_task_run, RunDispatchConfig, RunExecutor, NoopExecutor};
+use pm_application::run_dispatch::{claim_task_run, RunDispatchConfig, NoopExecutor};
 use pm_application::run_transition_guard::{
     lock_and_validate_transition, RunKind, RunStatus, RunTransitionError,
     RunTransitionGuardError,
@@ -17,7 +17,6 @@ struct Fx {
     delivery_run_id: Uuid,
     review_run_id: Uuid,
     human_id: Uuid,
-    agent_id: Uuid,
 }
 
 async fn seed(pool: &PgPool, code: &str) -> Fx {
@@ -105,7 +104,6 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
         delivery_run_id,
         review_run_id,
         human_id: boot.human_id,
-        agent_id,
     }
 }
 
@@ -335,10 +333,7 @@ async fn project_archive_cancels_active_reviewer_run(pool: PgPool) {
 
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn stale_lease_token_and_generation_remain_fenced() {
-    let pool = sqlx::PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-        .await
-        .unwrap();
+async fn stale_lease_token_and_generation_remain_fenced(pool: PgPool) {
     let fx = seed(&pool, "PA08-RG-FENCING").await;
     let token = "pa08-current-lease-token";
     sqlx::query(
