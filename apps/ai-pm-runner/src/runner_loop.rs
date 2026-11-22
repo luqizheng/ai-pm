@@ -164,7 +164,12 @@ pub async fn recover_inflight_run(
         .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid task_id".into()))?;
-    let previous_generation = entry.get("lease_generation").and_then(Value::as_i64).unwrap_or(0);
+    let previous_generation = match entry.get("lease_generation") {
+        Some(value) => value.as_i64().filter(|generation| *generation > 0).ok_or_else(|| {
+            mcp::RunnerError::Malformed("discovered Run has an invalid lease_generation".into())
+        })?,
+        None => 0,
+    };
 
     let mut last_error = None;
     let mut reacquired = None;
