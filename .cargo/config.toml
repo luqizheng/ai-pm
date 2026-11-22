@@ -2,13 +2,7 @@
 [build]
 rustc-wrapper = "sccache"
 
-# crates.io 走 rsproxy 镜像（与 lmms 根 .cargo/config.toml 同款，国内直连不依赖代理）
-[source.crates-io]
-replace-with = "rsproxy-sparse"
-
-[source.rsproxy-sparse]
-registry = "sparse+https://rsproxy.cn/index/"
-
+# Public crates are resolved directly from crates.io.
 # Digua dependencies are published on crates.io; no private registry is required.
 # rust-lld 链接器（仅 Windows MSVC host；Linux/Docker 构建不受影响）。
 # 实测 lld 比 link.exe 快 ~35–40%，本仓 pm-api / pm-worker / ai-pm-worker
