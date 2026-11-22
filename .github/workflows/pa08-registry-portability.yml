@@ -49,23 +49,7 @@ jobs:
 
   public-registry-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +61,7 @@ jobs:
       - name: Verify all Digua crates resolve from crates.io
         shell: bash
         run: |
+          set -euo pipefail
           for crate in digua_common_jwt digua_common_consul digua_file_sdk digua_http_client; do
             grep -A3 -F "name = \"$crate\"" Cargo.lock | grep -F "registry+https://github.com/rust-lang/crates.io-index"
           done
@@ -87,47 +72,15 @@ jobs:
       - name: Verify SQLx migration versions are unique
         shell: bash
         run: |
+          set -euo pipefail
           duplicates="$(find migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sed -E 's/^([0-9]+)_.*/\1/' | sort | uniq -d)"
           if [[ -n "$duplicates" ]]; then
             echo "Duplicate SQLx migration versions: $duplicates"
             exit 1
           fi
           echo "All SQLx migration versions are unique."
-      # Keep the frozen shared-document-container boundary visible as its own gate;
-      # it also runs in the full workspace suite below.
-      - name: Verify ADR-06a shared document container boundary
-        run: cargo test -p kb-pc-contracts --test guard_ai_container_users --locked
-      - name: Verify audit actor identity coverage
-        run: cargo test -p pm-application --test audit_actor_coverage --locked
-      - name: Run full workspace test suite
-        run: cargo test --workspace --locked
-      - name: Run Runner integration tests
-        run: cargo test -p ai-pm-runner --tests --locked
-      - name: Run Runner metrics exporter unit tests
-        run: cargo test -p ai-pm-runner --lib metrics::tests --locked
-      - name: Run Worker filesystem metrics unit tests
-        run: cargo test -p ai-pm-worker --bin ai-pm-worker metrics::tests --locked
-      - name: Run Run transition guard PostgreSQL integration tests
-        run: cargo test -p pm-application --test run_transition_guard --locked
-      - name: Run process cleanup PostgreSQL integration tests
-        run: cargo test -p pm-application --test run_cleanup --locked
-      - name: Run workspace reclamation ledger PostgreSQL integration tests
-        run: cargo test -p pm-application --test workspace_reclamation --locked
-      - name: Run Product lifecycle API integration tests
-        run: cargo test -p pm-api --test product_domain --locked
-      - name: Run Product gate vs Run claim concurrency integration tests
-        run: cargo test -p pm-api --test run_claim_lifecycle --locked
-      - name: Run application transition guard unit tests
-        run: cargo test -p pm-application --lib run_transition_guard --locked
-      - name: Run Codex reclamation path safety unit tests
-        run: cargo test -p pm-infrastructure codex_executor::imp008_tests --locked
-      - name: Run PA08-06 metrics exposition unit tests
-        run: cargo test -p pm-api --lib metrics::tests --locked
-      - name: Run PA08-06 authenticated metrics HTTP integration tests
-        run: cargo test -p pm-api --test auth metrics_endpoint --locked
       - name: Validate PA08-06 Prometheus alert rules
         run: docker run --rm --entrypoint /bin/promtool -v "$PWD/infrastructure/monitoring/pa08-alerts.yml:/etc/prometheus/pa08-alerts.yml:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/pa08-alerts.yml
-      # Check only Rust files changed by this PR/push; unrelated repository formatting debt is tracked separately.
       - name: Check Rust formatting for changed files
         shell: bash
         env:
@@ -152,8 +105,107 @@ jobs:
             exit 0
           fi
           echo "Checking ${#files[@]} changed Rust files."
-          # reorder_modules=false：master 的 lib.rs mod 排列本身不是字母序（master
-          # 无 fmt 门），rustfmt 默认会重排 mod 声明，导致任何包含 master 现有
-          # lib.rs 的 PR merge 树必然挂本步——与本 PR 内容无关的 gate 设计缺陷。
-          # 关掉重排后其余 rustfmt 检查（缩进/行宽等）全部保留。
           rustfmt --edition 2021 --check --config skip_children=true,reorder_modules=false "${files[@]}"
+
+  linux-test-archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and archive the complete workspace test suite
+        run: cargo nextest archive --workspace --locked --archive-file nextest-archive.tar.zst --zstd-level 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pa08-linux-nextest-archive
+          path: nextest-archive.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  linux-test-shards:
+    name: Linux full tests (shard ${{ matrix.shard }}/4)
+    needs: linux-test-archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: pa08-linux-nextest-archive
+      - name: Tune disposable PostgreSQL test service
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_container="$(docker ps --filter 'ancestor=postgres:16' --format '{{.ID}}' | head -n1)"
+          test -n "$pg_container"
+          docker exec "$pg_container" psql -U postgres -d postgres \
+            -c "ALTER SYSTEM SET fsync = 'off';" \
+            -c "ALTER SYSTEM SET full_page_writes = 'off';" \
+            -c "ALTER SYSTEM SET synchronous_commit = 'off';" \
+            -c "ALTER SYSTEM SET max_locks_per_transaction = '1024';" \
+            -c "ALTER SYSTEM SET max_wal_size = '4GB';" \
+            -c "ALTER SYSTEM SET checkpoint_timeout = '30min';"
+          docker restart "$pg_container" >/dev/null
+          for attempt in $(seq 1 60); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres
+          psql "$DATABASE_URL" -Atc "SHOW max_locks_per_transaction;"
+      - name: Seed disposable PostgreSQL template with current migrations
+        run: cargo run --locked -p pm-application --example seed_template1
+      - name: Run this complete-workspace test partition
+        run: cargo nextest run --archive-file nextest-archive.tar.zst --partition hash:${{ matrix.shard }}/4 --test-threads 2 --no-fail-fast
+
+  linux-doctests:
+    name: Linux workspace doctests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run all workspace doctests
+        run: cargo test --workspace --doc --locked
