@@ -40,6 +40,8 @@ pub struct CleanupEntry {
     pub max_attempts: i32,
     pub next_retry_at: DateTime<Utc>,
     pub last_error: Option<String>,
+    /// Fencing token for the current cleaning lease; absent outside a claim.
+    pub claim_token: Option<Uuid>,
 }
 
 /// 登记一条待清理记录（撤凭据时调用；幂等——同 Run 已在账本则不覆盖）。
@@ -63,86 +65,84 @@ pub async fn enqueue(
 }
 
 /// 领取一批到期待清理记录（`FOR UPDATE SKIP LOCKED`：多清理 Worker 安全）。
+const CLEANUP_CLAIM_LEASE_SECS: f64 = 300.0;
+
+/// Atomically claim due cleanup rows and fence each claim with a fresh token.
+/// `next_retry_at` is the claim lease expiry while status is `cleaning`; a
+/// crashed worker becomes reclaimable only after that deadline.
 pub async fn claim_batch(pool: &PgPool) -> Result<Vec<CleanupEntry>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, CleanupEntry>(
-        "SELECT run_id, session, executor_kind, identity_hint, status, \
-                attempts, max_attempts, next_retry_at, last_error \
-           FROM delivery.task_run_cleanup \
-          WHERE status IN ('pending', 'cleaning') AND next_retry_at <= now() \
-          ORDER BY next_retry_at \
-          LIMIT $1 \
-          FOR UPDATE SKIP LOCKED",
-    )
-    .bind(CLEANUP_BATCH_LIMIT)
-    .fetch_all(pool)
-    .await?;
-    // 标记为 cleaning（事务外持久化——claim_batch 自带短事务即可）。
-    if rows.is_empty() {
-        return Ok(rows);
-    }
-    let ids: Vec<Uuid> = rows.iter().map(|row| row.run_id).collect();
-    sqlx::query(
-        "UPDATE delivery.task_run_cleanup SET status = 'cleaning', updated_at = now() \
-          WHERE run_id = ANY($1)",
-    )
-    .bind(&ids)
-    .execute(pool)
-    .await?;
-    Ok(rows)
-}
-
-/// 清理成功：置 completed（I1-031：**无时间窗**——超过一小时的残留同样能被发现）。
-pub async fn mark_completed(pool: &PgPool, run_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE delivery.task_run_cleanup \
-            SET status = 'completed', completed_at = now(), updated_at = now() \
-          WHERE run_id = $1",
-    )
-    .bind(run_id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// 清理失败：退避重试；达到阈值 → needs_human（I1-033：Worker 崩溃后行仍在
-/// 账本中，`cleaning` 状态的行到期后会被重新领取——崩溃可恢复）。
-pub async fn mark_failed(
-    pool: &PgPool,
-    run_id: Uuid,
-    error: &str,
-    backoff_secs: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE delivery.task_run_cleanup \
-            SET attempts = attempts + 1, \
-                status = CASE WHEN attempts + 1 >= max_attempts \
-                              THEN 'needs_human' ELSE 'pending' END, \
-                next_retry_at = now() + make_interval(secs => $2::float8), \
-                last_error = $3, updated_at = now() \
-          WHERE run_id = $1",
-    )
-    .bind(run_id)
-    .bind(backoff_secs as f64)
-    .bind(truncate_error(error))
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// 人工处理队列（I1-040：可查询、告警）。
-pub async fn list_needs_human(pool: &PgPool) -> Result<Vec<CleanupEntry>, sqlx::Error> {
     sqlx::query_as::<_, CleanupEntry>(
-        "SELECT run_id, session, executor_kind, identity_hint, status, \
-                attempts, max_attempts, next_retry_at, last_error \
-           FROM delivery.task_run_cleanup \
-          WHERE status = 'needs_human' \
-          ORDER BY created_at",
+        "WITH candidates AS (
+             SELECT run_id
+               FROM delivery.task_run_cleanup
+              WHERE status IN ('pending', 'cleaning')
+                AND next_retry_at <= now()
+              ORDER BY next_retry_at, created_at
+              LIMIT 32
+              FOR UPDATE SKIP LOCKED
+         )
+         UPDATE delivery.task_run_cleanup AS cleanup
+            SET status = 'cleaning',
+                claim_token = gen_random_uuid(),
+                next_retry_at = now() + make_interval(secs => $1::float8),
+                updated_at = now()
+           FROM candidates
+          WHERE cleanup.run_id = candidates.run_id
+         RETURNING cleanup.run_id, cleanup.session, cleanup.executor_kind,
+                   cleanup.pid, cleanup.process_started_at, cleanup.process_command,
+                   cleanup.status, cleanup.attempts, cleanup.max_attempts,
+                   cleanup.next_retry_at, cleanup.last_error, cleanup.claim_token",
     )
+    .bind(CLEANUP_CLAIM_LEASE_SECS)
     .fetch_all(pool)
     .await
 }
 
-/// 重置一条 needs_human 行（人工介入后重新入队）。
+pub async fn mark_completed(
+    pool: &PgPool,
+    run_id: Uuid,
+    claim_token: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE delivery.task_run_cleanup
+            SET status = 'completed', claim_token = NULL, updated_at = now()
+          WHERE run_id = $1 AND status = 'cleaning' AND claim_token = $2",
+    )
+    .bind(run_id)
+    .bind(claim_token)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(rows == 1)
+}
+
+pub async fn mark_failed(
+    pool: &PgPool,
+    run_id: Uuid,
+    claim_token: Uuid,
+    error: &str,
+    backoff_secs: i64,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE delivery.task_run_cleanup
+            SET attempts = attempts + 1,
+                status = CASE WHEN attempts + 1 >= max_attempts THEN 'needs_human' ELSE 'pending' END,
+                next_retry_at = now() + make_interval(secs => $3::float8),
+                last_error = $4,
+                claim_token = NULL,
+                updated_at = now()
+          WHERE run_id = $1 AND status = 'cleaning' AND claim_token = $2",
+    )
+    .bind(run_id)
+    .bind(claim_token)
+    .bind(backoff_secs as f64)
+    .bind(error)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(rows == 1)
+}
+
 pub async fn requeue(pool: &PgPool, run_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE delivery.task_run_cleanup \
