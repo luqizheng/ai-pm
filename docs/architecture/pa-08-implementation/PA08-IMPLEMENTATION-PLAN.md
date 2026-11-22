@@ -138,6 +138,6 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 - PA08-04 的 OS-backed persistent mirror lock、stale-mtime contender、资源回收与引用保护相关测试通过；Windows mirror-lock 专项 Job 成功。真实文件删除仍默认关闭，启用仍要求全部显式 opt-in。
 - PA08-06 API authenticated metrics HTTP contract、Worker/Runner exporter、filesystem gauges 与 alert rules 验证通过；指标仍遵循 bounded-label 与不泄露实体标识/敏感内容约束。
 
-本次完整验证后，唯一非阻塞后续项是独立的 CI Archive 体积/传输优化；不得通过减少测试覆盖来优化。代码验证证据严格归属于 SHA `643231111624aa170d90f5bf4a467720302cb07a`。其后的文档提交不包含代码改动，不冒充已重新执行 Hosted CI。
+PA08-01 至 PA08-06 的实现验收仍严格归属于代码 SHA `643231111624aa170d90f5bf4a467720302cb07a`。后续 workflow-only 优化提交 `31db253d1f3872bf191ccb6958212dd2181fd13b` 已由 PA-08 Run [#45045963157](https://github.com/luqizheng/ai-pm/actions/runs/45045963157)（8/8 Jobs 成功）完整验证：`CARGO_PROFILE_TEST_DEBUG=0` 将 Nextest artifact 从 3,503,762,456 bytes 降至 1,606,573,561 bytes（约减少 54.2%），四个 shard 仍完整执行 2,000 项测试且全部成功。该优化只影响测试二进制调试信息，不改变断言、overflow checks、测试覆盖或分片策略。PA-07 Run [#45045963156](https://github.com/luqizheng/ai-pm/actions/runs/45045963156) 同批 2/2 Jobs 成功。
 
 PR #1 继续保持 Open / Draft；本状态更新不构成合并或部署授权。
