@@ -381,10 +381,11 @@ async fn claim_and_project_archive_race_leaves_no_active_run(pool: PgPool) {
     let claim = claim_task_run(
         &pool, fx.project_id, fx.task_id, "pa08-race-runner", None, &config,
     );
+    let actor = pm_application::actor::AuditActor::principal(fx.human_id);
     let archive = pm_application::archive::close_project(
         &pool,
         &NoopExecutor,
-        &pm_application::actor::AuditActor::principal(fx.human_id),
+        &actor,
         SYSTEM_TENANT,
         fx.project_id,
         "pa08-claim-archive-race",
