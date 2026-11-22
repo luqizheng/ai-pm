@@ -1445,8 +1445,8 @@ mod imp008_tests {
     }
 
     #[cfg(unix)]
-    #[test]
-    fn mirror_lock_refuses_symlink_root() {
+    #[tokio::test]
+    async fn mirror_lock_refuses_symlink_root() {
         use std::os::unix::fs::symlink;
 
         let root = temp_root("mirror-lock-symlink");
