@@ -1,6 +1,6 @@
 # PA08-03 — Run Transition Inventory
 
-- **Status:** IMPLEMENTED (initial guard + PostgreSQL verification; final scoped update revalidation pending)
+- **Status:** VERIFIED (transaction-scoped guard + PostgreSQL concurrency coverage)
 - **Date:** 2026-11-22
 - **Branch:** `pa-08/implementation-baseline`
 - **Purpose:** Map existing Run status writes before introducing a shared transition guard. This is a code inventory, not proof that every concurrency path is correct.
@@ -92,10 +92,12 @@ Hosted evidence:
 - [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926) completed successfully with the additional Project-archive cancellation integration test.
 - Latest Project-scoped infrastructure-exhaustion UPDATE tightening is under validation in [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176).
 
-Remaining PA08-03 gates:
-1. Complete latest Run #58.
-2. Add/verify claim-vs-archive and stale lease-generation/token concurrency coverage with real PostgreSQL where the existing fixtures permit.
-3. Audit every direct Run status UPDATE against this inventory and keep this file synchronized.
+Verification complete for the current PA08-03 acceptance slice:
+- [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176): Project-scoped infrastructure-exhaustion compare-and-set hardening passed.
+- [Run #63](https://github.com/luqizheng/ai-pm/actions/runs/44970788999): latest tree passed workspace build, Runner integration, all seven PostgreSQL transition guard tests, and Run guard unit tests.
+- The seven PostgreSQL tests cover valid Delivery edges, Reviewer isolation, terminal immutability, competing terminal writers, active Reviewer archive cancellation, stale lease token/generation fencing, and claim-vs-Project-archive race.
+
+No PA08-03 acceptance blocker remains in the inventoried paths. Keep this inventory synchronized if a future Run status write path is added.
 
 ## 7. Verified source files
 
