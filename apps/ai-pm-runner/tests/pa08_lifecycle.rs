@@ -664,6 +664,43 @@ async fn restart_recovery_fails_closed_when_multiple_runs_are_discovered() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// A failed discovery gate must return before task listing or claiming is attempted.
+#[tokio::test]
+async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
+        .expect(1)
+        .mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_list_tasks" }
+        })))
+        .expect(0)
+        .mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_claim_task" }
+        })))
+        .expect(0)
+        .mount(&server).await;
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    assert!(run_loop(&cfg, &client).await.is_err());
+    server.verify().await;
+    let _ = std::fs::remove_dir_all(root);
+}
+
 /// A successful RPC with a missing or malformed runs field is not proof of emptiness.
 #[tokio::test]
 async fn restart_recovery_rejects_malformed_discovery_payload() {
