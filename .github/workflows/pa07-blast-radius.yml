@@ -53,22 +53,30 @@ jobs:
       - name: pm-ai self_review
         run: cargo test --locked -p pm-ai --lib self_review
 
-  # 端到端面：orchestrator 集成测试需要 PostgreSQL（sqlx::test 自动建库）。
-  # 在仓库 Settings → Variables 配 AIPM_TEST_DATABASE_URL（指向可建临时库的
-  # 实例，如 postgres://aipm:aipm@<host>:<port>/aipm）。未配置变量时本 job
-  # 主动跳过（结论=SKIP，不是 PASS），避免 CI 假绿。
+  # 端到端面：为 sqlx::test 提供每次运行独立、可丢弃的 PostgreSQL 服务。
+  # sqlx::test 使用 DATABASE_URL 连接，并在该服务中自动创建/清理测试数据库。
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - name: Install stable Rust
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
       - name: pm-ai orchestrator blast-radius regression
-        if: ${{ vars.AIPM_TEST_DATABASE_URL != '' }}
-        env:
-          DATABASE_URL: ${{ vars.AIPM_TEST_DATABASE_URL }}
         run: cargo test --locked -p pm-ai --test orchestrator batch_create_tasks
-      - name: Explain skip
-        if: ${{ vars.AIPM_TEST_DATABASE_URL == '' }}
-        run: echo "::warning::AIPM_TEST_DATABASE_URL 未配置，集成回归跳过（SKIP 非 PASS）"
