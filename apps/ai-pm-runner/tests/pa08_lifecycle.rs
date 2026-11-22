@@ -2,7 +2,7 @@
 //! through the real MCP client and a scripted Platform endpoint.
 use ai_pm_runner::adapter::{read_process_record, scan_orphans, spawn_agent, terminate, terminate_orphan};
 use ai_pm_runner::mcp::McpClient;
-use ai_pm_runner::runner_loop::{claim_and_start, recover_inflight_run, tick, ActiveRun, Config};
+use ai_pm_runner::runner_loop::{claim_and_start, recover_inflight_run, run_loop, tick, ActiveRun, Config};
 use std::time::{Duration, Instant};
 use serde_json::json;
 use std::path::PathBuf;
@@ -683,6 +683,7 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
             "method": "tools/call",
             "params": { "name": "pm_list_tasks" }
         })))
+        .respond_with(ResponseTemplate::new(500))
         .expect(0)
         .mount(&server).await;
     Mock::given(method("POST"))
@@ -691,6 +692,7 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
             "method": "tools/call",
             "params": { "name": "pm_claim_task" }
         })))
+        .respond_with(ResponseTemplate::new(500))
         .expect(0)
         .mount(&server).await;
     let root = temp_dir();
