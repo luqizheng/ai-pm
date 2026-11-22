@@ -214,6 +214,7 @@ impl CodexExecutor {
 
         let Some(target) = target else {
             if let Some(mirror) = mirror {
+                ensure_bare_mirror(&mirror).await?;
                 let prune = tokio::process::Command::new("git")
                     .arg("--git-dir")
                     .arg(&mirror)
@@ -1442,5 +1443,76 @@ mod imp008_tests {
         assert!(resolve_repository_mirror_target(&root, repository_id).is_err());
         std::fs::remove_dir_all(&root).unwrap();
         std::fs::remove_dir_all(&outside).unwrap();
+    }
+
+    fn git_ok(args: &[&str]) {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .output()
+            .expect("git executable available in test environment");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
+    async fn reclamation_removes_only_worktree_then_unreferenced_bare_mirror() {
+        let root = temp_root("git-reclamation");
+        let source = root.join("source");
+        let repository_id = Uuid::new_v4();
+        let run_id = Uuid::new_v4();
+        let mirror = root.join("git-mirror").join(repository_id.to_string());
+        let run_root = root.join(run_id.to_string());
+        let worktree = run_root.join("repos/repo");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&run_root.join("logs")).unwrap();
+        std::fs::write(run_root.join("logs/stdout.log"), "preserve me").unwrap();
+
+        let source_s = source.to_string_lossy().to_string();
+        let mirror_s = mirror.to_string_lossy().to_string();
+        let worktree_s = worktree.to_string_lossy().to_string();
+        git_ok(&["init", &source_s]);
+        git_ok(&["-C", &source_s, "config", "user.email", "pa08@example.invalid"]);
+        git_ok(&["-C", &source_s, "config", "user.name", "PA08 Test"]);
+        std::fs::write(source.join("README.md"), "workspace reclamation fixture").unwrap();
+        git_ok(&["-C", &source_s, "add", "README.md"]);
+        git_ok(&["-C", &source_s, "commit", "-m", "initial"]);
+        git_ok(&["clone", "--bare", &source_s, &mirror_s]);
+        git_ok(&[
+            "--git-dir",
+            &mirror_s,
+            "worktree",
+            "add",
+            "--detach",
+            &worktree_s,
+            "HEAD",
+        ]);
+
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .unwrap();
+        let executor = CodexExecutor::new(pool, "codex".into(), vec![], root.clone(), 1);
+
+        assert!(
+            executor.reclaim_repository_mirror(repository_id).await.is_err(),
+            "mirror with a linked worktree must be retained"
+        );
+        assert!(worktree.exists());
+
+        executor
+            .reclaim_run_worktree(run_id, repository_id, "repos/repo")
+            .await
+            .unwrap();
+        assert!(!worktree.exists());
+        assert!(run_root.join("logs/stdout.log").exists());
+        assert!(run_root.exists(), "Run root and logs must be preserved");
+
+        executor.reclaim_repository_mirror(repository_id).await.unwrap();
+        assert!(!mirror.exists());
+        assert!(run_root.join("logs/stdout.log").exists());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }
