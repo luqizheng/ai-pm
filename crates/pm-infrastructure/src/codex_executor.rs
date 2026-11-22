@@ -169,6 +169,7 @@ impl CodexExecutor {
         }
     }
 
+    #[cfg(test)]
     fn try_lock_mirror(&self, repository_id: Uuid) -> Result<Option<MirrorLockGuard>, ExecutorError> {
         let path = self.mirror_lock_path(repository_id)?;
         self.try_lock_mirror_path(&path)
@@ -1438,8 +1439,8 @@ mod imp008_tests {
         std::env::temp_dir().join(format!("pa08-{label}-{}", Uuid::new_v4()))
     }
 
-    #[test]
-    fn active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale() {
+    #[tokio::test]
+    async fn active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale() {
         let root = temp_root("mirror-lock-stale-mtime");
         std::fs::create_dir_all(&root).unwrap();
         let pool = sqlx::postgres::PgPoolOptions::new()
