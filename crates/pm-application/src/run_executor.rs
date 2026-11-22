@@ -173,10 +173,11 @@ pub async fn claim_and_start(
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
                     SET status = 'running', stage = 'started', started_at = now() \
-                  WHERE id = $1 AND status = 'claimed' AND executor_session = $2",
+                  WHERE id = $1 AND status = 'claimed' AND executor_session = $2 AND project_id = $3",
             )
             .bind(run_id)
             .bind(&session_text)
+            .bind(project_id)
             .execute(&mut *tx)
             .await?
             .rows_affected();
@@ -760,13 +761,14 @@ async fn start_failed(
                 next_dispatch_at = now() + make_interval(secs => \
                     LEAST($3::float8, power(2, dispatch_attempts))::float8), \
                 release_reason = 'executor_start_failed' \
-          WHERE id = $1 AND status = $4 \
+          WHERE id = $1 AND status = $4 AND project_id = $5 \
          RETURNING status, infrastructure_retry_count",
     )
     .bind(run_id)
     .bind(detail)
     .bind(cfg.backoff_cap_secs)
     .bind(from_status.as_str())
+    .bind(project_id)
     .fetch_optional(&mut *tx)
     .await?;
     let Some((status, retry_count)) = row else {
