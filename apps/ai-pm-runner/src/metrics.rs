@@ -22,7 +22,7 @@ const OPERATIONS: [&str; 8] = [
 
 pub struct RunnerMetrics {
     started_at: u64,
-    operations: [[AtomicU64; 2]; 7],
+    operations: [[AtomicU64; 2]; 8],
     supervision_errors: AtomicU64,
     cleanup_successes: AtomicU64,
     cleanup_errors: AtomicU64,
@@ -34,6 +34,7 @@ impl RunnerMetrics {
         Self {
             started_at: unix_seconds(),
             operations: [
+                [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)],
