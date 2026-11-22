@@ -156,8 +156,24 @@ impl CodexExecutor {
     /// 超时后可安全清除。
     fn lock_mirror(&self, repository_id: Uuid) -> Result<MirrorLockGuard, ExecutorError> {
         let mirror_dir = self.root.join("git-mirror");
+        if let Ok(meta) = std::fs::symlink_metadata(&mirror_dir) {
+            if meta.file_type().is_symlink() {
+                return Err(ExecutorError::Other(
+                    "git-mirror root is a symlink; refusing mirror lock".into(),
+                ));
+            }
+        }
         std::fs::create_dir_all(&mirror_dir)
             .map_err(|e| ExecutorError::Other(format!("create mirror dir failed: {e}")))?;
+        let root_canonical = std::fs::canonicalize(&self.root)
+            .map_err(|e| ExecutorError::Other(format!("canonicalize workspace root failed: {e}")))?;
+        let mirror_dir_canonical = std::fs::canonicalize(&mirror_dir)
+            .map_err(|e| ExecutorError::Other(format!("canonicalize mirror root failed: {e}")))?;
+        if !mirror_dir_canonical.starts_with(&root_canonical) {
+            return Err(ExecutorError::Other(
+                "git-mirror root escapes configured workspace root".into(),
+            ));
+        }
         let path = mirror_dir.join(format!("{repository_id}.lock"));
         let deadline = std::time::Instant::now() + Duration::from_secs(120);
         loop {
