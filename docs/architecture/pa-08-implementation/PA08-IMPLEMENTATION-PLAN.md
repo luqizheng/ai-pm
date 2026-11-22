@@ -65,12 +65,14 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Real PostgreSQL evidence: [Run #52](https://github.com/luqizheng/ai-pm/actions/runs/44970075346) passed guard integration + unit tests; [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926) passed again with the active Reviewer archive cancellation scenario.
 - Latest Project-scoped infrastructure exhaustion compare-and-set hardening is pending [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176). Remaining gates: claim-vs-archive and stale lease token/generation concurrency tests.
 
-### PA08-04 — Workspace / mirror reclamation
-- 先定义可回收候选：没有活跃 Run、没有数据库引用、已超过明确保留期、路径位于受控 workspace 根目录。
-- 实施只读 inventory 与 dry-run；执行前再次核对引用/活跃状态，防止 TOCTOU。
-- 删除采用限批、幂等、可重试流程；记录候选、跳过原因、删除结果和失败原因。
-- 默认保留安全优先：无法确定归属、引用状态或路径安全时一律跳过，不推测删除。
-- 覆盖活跃 Run、终态 Run、共享 mirror、多仓库引用、路径越界、并发 claim、删除失败及重试。
+### PA08-04 — Workspace / mirror reclamation — RUN WORKTREE PATH VERIFIED; MIRROR DELETE DEFERRED
+- Added migrations `0054` and `0055`: atomic process-cleanup claims with lease/fencing, and a separate worktree/mirror reclamation ledger.
+- Candidate staging is idempotent and metadata-only. Default retention is 30 days; Run worktrees require terminal retention and completed process cleanup; archived mirrors require no active Run or unfinished cleanup reference.
+- CodexExecutor now has guarded worktree/mirror primitives: canonical path checks, symlink rejection, shared mirror lock, Git worktree remove/prune, and linked-worktree refusal before mirror deletion.
+- The Worker stages candidates periodically but deletes nothing by default. Run-worktree deletion requires explicit enablement plus shared-root acknowledgement and an absolute workspace root. It claims only Run worktrees, revalidates eligibility/fencing, and records completion only after filesystem success.
+- Mirror candidates are not claimed or deleted yet; add Repository row-lock coordination for archive/unarchive before enabling mirror deletion.
+- Real PostgreSQL and filesystem/real-Git tests passed in Hosted [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988).
+- Remaining PA08-04 gates: operational needs-human query/requeue, mirror lifecycle concurrency guard, and observability integration.
 
 ### PA08-05 — Product lifecycle integrity
 - 先从 PA-07 目标状态图映射当前字段与迁移；不把业务 lifecycle 与 execution state 混为一谈。
@@ -115,4 +117,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 已开始资源所有权盘点和 process-cleanup claim 缺陷复现；尚未实施文件删除。PA08-05 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 的 Run worktree 回收路径已实现并通过 Hosted Run #117；生产删除默认关闭，mirror 仅登记候选、尚不自动删除。PA08-05 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
