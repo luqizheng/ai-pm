@@ -153,7 +153,7 @@ pub async fn recover_inflight_run(
     };
     if runs.len() > 1 {
         return Err(mcp::RunnerError::Malformed(format!(
-            "single-run Runner discovered {} in-flight Runs; refusing to claim or execute until recovery is unambiguous",
+            "single-run Runner discovered multiple in-flight Runs ({}); refusing to claim or execute until recovery is unambiguous",
             runs.len()
         )));
     }
