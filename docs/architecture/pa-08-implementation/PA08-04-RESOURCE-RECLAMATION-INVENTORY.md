@@ -1,6 +1,6 @@
 # PA08-04 — Workspace / Mirror Reclamation Inventory
 
-- **Status:** INVENTORY BASELINE (no filesystem deletion code changed)
+- **Status:** PROCESS-CLEANUP CLAIM FIX IMPLEMENTED; PostgreSQL CI VERIFICATION PENDING
 - **Date:** 2026-11-22
 - **Branch:** `pa-08/implementation-baseline`
 - **Purpose:** Establish ownership, safety gates, retention, and retry semantics before implementing resource reclamation.
@@ -63,21 +63,22 @@ Deleting the bare mirror never deletes `integration.project_repository`, reposit
 - Missing paths are idempotent success; path traversal, symlink escape, uncertain process identity, unknown status, or lock timeout are fail-closed skip/error outcomes.
 - A cleanup failure is persisted with bounded retry/backoff and eventually becomes queryable as `needs_human`.
 
-## 4. Process cleanup ledger issue requiring a real-PostgreSQL test
+## 4. Process cleanup ledger claim defect and implemented correction
 
-Static inspection found a concrete risk in `run_cleanup::claim_batch`:
-- The `SELECT ... FOR UPDATE SKIP LOCKED` uses `fetch_all(pool)` (autocommit), then the lock is released before a separate UPDATE marks rows `cleaning`.
-- The selection predicate includes both `pending` and `cleaning`, while the UPDATE does not advance `next_retry_at`. Therefore a row marked `cleaning` remains immediately eligible and can be claimed again by a second Worker even without a process crash.
+The original implementation separated `SELECT ... FOR UPDATE SKIP LOCKED` and the `cleaning` UPDATE across autocommit statements. This released the row lock before the claim state was persisted, and left `next_retry_at` unchanged, so a second Worker could immediately reclaim the same row.
 
-This must be reproduced by a real PostgreSQL test before changing the code. Expected corrected semantics:
-- Claim and status/token update are atomic.
-- A `cleaning` row has an explicit claim lease expiry; it cannot be reclaimed before expiry.
-- Each claim has a unique fencing token. `mark_completed` / `mark_failed` must compare the token so a stale Worker cannot overwrite a newer claimant's result.
-- Worker crash recovery remains supported after claim lease expiry.
+Implemented correction (migration `0054_task_run_cleanup_claim_fencing.sql`):
+- A single CTE statement selects and updates due rows atomically under `FOR UPDATE SKIP LOCKED`.
+- `next_retry_at` is advanced to a 300-second claim lease expiry while status is `cleaning`.
+- Every claim receives a fresh UUID `claim_token`; completion and failure updates require the current token and clear it on success/failure/requeue.
+- Expired leases are reclaimable after Worker crash; stale Workers cannot mutate the new claimant's state.
+- The token is excluded from serialized cleanup summaries.
+
+Real PostgreSQL tests now cover concurrent duplicate claims, unexpired lease protection, expired lease recovery, stale-token rejection, valid failure/backoff/retry, and valid completion. Hosted CI verification is pending; no filesystem reclamation is enabled by this change.
 
 ## 5. Planned implementation sequence
 
-1. Add a real PostgreSQL test reproducing duplicate `task_run_cleanup` claims; then fix claim lease + fencing token and update the existing Worker.
+1. Complete Hosted CI verification for the atomic process-cleanup claim lease + fencing token fix.
 2. Add a separate workspace-reclamation ledger. Do not conflate process termination status with disk deletion status.
 3. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors.
 4. Implement CodexExecutor filesystem operations with canonical path checks, mirror lock reuse, Git worktree removal/prune, and mirror worktree-list verification.
