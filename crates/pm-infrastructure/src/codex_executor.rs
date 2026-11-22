@@ -1601,4 +1601,14 @@ mod imp008_tests {
         assert!(run_root.join("logs/stdout.log").exists());
         std::fs::remove_dir_all(&root).unwrap();
     }
+    #[test]
+    fn directory_size_counts_regular_files_without_following_symlinks() {
+        let root = std::env::temp_dir().join(format!("aipm-size-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("nested")).unwrap();
+        std::fs::write(root.join("a.txt"), b"abc").unwrap();
+        std::fs::write(root.join("nested").join("b.txt"), b"12345").unwrap();
+        assert_eq!(directory_size_bytes(&root).unwrap(), 8);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
 }
