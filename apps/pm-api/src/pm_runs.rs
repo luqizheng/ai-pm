@@ -33,6 +33,7 @@ use serde_json::json;
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/task-runs", get(task_runs))
+        .route("/v1/pm/task-run-cleanups/needs-human", get(cleanup_needs_human))
         // S05 监控事件面（0013）：项目级汇总（静态段先于 {run_id} 匹配）。
         .route("/v1/pm/task-runs/summary", get(task_runs_summary))
         .route("/v1/pm/task-runs/{run_id}", get(task_run_detail))
@@ -43,6 +44,34 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/task-runs/{run_id}/execution-authorization",
             axum::routing::post(grant_authorization_handler).delete(revoke_authorization_handler),
         )
+}
+
+
+
+/// Project-scoped process-cleanup escalation list. A visible project is
+/// required; tenant/project filtering is repeated in the application query.
+async fn cleanup_needs_human(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Query(params): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = project_filter(&params).ok_or(ApiError::NotFound("project_not_found"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let limit = params.get("limit").and_then(|v| v.parse::<i64>().ok()).unwrap_or(50);
+    let items = pm_application::run_cleanup::list_needs_human(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        limit,
+    )
+    .await?;
+    Ok(Json(json!({ "items": items, "count": items.len() })))
 }
 
 /// ACP-07 守卫：run 存在于调用者租户 + 授权者为其租户 admin 或项目 owner。
