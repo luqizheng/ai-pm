@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01/03 VERIFIED; PA08-02/04/06 follow-up hardening implemented and awaiting latest Hosted validation)
+- **状态：** IMPLEMENTATION COMPLETE; PA08-01–06 HOSTED VERIFIED on code SHA `643231111624aa170d90f5bf4a467720302cb07a`
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -56,7 +56,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Runner does not call `pm_submit_result`: Agent submits delivery through MCP directly. Tests must not invent a Runner-side submit step; cover Agent submission separately at its protocol/contract boundary.
 - Additional command-path tests exercise real child-process termination + ack through production polling, continue spawning + human-reply injection through production polling, and frozen-guard refusal. The command-path suite passed in [Run #19](https://github.com/luqizheng/ai-pm/actions/runs/44968871944). Heartbeat retry hardening (clock advances only after Platform confirms renewal) and its HTTP 503 regression test passed in [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44969004043). Restart recovery/reacquire, empty discovery, and spawn failure passed in [Run #28](https://github.com/luqizheng/ai-pm/actions/runs/44969367934).
 - PA08-02 follow-up now covers delayed duplicate `agent.task.continue` delivery (the existing live Agent session is acknowledged without spawning a second process) and command-poll HTTP 503 retry (failed polls do not advance the poll clock). Both new production-path integration tests, plus the full Runner suite and the PA08 Hosted workflow, passed [Run #44979290867](https://github.com/luqizheng/ai-pm/actions/runs/44979290867).
-- Current PA08-02 P0 hardening: startup recovery now returns a typed failure for RPC/transport/malformed discovery responses and only accepts an explicit `runs: []` as empty; lease responses require a nonempty token/worker ID and positive generation, and active reacquisition must advance generation. Runner startup identity-checks and terminates orphaned process groups before recovery; failed orphan cleanup writes `cleanup-needs-human.json` and blocks startup. Lease-loss cleanup retains the Child handle and retries termination/reap while blocking command processing and new claims. Continue and Terminate ACK 503/redelivery tests now verify no duplicate Agent process/session. These changes are awaiting latest Hosted validation.
+- Current PA08-02 P0 hardening: startup recovery now returns a typed failure for RPC/transport/malformed discovery responses and only accepts an explicit `runs: []` as empty; lease responses require a nonempty token/worker ID and positive generation, and active reacquisition must advance generation. Runner startup identity-checks and terminates orphaned process groups before recovery; failed orphan cleanup writes `cleanup-needs-human.json` and blocks startup. Lease-loss cleanup retains the Child handle and retries termination/reap while blocking command processing and new claims. Continue and Terminate ACK 503/redelivery tests now verify no duplicate Agent process/session. These changes passed the complete latest-head Hosted validation on code SHA `643231111624aa170d90f5bf4a467720302cb07a` (PA-08 Run #45044216787; PA-07 Run #45044216776). The delayed duplicate Continue test includes first-ACK HTTP 503, redelivery, successful second ACK, and asserts the child PID/session is unchanged.
 - Next refactor target: isolate time/scheduling decisions and process lifecycle operations behind narrow seams only where needed by the remaining tests. Do not introduce production sleeps or a parallel test-only state machine.
 
 ### PA08-03 — Run transition guard — VERIFIED
@@ -75,7 +75,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - File deletion is disabled by default. Enablement requires `AI_PM_WORKSPACE_RECLAMATION_ENABLED=true`, `AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT=true`, and an absolute `AI_PM_WORKSPACE_ROOT`. The Worker performs fenced claims and a second DB eligibility check before filesystem operations.
 - Added `needs_human` listing and explicit operator requeue application operations. Project-scoped process-cleanup escalation is exposed at `GET /v1/pm/task-run-cleanups/needs-human`; the API first checks project visibility and the application query repeats tenant/project scope in SQL.
 - Workspace reclamation completion records logical file bytes removed in migration `0056`; CodexExecutor measures regular-file logical sizes without following symlinks. The metric `ai_pm_workspace_reclaimed_bytes_total` is exported by the API. This is logical file-size accounting, not physical disk-block reclamation.
-- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). Expanded mirror-lock, worker, ledger, process-cleanup and Codex path-safety tests all pass in [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084). The byte-accounting, needs-human API, workspace build, Runner integration and PostgreSQL ledger suites passed [Hosted Run](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). New OS-backed lock, orphan cleanup/fencing, and command ACK redelivery tests are awaiting current PA08/PA07 Hosted regression results.
+- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). Expanded mirror-lock, worker, ledger, process-cleanup and Codex path-safety tests all pass in [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084). The byte-accounting, needs-human API, workspace build, Runner integration and PostgreSQL ledger suites passed [Hosted Run](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). New OS-backed lock, orphan cleanup/fencing, and command ACK redelivery tests passed in the complete current PA-08 Hosted run (#45044216787), including the Windows mirror-lock job.
 - File deletion remains opt-in and disabled by default. Reclamation backlog and cumulative logical reclaimed bytes are included in the PA08-06 API metrics endpoint.
 
 ### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFIED
@@ -86,7 +86,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Hosted verification: [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084) passed the Product lifecycle API and Product gate vs Run claim concurrency suites.
 
 
-### PA08-06 — Runtime observability — IMPLEMENTED; LATEST HOSTED VALIDATION PENDING
+### PA08-06 — Runtime observability — IMPLEMENTED; HOSTED VERIFIED
 - `pm-api` 已新增受现有 Bearer 鉴权保护的 `GET /metrics`，输出 Prometheus text exposition；数据库聚合覆盖 Run 状态/活跃年龄、process-cleanup 状态、workspace reclamation 状态，以及现有 communication overview。
 - Label 仅使用 Run kind/status、cleanup status、resource kind/status 等有限状态维度；不输出任何 entity ID、用户内容、仓库 URL、凭据或原始错误。
 - 数据库 scrape 查询失败返回 503，不会把旧值伪装成当前值。指标实现与转义测试见 `apps/pm-api/src/metrics.rs`。
@@ -130,4 +130,14 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 基础生命周期、命令轮询 503 retry 与 Continue duplicate baseline 已有历史通过证据；本轮新增 fail-closed startup discovery、orphan process identity fencing、lease generation advance validation、Continue/Terminate ACK 503 redelivery 与不重复启动测试，等待最新 Hosted CI。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过；本轮 mirror lock 已改为 OS-backed persistent advisory lock，并新增 stale-mtime contender test 与 Windows Hosted job，等待最新验证。PA08-06 API、Worker、Runner exporters、filesystem gauges、API HTTP tests 和 promtool alert validation 已实现并纳入 CI，等待最新验证。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
+**PA-08 implementation acceptance：已完成（PA08-01 至 PA08-06）。** 完整 Hosted 验证对应代码 SHA `643231111624aa170d90f5bf4a467720302cb07a`：
+
+- PA-08 Run [#45044216787](https://github.com/luqizheng/ai-pm/actions/runs/45044216787)：8/8 Jobs 成功；Linux 四个 Nextest shard 共 2,000 passed / 0 failed；Linux doctests、public-registry build、Clippy、migration uniqueness、Prometheus alert `promtool`、changed-file rustfmt、Windows mirror lock 与 Runner/Worker Windows 编译均通过。
+- PA-07 Run [#45044216776](https://github.com/luqizheng/ai-pm/actions/runs/45044216776)：2/2 Jobs 成功；`batch_create_tasks` PostgreSQL integration 实际执行，2 passed / 0 failed / 0 ignored，不是 skipped。
+- PA08-02 的 Continue ACK 503/redelivery 回归、Terminate ACK 503/redelivery、fail-closed startup、lease generation fencing 与 orphan process identity cleanup 均包含在完整 workspace 测试中并通过。
+- PA08-04 的 OS-backed persistent mirror lock、stale-mtime contender、资源回收与引用保护相关测试通过；Windows mirror-lock 专项 Job 成功。真实文件删除仍默认关闭，启用仍要求全部显式 opt-in。
+- PA08-06 API authenticated metrics HTTP contract、Worker/Runner exporter、filesystem gauges 与 alert rules 验证通过；指标仍遵循 bounded-label 与不泄露实体标识/敏感内容约束。
+
+本次完整验证后，唯一非阻塞后续项是独立的 CI Archive 体积/传输优化；不得通过减少测试覆盖来优化。代码验证证据严格归属于 SHA `643231111624aa170d90f5bf4a467720302cb07a`。其后的文档提交不包含代码改动，不冒充已重新执行 Hosted CI。
+
+PR #1 继续保持 Open / Draft；本状态更新不构成合并或部署授权。
