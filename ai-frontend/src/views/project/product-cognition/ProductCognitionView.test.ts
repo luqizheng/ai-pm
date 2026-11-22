@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
 import ProductCognitionView from "./ProductCognitionView.vue";
+import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { useShellStore } from "@/stores/shell";
 import type {
@@ -134,5 +135,6 @@ describe("ProductCognitionView", () => {
 
     expect(wrapper.text()).toContain("permission denied");
     expect(wrapper.find(".product-cognition__list").exists()).toBe(false);
+    expect(wrapper.findComponent(EmptyState).exists()).toBe(false);
   });
 });
