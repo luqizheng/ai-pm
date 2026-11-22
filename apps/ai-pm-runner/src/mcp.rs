@@ -87,6 +87,7 @@ impl McpClient {
             "pm_heartbeat_run" => "heartbeat",
             "pm_poll_commands" => "command_poll",
             "pm_ack_command" => "command_ack",
+            "pm_reacquire_lease" => "lease_reacquire",
             "pm_report_interaction" | "pm_report_interaction_consumed" => "interaction",
             _ => "other",
         };
