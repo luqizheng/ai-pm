@@ -826,9 +826,10 @@ async fn start_failed(
             "UPDATE delivery.task_run \
                 SET status = 'failed', outcome = 'failed', finished_at = now(), \
                     release_reason = 'infrastructure_exhausted' \
-              WHERE id = $1 AND status = 'queued'",
+              WHERE id = $1 AND project_id = $2 AND status = 'queued'",
         )
         .bind(run_id)
+        .bind(project_id)
         .execute(&mut *tx)
         .await?
         .rows_affected();
