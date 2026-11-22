@@ -46,3 +46,5 @@ jobs:
           done
       - name: Build workspace from public registries
         run: cargo check --workspace --locked
+      - name: Run Runner integration tests
+        run: cargo test -p ai-pm-runner --tests --locked
