@@ -300,10 +300,12 @@ async fn product_pause_wins_against_waiting_run_claim(pool: PgPool) {
         .await
         .expect("claim should finish after Product lock release")
         .expect("claim task should not panic")
-        .unwrap();
+        .unwrap()
+        .expect("blocked Run should be explicitly skipped");
+    assert_eq!(result.kind, pm_application::run_dispatch::ClaimKind::Skipped);
     assert!(
-        result.is_none(),
-        "a Run linked to a suspended Product must not be claimed"
+        result.lease_token.is_none(),
+        "a Run linked to a suspended Product must not receive a lease"
     );
 
     let run_status: String = sqlx::query_scalar(
