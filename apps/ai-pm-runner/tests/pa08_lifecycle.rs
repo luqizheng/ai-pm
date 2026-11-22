@@ -208,10 +208,10 @@ async fn terminate_command_kills_child_and_acks_receipt() {
             "command_type": "agent.process.terminate",
             "payload": { "issued_at": "2026-11-22T00:00:00Z" }
         }] })))
-        .expect(1)
+        .expect(2)
         .mount(&server).await;
 
-    Mock::given(method("POST"))
+    let failed_ack = Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
             "method": "tools/call",
@@ -225,9 +225,10 @@ async fn terminate_command_kills_child_and_acks_receipt() {
                 }
             }
         })))
-        .respond_with(structured(json!({ "ok": true })))
+        .respond_with(ResponseTemplate::new(503).set_body_string("terminate ack unavailable"))
         .expect(1)
-        .mount(&server).await;
+        .mount_as_scoped(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -252,9 +253,31 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         lease_failures: 0,
         last_lease_attempt: None,
     };
-    tick(&cfg, &client, &mut run).await.expect("terminate command should be acknowledged");
+    tick(&cfg, &client, &mut run).await.expect("first terminate delivery should execute despite lost ACK");
     assert!(run.awaiting_continue);
-    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "terminate must reap the child process");
+    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "first delivery must reap the child process");
+    drop(failed_ack);
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
+    run.last_command_poll = Instant::now() - Duration::from_secs(10);
+    tick(&cfg, &client, &mut run).await.expect("redelivered terminate must be idempotently acknowledged");
+    assert!(run.awaiting_continue);
+    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "redelivery must not spawn or replace a child");
     let _ = std::fs::remove_dir_all(root);
 }
 
