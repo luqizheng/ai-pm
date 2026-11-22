@@ -6,8 +6,8 @@
 
 - Workspace dependencies contain no Prometheus, `metrics`, or OpenTelemetry exporter.
 - `pm-api` is an Axum service with a single main listener and an authenticated `GET /metrics` Prometheus text exposition endpoint.
-- `ai-pm-worker` has no HTTP listener or metrics dependency. It emits structured logs for claim/poll/cleanup/reclamation errors.
-- `ai-pm-runner` is a client process and uses `tracing`; it does not expose an HTTP metrics endpoint.
+- `ai-pm-worker` now has an optional loopback-only Prometheus listener (`AI_PM_WORKER_METRICS_ADDR`, default `127.0.0.1:9465`) with bounded in-process counters for analysis/import claims, Run dispatch attempts/errors, Run polling errors, cleanup errors, and scrapes. The endpoint is intentionally minimal and does not add a monitoring dependency.
+- `ai-pm-runner` remains a client process using `tracing`; it does not yet expose an HTTP metrics endpoint or bounded MCP operation counters.
 - `pm_application::comm_overview::load_comm_overview` already aggregates shielded Runs, unconsumed interaction responses, open interaction chains, pending worker commands, and oldest pending command age. The Worker logs these fields every 500 dispatch-loop ticks.
 - `delivery.task_run_cleanup` has fenced retry and `needs_human` state plus explicit requeue; the application exposes a bounded project/tenant-scoped list and the API exposes it at `GET /v1/pm/task-run-cleanups/needs-human`.
 - `delivery.workspace_reclamation` has `needs_human` listing, explicit operator requeue, and logical reclaimed-byte accounting (migration `0056`). The API exports cumulative logical bytes by bounded `resource_kind` only; the cumulative total is stored separately from per-operation ledger state (migration `0057`) so the Prometheus Counter remains monotonic.
@@ -19,8 +19,8 @@
 Prefer a small pull-based Prometheus text exposition with no new monitoring service or event platform:
 
 1. **API metrics endpoint:** expose database-backed global aggregates for Run counts/ages, cleanup backlog, reclamation backlog, and existing communication overview.
-2. **Worker metrics endpoint:** expose bounded in-process counters and workspace filesystem capacity/available-space gauges. Bind to loopback by default; require explicit operator configuration to expose beyond localhost.
-3. **Runner telemetry:** add bounded counters for claim, heartbeat, command polling/acknowledgement, and supervision errors. Because Runner commonly executes on a separate host, keep its exporter optional and document how operators scrape it locally.
+2. **Worker metrics endpoint:** expose bounded in-process counters and workspace filesystem capacity/available-space gauges. **Partial:** the loopback exporter and core counters are implemented; filesystem capacity/available-space gauges remain open. Bind to loopback by default; require explicit operator configuration to expose beyond localhost.
+3. **Runner telemetry:** add bounded counters for claim, heartbeat, command polling/acknowledgement, and supervision errors. Not yet implemented. Because Runner commonly executes on a separate host, keep its exporter optional and document how operators scrape it locally.
 4. **Reclamation accounting:** record logical bytes per ledger operation and atomically increment a durable per-resource cumulative total (migration `0057`) so Counter values remain monotonic across retries and requeues.
 5. **Cleanup operations:** add a bounded `needs_human` listing query for process-cleanup records, matching the reclamation ledger operations.
 
@@ -56,7 +56,7 @@ Never use `run_id`, `task_id`, `project_id`, `repository_id`, user identity, URL
 
 1. Add typed SQL aggregate snapshots and tests for Run, cleanup, reclamation, and communication metrics.
 2. Add API `/metrics` exposition and response/content-type tests.
-3. Add Worker metrics listener and filesystem capacity gauges, defaulting to loopback.
+3. Add Worker metrics listener and core counters (implemented); add filesystem capacity gauges, defaulting to loopback.
 4. Add reclamation byte accounting and process-cleanup `needs_human` list query. **Completed:** migration `0056`, logical reclaimed-byte metric, and project-scoped needs-human API.
 5. Instrument Worker and Runner operation counters with bounded dimensions.
 6. Add exporter tests, security assertions, and Hosted CI steps.
@@ -75,16 +75,20 @@ Implemented:
 - Labels are limited to status/kind dimensions; entity IDs, user content, repository URLs, tokens and raw errors are excluded.
 - Label escaping has a unit test.
 
+Implemented in the current PA08 branch:
+- Worker loopback Prometheus listener, bounded process counters, and HTTP endpoint tests for `/metrics` and 404 behavior.
+- Worker counters are wired to analysis/import claims, Run dispatch attempts/errors, Run polling errors, and cleanup errors.
+
 Not yet implemented:
-- Worker and Runner operation counters / exporters.
-- Worker loopback listener and filesystem capacity/available-space gauges.
-- Full scrape/endpoint integration tests and alerting thresholds.
+- Runner MCP operation counters / optional exporter.
+- Worker workspace filesystem capacity/available-space gauges.
+- Full API scrape integration tests and alerting thresholds.
 
 Implemented after the first API slice:
 - Logical reclaimed-byte accounting and the `ai_pm_workspace_reclaimed_bytes_total` metric.
 - Project/tenant-scoped process-cleanup `needs_human` listing API.
 - Hosted verification of the workspace build, Runner suite, PostgreSQL reclamation/cleanup suites, Product lifecycle/concurrency suites, and metrics exposition unit tests.
 
-Verification update: the API aggregate metrics code and its label-escaping unit test passed [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). Reclaimed-byte accounting, needs-human API, and the full PA08 Hosted test workflow passed [Run #44978431052](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). PA08-02 delayed duplicate command and command-poll transport retry coverage also passed [Run #44979290867](https://github.com/luqizheng/ai-pm/actions/runs/44979290867). PA-07 blast-radius unit and integration jobs passed [Run #44979290858](https://github.com/luqizheng/ai-pm/actions/runs/44979290858). This does not close the remaining Worker/Runner exporter, filesystem gauge, alerting, or scrape integration gates.
+Verification update: the API aggregate metrics code and its label-escaping unit test passed [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). Reclaimed-byte accounting, needs-human API, and the full PA08 Hosted test workflow passed [Run #44978431052](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). PA08-02 delayed duplicate command and command-poll transport retry coverage also passed [Run #44979290867](https://github.com/luqizheng/ai-pm/actions/runs/44979290867). PA-07 blast-radius unit and integration jobs passed [Run #44979290858](https://github.com/luqizheng/ai-pm/actions/runs/44979290858). This does not close the remaining Runner exporter/counters, Worker filesystem gauges, alerting, or API scrape integration gates. The Worker exporter and HTTP endpoint test are now implemented but must pass the latest Hosted CI.
 
 This is deliberately a partial slice, not PA08-06 acceptance. See the implementation plan for remaining gates.
