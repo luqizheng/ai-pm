@@ -14,7 +14,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 | PA08-00 | Baseline & inventory | P1 | COMPLETE (static inventory) |
 | PA08-01 | Registry portability | Foundation | VERIFIED |
 | PA08-02 | Runner lifecycle test harness | P1 | VERIFIED (implemented slice; follow-up failure cases remain) |
-| PA08-03 | Run transition guard | P1 | IMPLEMENTED (initial acceptance slice; final hardening pending) |
+| PA08-03 | Run transition guard | P1 | VERIFIED |
 | PA08-04 | Workspace / mirror reclamation | P1 | PLANNED |
 | PA08-05 | Product lifecycle integrity | P1 | PLANNED |
 | PA08-06 | Runtime observability | P2 | PLANNED |
@@ -40,7 +40,8 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 
 - [Run #52](https://github.com/luqizheng/ai-pm/actions/runs/44970075346): complete success — workspace build, Runner integration, real PostgreSQL guard tests, and guard unit tests.
 - [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926): complete success — includes Project archive cancellation of an active Reviewer Run.
-- [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176): validating the latest Project-scoped infrastructure exhaustion compare-and-set tightening.
+- [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176): complete success — Project-scoped infrastructure exhaustion compare-and-set tightening.
+- [Run #63](https://github.com/luqizheng/ai-pm/actions/runs/44970788999): complete success — latest tree, Runner tests, seven PostgreSQL guard/concurrency tests, and guard unit tests.
 - PA-07 Hosted unit regression [Run #60](https://github.com/luqizheng/ai-pm/actions/runs/44970217908) passed. Its PostgreSQL integration job was explicitly skipped because `AIPM_TEST_DATABASE_URL` is not configured; do not count that as a DB regression pass.
 
 Status changes require code/test evidence. A plan or merged documentation is not implementation completion.
