@@ -136,5 +136,5 @@ jobs:
             echo "No changed Rust files."
             exit 0
           fi
-          printf 'Checking %s changed Rust files\\n' "${#files[@]}"
+          echo "Checking ${#files[@]} changed Rust files."
           rustfmt --edition 2021 --check "${files[@]}"

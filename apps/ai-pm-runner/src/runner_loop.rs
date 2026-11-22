@@ -1263,6 +1263,7 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(root);
     }
+
     #[tokio::test]
     async fn failed_lease_reacquisition_keeps_child_until_explicit_termination() {
         let server = MockServer::start().await;
