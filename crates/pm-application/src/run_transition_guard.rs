@@ -5,6 +5,8 @@
 //! Delivery and Reviewer Runs share a table but retain separate lifecycle edges.
 
 use thiserror::Error;
+use sqlx::{Postgres, Row, Transaction};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunKind { Delivery, Review }
@@ -182,4 +184,73 @@ mod tests {
         assert!(RunKind::parse("other").is_err());
         assert!(RunStatus::parse("waiting").is_err());
     }
+}
+
+
+#[derive(Debug, Error)]
+pub enum RunTransitionGuardError {
+    #[error("database error: {0}")]
+    Db(#[from] sqlx::Error),
+    #[error("Run {0} was not found in the expected Project")]
+    NotFound(Uuid),
+    #[error(transparent)]
+    Invalid(#[from] RunTransitionError),
+}
+
+/// Lock the Run row, validate its kind and source-to-target edge, and return
+/// the source status. The caller must perform its UPDATE in this same transaction
+/// with a source-status predicate (compare-and-set) and keep audit/effects atomic.
+pub async fn lock_and_validate_transition(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    run_id: Uuid,
+    expected_kind: RunKind,
+    target: RunStatus,
+) -> Result<RunStatus, RunTransitionGuardError> {
+    let row = sqlx::query(
+        "SELECT status, run_kind FROM delivery.task_run \
+          WHERE id = $1 AND project_id = $2 FOR UPDATE",
+    )
+    .bind(run_id)
+    .bind(project_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(RunTransitionGuardError::NotFound(run_id))?;
+    let status_text: String = row.get("status");
+    let kind_text: String = row.get("run_kind");
+    let status = RunStatus::parse(&status_text)?;
+    let kind = RunKind::parse(&kind_text)?;
+    if kind != expected_kind {
+        return Err(RunTransitionError::IllegalEdge {
+            kind,
+            from: status,
+            to: target,
+        }
+        .into());
+    }
+    validate_transition(kind, status, target)?;
+    Ok(status)
+}
+
+/// Lock and validate a Delivery Run whose status remains claimed while its
+/// lease token/generation are replaced. Callers must still enforce expiry and
+/// generation increment semantics in the claim/reacquire SQL.
+pub async fn lock_and_validate_reacquire(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    run_id: Uuid,
+) -> Result<(), RunTransitionGuardError> {
+    let row = sqlx::query(
+        "SELECT status, run_kind FROM delivery.task_run \
+          WHERE id = $1 AND project_id = $2 FOR UPDATE",
+    )
+    .bind(run_id)
+    .bind(project_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(RunTransitionGuardError::NotFound(run_id))?;
+    let status = RunStatus::parse(row.get::<String, _>("status").as_str())?;
+    let kind = RunKind::parse(row.get::<String, _>("run_kind").as_str())?;
+    validate_reacquire(kind, status)?;
+    Ok(())
 }
