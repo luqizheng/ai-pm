@@ -118,4 +118,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过（包含回收 Worker、PostgreSQL 账本、Product lifecycle API 与 Product gate vs Run claim 并发测试）。PA08-06 第一阶段 API 聚合指标代码已提交，并将指标单测加入 PA-08 workflow；该新代码尚无 Hosted CI 结果。PA08-06 剩余 Worker/Runner 监控、磁盘容量和回收量统计仍未实现。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过（包含回收 Worker、PostgreSQL 账本、Product lifecycle API 与 Product gate vs Run claim 并发测试）。PA08-06 第一阶段 API 聚合指标代码及单测已由 Hosted CI Run #156 验证通过。PA08-06 剩余 Worker/Runner 监控、磁盘容量和回收量统计仍未实现。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
