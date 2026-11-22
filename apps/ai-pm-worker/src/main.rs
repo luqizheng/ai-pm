@@ -324,6 +324,27 @@ async fn main() {
                                 "Run worktree reclamation round failed"
                             ),
                         }
+
+                        match pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+                            &dispatch_pool,
+                            reclaimer,
+                            reclamation_retention_days,
+                        )
+                        .await
+                        {
+                            Ok(report) if report.claimed > 0 => tracing::info!(
+                                claimed = report.claimed,
+                                completed = report.completed,
+                                failed = report.failed,
+                                skipped = report.skipped,
+                                "Repository mirror reclamation round"
+                            ),
+                            Ok(_) => {}
+                            Err(error) => tracing::warn!(
+                                error = %error,
+                                "Repository mirror reclamation round failed"
+                            ),
+                        }
                     } else {
                         tracing::warn!(
                             "workspace reclamation enabled but Codex executor is not configured"
