@@ -239,7 +239,7 @@ async fn run_review(
     }
 
     persist_findings(&mut tx, &collected, review_run_id, &outcome).await?;
-    sqlx::query(
+    let finalized = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'succeeded', outcome = 'succeeded', finished_at = now(), \
                 review_verdict = $2 \
@@ -249,7 +249,12 @@ async fn run_review(
     .bind(outcome.verdict.as_str())
     .bind(collected.project_id)
     .execute(&mut *tx)
-    .await?;
+    .await?
+    .rows_affected();
+    if finalized != 1 {
+        tx.rollback().await.ok();
+        return Ok(ReviewStep::Idle);
+    }
 
     let advance = advance_after_review(
         &mut tx,
