@@ -9,7 +9,8 @@
 //!
 //! 1. **授权主体永远是真人**——`core.principal.kind='human'`；Agent 职能行
 //!    （`ai_pm` / `architect` / `developer` / `tester`）由 bootstrap 独占维护。
-//! 2. **锁序固定** `core.tenant → core.project → core.project_member`，
+//! 2. **锁序固定** `core.team → core.tenant → core.project → core.project_member`，
+//!    Team 成员移除同样先锁 `core.team`，避免级联撤权与项目授权形成死锁；
 //!    不碰 run/task 行（与 I1 的 `project → run → task` 无环）。
 //! 3. **审计与写入同事务**——审计写失败即整体回滚。
 
@@ -118,7 +119,7 @@ pub async fn list_members(
         .collect())
 }
 
-/// 执行一次成员变更（单事务：锁 → 校验 → 写 → 审计）。
+/// 执行一次成员变更（单事务：Team → tenant → project → project_member 锁 → 校验 → 写 → 审计）。
 pub async fn apply_member_change(
     pool: &PgPool,
     actor: &AuditActor,
