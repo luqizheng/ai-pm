@@ -136,72 +136,83 @@ pub struct ActiveRun {
 
 /// Recover a pending human-intervention Run after Runner process restart.
 /// Exposed as a narrow production seam so lifecycle recovery is integration-tested.
-pub async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Option<ActiveRun> {
-    let discovered = match client.discover_runs(cfg.project_id).await {
-        Ok(value) => value,
-        Err(e) => {
-            tracing::warn!(error = %e, "startup discovery failed; starting without recovery");
-            return None;
-        }
-    };
+pub async fn recover_inflight_run(
+    cfg: &Config,
+    client: &mcp::McpClient,
+) -> Result<Option<ActiveRun>, mcp::RunnerError> {
+    // Only an explicit, well-formed empty array proves that no Run needs recovery.
+    let discovered = client.discover_runs(cfg.project_id).await?;
     let runs = discovered
         .get("runs")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+        .and_then(Value::as_array)
+        .ok_or_else(|| mcp::RunnerError::Malformed(
+            "pm_discover_runs response must contain a runs array".into(),
+        ))?;
+    let Some(entry) = runs.first() else {
+        return Ok(None);
+    };
     if runs.len() > 1 {
-        // I5：多发现项显式告警——V1 单 Run 串行，余项待当前 Run 终局后
-        // 下轮 discover 再领（幂等、无副作用）。
-        tracing::warn!(
-            count = runs.len(),
-            "multiple recoverable runs discovered; single-run runner takes the first, rest re-discovered later"
-        );
+        tracing::warn!(count = runs.len(), "multiple recoverable Runs discovered; single-run Runner recovers the first");
     }
-    let entry = runs.first()?.clone();
-    let run_id: Uuid = entry.get("run_id")?.as_str()?.parse().ok()?;
-    let task_id: Uuid = entry.get("task_id")?.as_str()?.parse().ok()?;
-    // I4：续领失败退避重试（有界），耗尽后转入正常循环（平台侧恢复路径接管）。
-    let mut attempt: u32 = 0;
-    let reacquired = loop {
+    let run_id = entry
+        .get("run_id")
+        .and_then(Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid run_id".into()))?;
+    let task_id = entry
+        .get("task_id")
+        .and_then(Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid task_id".into()))?;
+    let previous_generation = entry.get("lease_generation").and_then(Value::as_i64).unwrap_or(0);
+
+    let mut last_error = None;
+    let mut reacquired = None;
+    for attempt in 1..=5 {
         match client.reacquire_lease(cfg.project_id, run_id).await {
-            Ok(value) => break Some(value),
-            Err(e) => {
-                if e.is_unauthorized() {
-                    tracing::error!(error = %e, "credential rejected during recovery reacquire");
-                    return None;
-                }
-                attempt += 1;
+            Ok(value) => {
+                reacquired = Some(value);
+                break;
+            }
+            Err(error) if error.is_unauthorized() => return Err(error),
+            Err(error) => {
                 let delay = backoff_delay_ms(attempt, cfg.backoff_base_ms, cfg.backoff_cap_ms);
-                tracing::warn!(
-                    error = %e, attempt, retry_in_ms = delay,
-                    "recovery reacquire failed; backing off"
-                );
-                if attempt >= 5 {
-                    break None;
+                tracing::warn!(error = %error, attempt, retry_in_ms = delay, "recovery reacquire failed; backing off");
+                last_error = Some(error);
+                if attempt < 5 {
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
                 }
-                tokio::time::sleep(Duration::from_millis(delay)).await;
             }
         }
-    };
-    let Some(reacquired) = reacquired else {
-        tracing::error!(run = %run_id, "recovery reacquire exhausted bounded retries; run left to platform recovery paths");
-        return None;
-    };
+    }
+    let reacquired = reacquired.ok_or_else(|| {
+        last_error.unwrap_or_else(|| mcp::RunnerError::Adapter("recovery lease reacquisition failed".into()))
+    })?;
+    let lease_token = required_nonempty_string(&reacquired, "lease_token")?;
+    let lease_generation = required_positive_generation(&reacquired)?;
+    if previous_generation > 0 && lease_generation as i64 <= previous_generation {
+        return Err(mcp::RunnerError::Malformed(format!(
+            "recovery lease generation {} did not fence prior generation {}",
+            lease_generation, previous_generation
+        )));
+    }
+    let worker_id = required_nonempty_string(&reacquired, "worker_id")?;
     let run_dir = cfg.workspace_root.join(run_id.to_string());
-    let _ = std::fs::create_dir_all(&run_dir);
+    std::fs::create_dir_all(&run_dir)
+        .map_err(|error| mcp::RunnerError::Adapter(format!("create recovered Run directory failed: {error}")))?;
     tracing::info!(
         run = %run_id,
-        generation = %reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(0),
-        rerouted = %reacquired.get("rerouted_commands").and_then(|v| v.as_i64()).unwrap_or(0),
-        "recovered in-flight run after offline window (same-owner re-lease)"
+        generation = lease_generation,
+        rerouted = %reacquired.get("rerouted_commands").and_then(Value::as_i64).unwrap_or(0),
+        "recovered in-flight run after offline window with a fenced lease generation"
     );
-    Some(ActiveRun {
+    Ok(Some(ActiveRun {
         project_id: cfg.project_id,
         task_id,
         run_id,
-        lease_token: required_nonempty_string(&reacquired, "lease_token")?,
-        lease_generation: required_positive_generation(&reacquired)?,
-        worker_id: required_nonempty_string(&reacquired, "worker_id")?,
+        lease_token,
+        lease_generation,
+        worker_id,
         run_dir,
         stage: "started".into(),
         process: None,
@@ -210,12 +221,12 @@ pub async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Opti
         last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
         pending_interaction: entry
             .get("interaction_id")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse().ok()),
+            .and_then(Value::as_str)
+            .and_then(|value| value.parse().ok()),
         awaiting_continue: true,
         lease_failures: 0,
         last_lease_attempt: None,
-    })
+    }))
 }
 
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::RunnerError> {
