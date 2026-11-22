@@ -1468,6 +1468,7 @@ mod imp008_tests {
         let run_root = root.join(run_id.to_string());
         let worktree = run_root.join("repos/repo");
         std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(mirror.parent().unwrap()).unwrap();
         std::fs::create_dir_all(&run_root.join("logs")).unwrap();
         std::fs::write(run_root.join("logs/stdout.log"), "preserve me").unwrap();
 
