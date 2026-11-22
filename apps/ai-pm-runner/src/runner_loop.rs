@@ -1161,16 +1161,11 @@ mod tests {
             backoff_cap_ms: 60_000,
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::{terminate_reacquired_agent, write_cleanup_escalation_evidence, ActiveRun};
     use crate::adapter;
     use std::time::Instant;
     use uuid::Uuid;
-
-    #[test]
+#[test]
     fn failed_child_termination_writes_cleanup_escalation_evidence_without_lease_token() {
         let root = std::env::temp_dir().join(format!("aipm-cleanup-evidence-{}", Uuid::new_v4()));
         let run = ActiveRun {
@@ -1234,4 +1229,5 @@ mod tests {
         assert!(!adapter::is_pid_alive(pid), "old Agent process must not survive generation fencing");
         let _ = std::fs::remove_dir_all(root);
     }
+
 }
