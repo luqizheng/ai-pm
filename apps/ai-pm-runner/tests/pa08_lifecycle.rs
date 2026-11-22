@@ -189,3 +189,214 @@ async fn tick_reports_heartbeat_and_polls_commands() {
     assert!(run.last_command_poll.elapsed() < Duration::from_secs(2));
     let _ = std::fs::remove_dir_all(root);
 }
+
+
+/// A terminate command must kill the real child and acknowledge the command
+/// with the current lease generation and an exit outcome.
+#[tokio::test]
+async fn terminate_command_kills_child_and_acks_receipt() {
+    let server = MockServer::start().await;
+    let command_id = Uuid::new_v4();
+    let ack = Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1);
+    ack.mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let process = ai_pm_runner::adapter::spawn(
+        &cfg.agent_cmd,
+        &root,
+        &[],
+        None,
+        &[],
+    ).expect("spawn long-lived child");
+
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 9,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: Some(process),
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: false,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+
+    ai_pm_runner::runner_loop::execute_command(
+        &cfg,
+        &client,
+        &mut run,
+        json!({
+            "command_id": command_id,
+            "command_type": "agent.process.terminate",
+            "payload": { "issued_at": "2026-11-22T00:00:00Z" }
+        }),
+    ).await;
+
+    assert!(run.awaiting_continue);
+    let child_id = run.process.as_ref().and_then(|p| p.child.id());
+    assert!(child_id.is_none(), "terminate must reap the child process");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A continue command must inject the human reply, spawn a fresh session,
+/// clear the awaiting-continue gate, and acknowledge it.
+#[tokio::test]
+async fn continue_command_spawns_session_and_injects_reply() {
+    let server = MockServer::start().await;
+    let command_id = Uuid::new_v4();
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 11,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+    let reply = json!({ "answer": "Use the safer migration path." });
+
+    ai_pm_runner::runner_loop::execute_command(
+        &cfg,
+        &client,
+        &mut run,
+        json!({
+            "command_id": command_id,
+            "command_type": "agent.task.continue",
+            "payload": {
+                "response": reply,
+                "guard": { "continuation_start_frozen": false }
+            }
+        }),
+    ).await;
+
+    assert!(!run.awaiting_continue);
+    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_some());
+    let injected: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.join(".aipm").join("reply.json")).expect("reply injection file")
+    ).expect("valid reply JSON");
+    assert_eq!(injected, reply);
+
+    if let Some(process) = run.process.as_mut() {
+        terminate(&mut process.child).await.expect("continued child terminates");
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A frozen continuation guard must fail closed and must not spawn a process.
+#[tokio::test]
+async fn continue_command_refuses_frozen_start_without_spawning() {
+    let server = MockServer::start().await;
+    let command_id = Uuid::new_v4();
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "failed"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 12,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+
+    ai_pm_runner::runner_loop::execute_command(
+        &cfg,
+        &client,
+        &mut run,
+        json!({
+            "command_id": command_id,
+            "command_type": "agent.task.continue",
+            "payload": {
+                "response": { "answer": "must not run" },
+                "guard": { "continuation_start_frozen": true }
+            }
+        }),
+    ).await;
+
+    assert!(run.awaiting_continue);
+    assert!(run.process.is_none());
+    assert!(!root.join(".aipm").join("reply.json").exists());
+    let _ = std::fs::remove_dir_all(root);
+}
