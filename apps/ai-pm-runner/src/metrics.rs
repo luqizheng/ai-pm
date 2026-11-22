@@ -51,11 +51,12 @@ impl RunnerMetrics {
     }
 
     fn record_operation(&self, operation: &str, success: bool) {
-        let index = OPERATIONS.iter().position(|candidate| *candidate == operation).unwrap_or(6);
+        let index = OPERATIONS.iter().position(|candidate| *candidate == operation).unwrap_or(7);
         self.operations[index][usize::from(!success)].fetch_add(1, Ordering::Relaxed);
     }
 
     fn render(&self) -> String {
+        use std::fmt::Write;
         let mut out = String::with_capacity(2048);
         metric(&mut out, "ai_pm_runner_uptime_seconds", "gauge", "Runner process uptime in seconds.", unix_seconds().saturating_sub(self.started_at));
         let _ = writeln!(out, "# HELP ai_pm_runner_mcp_operations_total Runner MCP tool calls by bounded operation and outcome.");
