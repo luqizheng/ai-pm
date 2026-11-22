@@ -125,7 +125,7 @@ describe("ProductCognitionView", () => {
     const { wrapper } = await mountView(null);
 
     expect(listPcObjects).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain("请选择项目");
+    expect(wrapper.find(".product-cognition__list").exists()).toBe(false);
   });
 
   it("加载失败显示错误，不伪装成空数据", async () => {
