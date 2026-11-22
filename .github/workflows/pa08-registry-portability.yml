@@ -72,8 +72,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify locked dependency metadata
         run: cargo metadata --locked --format-version 1 --no-deps
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
       - name: Verify all Digua crates resolve from crates.io
         shell: bash
         run: |
@@ -112,3 +110,6 @@ jobs:
         run: cargo test -p pm-api --test auth metrics_endpoint --locked
       - name: Validate PA08-06 Prometheus alert rules
         run: docker run --rm --entrypoint /bin/promtool -v "$PWD/infrastructure/monitoring/pa08-alerts.yml:/etc/prometheus/pa08-alerts.yml:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/pa08-alerts.yml
+      # Run formatting last so a pre-existing formatting failure cannot skip functional validation.
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
