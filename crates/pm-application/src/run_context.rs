@@ -875,10 +875,11 @@ async fn report_progress_impl(
             "UPDATE delivery.task_run \
                 SET status = 'running', stage = 'started', started_at = now(), \
                     executor_kind = 'mcp', executor_session = $2 \
-              WHERE id = $1",
+              WHERE id = $1 AND project_id = $3 AND status = 'claimed'",
         )
         .bind(run_id)
         .bind(&executor_session)
+        .bind(project_id)
         .execute(&mut *tx)
         .await?;
         run_status_after = run_status::RUNNING.to_string();
