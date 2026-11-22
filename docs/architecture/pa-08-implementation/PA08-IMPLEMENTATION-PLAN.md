@@ -71,9 +71,10 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - CodexExecutor has guarded worktree/mirror primitives: canonical path checks, symlink rejection, shared mirror lock, Git worktree remove/prune, and linked-worktree refusal before mirror deletion.
 - Worker now runs both Run-worktree and Repository-mirror rounds. Mirror reclamation locks the Repository row and keeps that transaction open through the filesystem adapter, serializing against Repository archive/update writes; the existing mirror lock and Git linked-worktree checks remain in force.
 - File deletion is disabled by default. Enablement requires `AI_PM_WORKSPACE_RECLAMATION_ENABLED=true`, `AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT=true`, and an absolute `AI_PM_WORKSPACE_ROOT`. The Worker performs fenced claims and a second DB eligibility check before filesystem operations.
-- Added `needs_human` listing and explicit operator requeue application operations. Backlog/bytes metrics remain PA08-06.
-- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). Expanded mirror-lock, worker, ledger, process-cleanup and Codex path-safety tests all pass in [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084).
-- File deletion remains opt-in and disabled by default. Reclamation backlog is now included in the initial PA08-06 API metrics endpoint; reclaimed-byte accounting remains open.
+- Added `needs_human` listing and explicit operator requeue application operations. Project-scoped process-cleanup escalation is exposed at `GET /v1/pm/task-run-cleanups/needs-human`; the API first checks project visibility and the application query repeats tenant/project scope in SQL.
+- Workspace reclamation completion records logical file bytes removed in migration `0056`; CodexExecutor measures regular-file logical sizes without following symlinks. The metric `ai_pm_workspace_reclaimed_bytes_total` is exported by the API. This is logical file-size accounting, not physical disk-block reclamation.
+- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). Expanded mirror-lock, worker, ledger, process-cleanup and Codex path-safety tests all pass in [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084). The byte-accounting, needs-human API, workspace build, Runner integration and PostgreSQL ledger suites passed [Hosted Run](https://github.com/luqizheng/ai-pm/actions/runs/44978431052).
+- File deletion remains opt-in and disabled by default. Reclamation backlog and cumulative logical reclaimed bytes are included in the PA08-06 API metrics endpoint.
 
 ### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFIED
 - Added an explicit source-state/action matrix from PA-07 §§4/11/12: `normal → suspended → resuming → normal`, with `resuming → suspended` for a renewed pause and `abandon → archived` from non-archived states.
@@ -87,7 +88,10 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - `pm-api` 已新增受现有 Bearer 鉴权保护的 `GET /metrics`，输出 Prometheus text exposition；数据库聚合覆盖 Run 状态/活跃年龄、process-cleanup 状态、workspace reclamation 状态，以及现有 communication overview。
 - Label 仅使用 Run kind/status、cleanup status、resource kind/status 等有限状态维度；不输出任何 entity ID、用户内容、仓库 URL、凭据或原始错误。
 - 数据库 scrape 查询失败返回 503，不会把旧值伪装成当前值。指标实现与转义测试见 `apps/pm-api/src/metrics.rs`。
-- 尚未完成：Worker loop/Runner MCP 操作 counters、Worker loopback metrics listener、filesystem capacity/available-space、reclaimed bytes accounting、process-cleanup `needs_human` 列表接口、阈值告警与完整 Hosted CI 证据。故 PA08-06 不得标记完成。
+- Workspace reclamation 已记录每次成功删除的逻辑文件字节数（migration `0056`），并输出 `ai_pm_workspace_reclaimed_bytes_total`。该值不是物理磁盘块回收量。
+- Process-cleanup `needs_human` 列表已实现为项目范围 API：`GET /v1/pm/task-run-cleanups/needs-human?project_id=...`；项目可见性与 SQL tenant/project scope 双重约束。
+- 上述 reclaimed-byte accounting、needs-human API、metrics exposition、workspace build、Runner tests 及 PostgreSQL suites 已由 Hosted [Run #166 follow-up](https://github.com/luqizheng/ai-pm/actions/runs/44978431052) 验证通过。
+- 尚未完成：Worker loop/Runner MCP 操作 counters、Worker loopback metrics listener、filesystem capacity/available-space gauges、告警阈值与完整 scrape/endpoint integration tests。故 PA08-06 不得标记完成。
 
 ## 4. 全局红线
 
@@ -118,4 +122,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过（包含回收 Worker、PostgreSQL 账本、Product lifecycle API 与 Product gate vs Run claim 并发测试）。PA08-06 第一阶段 API 聚合指标代码及单测已由 Hosted CI Run #156 验证通过。PA08-06 剩余 Worker/Runner 监控、磁盘容量和回收量统计仍未实现。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛 transport/lease 故障注入仍待补齐。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过（包含回收 Worker、PostgreSQL 账本、Product lifecycle API 与 Product gate vs Run claim 并发测试）；reclaimed-byte accounting 与 process-cleanup needs-human API 后续由 Hosted Run #166 follow-up 验证通过。PA08-06 API 聚合指标、回收字节指标、needs-human API 已由 Hosted Run #166 follow-up 验证；Worker/Runner 运行指标、Worker exporter、文件系统容量指标、阈值告警及完整 endpoint/scrape 集成测试仍未完成。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
