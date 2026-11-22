@@ -276,6 +276,7 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
     let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await?;
     let mut logged_awaiting = false;
     let mut lease_lost_cleanup_pending = false;
+    let mut lease_reacquired_after_loss = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
 
     loop {
@@ -292,7 +293,10 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                         .map_err(|error| mcp::RunnerError::Adapter(error.to_string())),
                     None => Ok(()),
                 },
-                Some(run) => reacquire_active_run(cfg, client, run).await.map(|_| ()),
+                Some(_) if lease_reacquired_after_loss => Ok(()),
+                Some(run) => reacquire_active_run(cfg, client, run).await.map(|_| {
+                    lease_reacquired_after_loss = true;
+                }),
                 None => Ok(()),
             };
             if has_local_child {
@@ -300,15 +304,20 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
             }
             match cleanup_result {
                 Ok(()) => {
-                    if has_local_child {
-                        if let Some(run) = active.as_ref() {
-                            let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
-                        }
-                        active = None;
-                    } else if let Some(run) = active.as_ref() {
+                    if let Some(run) = active.as_mut() {
                         let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
+                        if has_local_child {
+                            run.process = None;
+                            if lease_reacquired_after_loss {
+                                run.awaiting_continue = true;
+                            }
+                        }
+                    }
+                    if has_local_child && !lease_reacquired_after_loss {
+                        active = None;
                     }
                     lease_lost_cleanup_pending = false;
+                    lease_reacquired_after_loss = false;
                 }
                 Err(error) => {
                     if let Some(run) = active.as_ref() {
@@ -381,12 +390,18 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                 // I2：租约类拒绝 → 同主体续领（退避；R-16 方案 a 真进程落位）。
                 if e.is_lease_error() {
                     match reacquire_active_run(cfg, client, run).await {
-                        Ok(()) => tracing::info!(
-                            run = %run.run_id,
-                            generation = run.lease_generation,
-                            "lease reacquired mid-run (lease-class rejection recovered)"
-                        ),
+                        Ok(()) => {
+                            tracing::info!(
+                                run = %run.run_id,
+                                generation = run.lease_generation,
+                                "lease reacquired with a new generation; old Agent must be reaped before continuing"
+                            );
+                            lease_lost_cleanup_pending = true;
+                            lease_reacquired_after_loss = true;
+                            continue;
+                        }
                         Err(reacquire_error) => {
+                            lease_reacquired_after_loss = false;
                             tracing::warn!(
                                 error = %reacquire_error,
                                 run = %run.run_id,
