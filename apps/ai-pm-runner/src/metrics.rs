@@ -9,12 +9,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-const OPERATIONS: [&str; 7] = [
+const OPERATIONS: [&str; 8] = [
     "claim",
     "discover",
     "heartbeat",
     "command_poll",
     "command_ack",
+    "lease_reacquire",
     "interaction",
     "other",
 ];
@@ -222,6 +223,6 @@ mod tests {
         assert!(!output.contains("project_id"));
         assert!(!output.contains("run_id"));
         assert!(!output.contains("lease_token"));
-        assert_eq!(OPERATIONS.len(), 7);
+        assert_eq!(OPERATIONS.len(), 8);
     }
 }
