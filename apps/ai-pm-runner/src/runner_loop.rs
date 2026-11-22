@@ -320,9 +320,23 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                             tracing::warn!(
                                 error = %reacquire_error,
                                 run = %run.run_id,
-                                "lease reacquire failed; run released to platform recovery paths"
+                                "lease reacquire failed; terminating and reaping local Agent before releasing supervision"
                             );
-                            active = None;
+                            match run.process.as_mut() {
+                                Some(process) => match adapter::terminate_spawned(process).await {
+                                    Ok(outcome) => {
+                                        tracing::warn!(run = %run.run_id, pid = process.pid, session = %process.session_id, outcome = outcome.as_str(), "Agent terminated and reaped after lease reacquisition failure");
+                                        active = None;
+                                    }
+                                    Err(stop_error) => {
+                                        if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &stop_error.to_string()) {
+                                            tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
+                                        }
+                                        tracing::error!(run = %run.run_id, pid = process.pid, session = %process.session_id, error = %stop_error, "Agent termination unconfirmed; retaining Child handle and blocking new claims");
+                                    }
+                                },
+                                None => tracing::error!(run = %run.run_id, "lease reacquisition failed for recovered Run; retaining supervision slot"),
+                            }
                             continue;
                         }
                     }
@@ -349,6 +363,28 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
     }
 }
 
+/// Persist local evidence when a child cannot be confirmed terminated. Credentials are excluded.
+fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(), std::io::Error> {
+    let directory = run.run_dir.join(".aipm");
+    std::fs::create_dir_all(&directory)?;
+    let process = run.process.as_ref();
+    let evidence = json!({
+        "schema_version": "aipm.runner-cleanup-escalation.v1",
+        "project_id": run.project_id,
+        "task_id": run.task_id,
+        "run_id": run.run_id,
+        "lease_generation": run.lease_generation,
+        "pid": process.map(|p| p.pid),
+        "session_id": process.map(|p| p.session_id.as_str()),
+        "reason": "lease_reacquisition_failed_and_termination_unconfirmed",
+        "error": error,
+        "recorded_at": chrono::Utc::now().to_rfc3339(),
+    });
+    let path = directory.join("cleanup-needs-human.json");
+    let temporary = directory.join("cleanup-needs-human.json.tmp");
+    std::fs::write(&temporary, serde_json::to_vec_pretty(&evidence)?)?;
+    std::fs::rename(temporary, path)
+}
 /// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
 async fn reacquire_active_run(
     cfg: &Config,
