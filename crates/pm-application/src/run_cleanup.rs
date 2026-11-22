@@ -214,3 +214,45 @@ pub async fn run_cleanup_round(
     }
     Ok((ok, failed))
 }
+
+
+/// Operator-facing process-cleanup rows that require human intervention.
+/// The project/tenant scope is enforced in SQL so callers cannot enumerate
+/// another tenant's cleanup records.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct CleanupNeedsHuman {
+    pub run_id: Uuid,
+    pub session: String,
+    pub executor_kind: Option<String>,
+    pub identity_hint: Option<String>,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub next_retry_at: DateTime<Utc>,
+    pub last_error: Option<String>,
+    pub task_id: Uuid,
+    pub project_id: Uuid,
+    pub run_status: String,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub async fn list_needs_human(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    limit: i64,
+) -> Result<Vec<CleanupNeedsHuman>, sqlx::Error> {
+    sqlx::query_as::<_, CleanupNeedsHuman>(
+        "SELECT cleanup.run_id, cleanup.session, cleanup.executor_kind, cleanup.identity_hint, \
+                cleanup.attempts, cleanup.max_attempts, cleanup.next_retry_at, cleanup.last_error, \
+                run.task_id, run.project_id, run.status AS run_status, cleanup.updated_at \
+           FROM delivery.task_run_cleanup cleanup \
+           JOIN delivery.task_run run ON run.id = cleanup.run_id \
+          WHERE run.tenant_id = $1 AND run.project_id = $2 AND cleanup.status = 'needs_human' \
+          ORDER BY cleanup.updated_at DESC LIMIT $3",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(limit.clamp(1, 100))
+    .fetch_all(pool)
+    .await
+}
