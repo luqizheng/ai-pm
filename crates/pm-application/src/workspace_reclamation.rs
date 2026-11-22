@@ -285,10 +285,20 @@ pub async fn mark_completed(
     reclaimed_bytes: u64,
 ) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
-        "UPDATE delivery.workspace_reclamation \
-            SET status = 'completed', completed_at = now(), claim_token = NULL, \
-                reclaimed_bytes = $3, last_error = NULL, updated_at = now() \
-          WHERE id = $1 AND status = 'cleaning' AND claim_token = $2",
+        "WITH completed AS ( \\
+             UPDATE delivery.workspace_reclamation \\
+                SET status = 'completed', completed_at = now(), claim_token = NULL, \\
+                    reclaimed_bytes = $3, last_error = NULL, updated_at = now() \\
+              WHERE id = $1 AND status = 'cleaning' AND claim_token = $2 \\
+              RETURNING resource_kind, reclaimed_bytes \\
+         ) \\
+         INSERT INTO delivery.workspace_reclamation_totals \\
+             (resource_kind, total_reclaimed_bytes) \\
+         SELECT resource_kind, reclaimed_bytes FROM completed \\
+         ON CONFLICT (resource_kind) DO UPDATE \\
+             SET total_reclaimed_bytes = delivery.workspace_reclamation_totals.total_reclaimed_bytes \\
+                                      + EXCLUDED.total_reclaimed_bytes, \\
+                 updated_at = now()",
     )
     .bind(id)
     .bind(claim_token)
