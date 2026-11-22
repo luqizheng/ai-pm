@@ -317,9 +317,9 @@ async fn grant(
     }
 
     // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
-    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
-    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
-    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。Team 行已由
+    // apply_member_change 在 tenant/project 锁之前锁定；此处只重读成员资格，
+    // 避免在锁序中途再次获取 Team 锁。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
            JOIN core.team t ON t.id = tm.team_id \
@@ -462,9 +462,9 @@ async fn transfer_owner(
     }
 
     // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
-    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
-    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
-    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。Team 行已由
+    // apply_member_change 在 tenant/project 锁之前锁定；此处只重读成员资格，
+    // 避免在锁序中途再次获取 Team 锁。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
            JOIN core.team t ON t.id = tm.team_id \
