@@ -755,3 +755,71 @@ async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(po
     assert_eq!(second.completed, 1);
     assert_eq!(second_adapter.mirror_calls.load(Ordering::SeqCst), 1);
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn reclaimed_byte_totals_remain_monotonic_across_reclamation_cycles(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-BYTES-TOTAL").await;
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.workspace_reclamation \\
+         (tenant_id, project_id, resource_kind, run_id, repository_id, relative_path) \\
+         VALUES ($1, $2, 'run_worktree', $3, $4, $5) RETURNING id",
+    )
+    .bind(fx.tenant_id)
+    .bind(fx.project_id)
+    .bind(fx.run_id)
+    .bind(fx.repository_id)
+    .bind(format!("repos/repo-{}", fx.repository_id))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let first_token = Uuid::new_v4();
+    sqlx::query(
+        "UPDATE delivery.workspace_reclamation \\
+            SET status = 'cleaning', claim_token = $2 WHERE id = $1",
+    )
+    .bind(id)
+    .bind(first_token)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        pm_application::workspace_reclamation::mark_completed(&pool, id, first_token, 7)
+            .await
+            .unwrap()
+    );
+
+    let second_token = Uuid::new_v4();
+    sqlx::query(
+        "UPDATE delivery.workspace_reclamation \\
+            SET status = 'cleaning', claim_token = $2, completed_at = NULL WHERE id = $1",
+    )
+    .bind(id)
+    .bind(second_token)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        pm_application::workspace_reclamation::mark_completed(&pool, id, second_token, 5)
+            .await
+            .unwrap()
+    );
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT total_reclaimed_bytes FROM delivery.workspace_reclamation_totals \\
+          WHERE resource_kind = 'run_worktree'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let latest_operation_bytes: i64 = sqlx::query_scalar(
+        "SELECT reclaimed_bytes FROM delivery.workspace_reclamation WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(total, 12, "counter total must include both successful cycles");
+    assert_eq!(latest_operation_bytes, 5, "ledger row retains latest operation size");
+}
