@@ -250,7 +250,7 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
         tracing::warn!(error = %e, "startup probe failed (non-credential); continuing");
     }
 
-    let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await;
+    let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await?;
     let mut logged_awaiting = false;
     let mut lease_lost_cleanup_pending = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
