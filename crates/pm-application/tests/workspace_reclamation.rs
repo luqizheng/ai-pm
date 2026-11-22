@@ -2,7 +2,8 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::time::Duration;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -362,6 +363,7 @@ async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPoo
 #[derive(Default)]
 struct FakeReclaimer {
     calls: AtomicUsize,
+    mirror_calls: AtomicUsize,
 }
 
 #[async_trait::async_trait]
@@ -373,6 +375,14 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for FakeReclaimer
         _workspace_path: &str,
     ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn reclaim_repository_mirror(
+        &self,
+        _repository_id: Uuid,
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+        self.mirror_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -445,4 +455,117 @@ async fn worktree_reclamation_round_skips_candidate_that_fails_second_check(pool
     assert_eq!(report.claimed, 1);
     assert_eq!(report.skipped, 1);
     assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
+}
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn mirror_reclamation_round_rechecks_archive_state_under_repository_lock(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-MIRROR-ROUND").await;
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let adapter = FakeReclaimer::default();
+    let report = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+        &pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.claimed, 1);
+    assert_eq!(report.completed, 1);
+    assert_eq!(adapter.mirror_calls.load(Ordering::SeqCst), 1);
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM delivery.workspace_reclamation WHERE repository_id = $1",
+    )
+    .bind(fx.repository_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "completed");
+}
+
+struct RepositoryLockProbe {
+    pool: PgPool,
+    repository_id: Uuid,
+    blocked: AtomicBool,
+}
+
+#[async_trait::async_trait]
+impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLockProbe {
+    async fn reclaim_run_worktree(
+        &self,
+        _run_id: Uuid,
+        _repository_id: Uuid,
+        _workspace_path: &str,
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+        unreachable!("mirror round must not call worktree reclamation")
+    }
+
+    async fn reclaim_repository_mirror(
+        &self,
+        _repository_id: Uuid,
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+        let pool = self.pool.clone();
+        let repository_id = self.repository_id;
+        let update = tokio::spawn(async move {
+            sqlx::query(
+                "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
+            )
+            .bind(repository_id)
+            .execute(&pool)
+            .await
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.blocked.store(!update.is_finished(), Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-MIRROR-LOCK").await;
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let adapter = RepositoryLockProbe {
+        pool: pool.clone(),
+        repository_id: fx.repository_id,
+        blocked: AtomicBool::new(false),
+    };
+    let report = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+        &pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.completed, 1);
+    assert!(
+        adapter.blocked.load(Ordering::SeqCst),
+        "Repository reactivation must block until mirror deletion transaction commits"
+    );
 }
