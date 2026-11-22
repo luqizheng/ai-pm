@@ -47,7 +47,7 @@ jobs:
   # review_proposals（pm-ai self_review）单测锁定阈值语义（10>10 为假、
   # 红线优先、拆分不绕过、批量命令按载荷长度计、饱和累加）。
   unit:
-    runs-on: [self-hosted, internal-registry]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
