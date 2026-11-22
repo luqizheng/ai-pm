@@ -152,7 +152,10 @@ pub async fn recover_inflight_run(
         return Ok(None);
     };
     if runs.len() > 1 {
-        tracing::warn!(count = runs.len(), "multiple recoverable Runs discovered; single-run Runner recovers the first");
+        return Err(mcp::RunnerError::Malformed(format!(
+            "single-run Runner discovered {} in-flight Runs; refusing to claim or execute until recovery is unambiguous",
+            runs.len()
+        )));
     }
     let run_id = entry
         .get("run_id")
