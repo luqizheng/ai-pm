@@ -506,7 +506,7 @@ async fn claim_core_in_project(
     let mut run_id: Uuid = candidate.get("id");
     let task_id: Uuid = candidate.get("task_id");
     let project_id: Uuid = candidate.get("project_id");
-    let run_state: String = candidate.get("status");
+    let mut run_state: String = candidate.get("status");
     let dispatch_attempts: i32 = candidate.get("dispatch_attempts");
     let executor_session: Option<String> = candidate.get("executor_session");
     let candidate_stage: Option<String> = candidate.get("stage");
@@ -527,6 +527,11 @@ async fn claim_core_in_project(
     .await?;
 
     let Some(task) = task else {
+        crate::run_transition_guard::lock_and_validate_transition(
+            &mut tx, project_id, run_id,
+            crate::run_transition_guard::RunKind::Delivery,
+            crate::run_transition_guard::RunStatus::Cancelled,
+        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
         cancel_run(&mut tx, run_id, "task_missing").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
@@ -550,6 +555,11 @@ async fn claim_core_in_project(
         .map(|s| s.is_terminal())
         .unwrap_or(true);
     if terminal_or_gone {
+        crate::run_transition_guard::lock_and_validate_transition(
+            &mut tx, project_id, run_id,
+            crate::run_transition_guard::RunKind::Delivery,
+            crate::run_transition_guard::RunStatus::Cancelled,
+        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
         cancel_run(&mut tx, run_id, "task_terminal").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
@@ -626,7 +636,13 @@ async fn claim_core_in_project(
                 .await?;
                 task_state = "ready".to_string();
             }
+            crate::run_transition_guard::lock_and_validate_transition(
+                &mut tx, project_id, run_id,
+                crate::run_transition_guard::RunKind::Delivery,
+                crate::run_transition_guard::RunStatus::Queued,
+            ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
             requeue_for_redispatch(&mut tx, run_id).await?;
+            run_state = run_status::QUEUED.to_string();
             audit_run(
                 &mut tx,
                 project_id,
@@ -658,6 +674,7 @@ async fn claim_core_in_project(
             }
             let created =
                 recover_lost_run(&mut tx, superseded_run_id, task_id, project_id, cfg).await?;
+            run_state = run_status::QUEUED.to_string();
             if opts.task_filter.is_none() {
                 tx.commit().await?;
                 return Ok(Some(ClaimOutcome {
@@ -916,6 +933,11 @@ async fn claim_core_in_project(
         LeaseOwner::Client { .. } => "spawn",
     };
 
+    crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::Claimed,
+    ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let lease_generation: i32 = sqlx::query_scalar(
         "UPDATE delivery.task_run \
             SET status = 'claimed', stage = 'dispatch', claimed_at = now(), \
