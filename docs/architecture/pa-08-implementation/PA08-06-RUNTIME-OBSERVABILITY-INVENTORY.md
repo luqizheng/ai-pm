@@ -1,6 +1,6 @@
 # PA08-06 — Runtime Observability Inventory
 
-**Status:** INVENTORY COMPLETE; IMPLEMENTATION NOT STARTED.
+**Status:** INVENTORY COMPLETE; PARTIAL IMPLEMENTATION LANDED (API AGGREGATE METRICS ONLY).
 
 ## 1. Current-state facts
 
@@ -62,3 +62,23 @@ Never use `run_id`, `task_id`, `project_id`, `repository_id`, user identity, URL
 6. Add exporter tests, security assertions, and Hosted CI steps.
 
 No Kafka, external SaaS, distributed tracing backend, or separate event-sourcing system is introduced.
+
+
+## 6. Implementation update — first API slice
+
+The branch now contains `apps/pm-api/src/metrics.rs` and a `GET /metrics` route.
+
+Implemented:
+- Prometheus text exposition for Run counts and oldest active Run age, process-cleanup backlog by status, workspace reclamation backlog by resource/status, and the existing communication overview aggregates.
+- The route is inside the normal authenticated router; the existing public `/health` probe remains separate.
+- Scrape/database failures return HTTP 503 rather than presenting stale values as fresh.
+- Labels are limited to status/kind dimensions; entity IDs, user content, repository URLs, tokens and raw errors are excluded.
+- Label escaping has a unit test.
+
+Not yet implemented:
+- Worker and Runner operation counters / exporters.
+- Worker loopback listener and filesystem capacity/available-space gauges.
+- Reclaimed-byte accounting and cleanup needs-human listing API.
+- Full scrape/endpoint integration tests, alerting thresholds and hosted CI verification.
+
+This is deliberately a partial slice, not PA08-06 acceptance. See the implementation plan for remaining gates.
