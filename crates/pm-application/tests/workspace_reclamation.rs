@@ -582,3 +582,68 @@ async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter
     }
     assert!(adapter.updated.load(Ordering::SeqCst), "blocked reactivation should proceed after commit");
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-NEEDS-HUMAN").await;
+    sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query(
+        "UPDATE delivery.workspace_reclamation SET max_attempts = 1 WHERE run_id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let claimed = pm_application::workspace_reclamation::claim_batch(&pool)
+        .await
+        .unwrap();
+    let token = claimed[0].claim_token.unwrap();
+    assert!(
+        pm_application::workspace_reclamation::mark_failed(
+            &pool,
+            claimed[0].id,
+            token,
+            "operator review required",
+            60,
+        )
+        .await
+        .unwrap()
+    );
+
+    let needs_human = pm_application::workspace_reclamation::list_needs_human(&pool, 10)
+        .await
+        .unwrap();
+    assert_eq!(needs_human.len(), 1);
+    assert_eq!(needs_human[0].id, claimed[0].id);
+    assert_eq!(needs_human[0].status, "needs_human");
+
+    assert!(
+        pm_application::workspace_reclamation::requeue_needs_human(&pool, claimed[0].id)
+            .await
+            .unwrap()
+    );
+    let status: (String, i32, Option<Uuid>) = sqlx::query_as(
+        "SELECT status, attempts, claim_token FROM delivery.workspace_reclamation WHERE id = $1",
+    )
+    .bind(claimed[0].id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status.0, "pending");
+    assert_eq!(status.1, 0);
+    assert!(status.2.is_none());
+}
