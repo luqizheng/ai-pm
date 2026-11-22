@@ -340,7 +340,9 @@ pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
-        if process_identity_hint(report.record.pid).as_deref() != Some(expected) {
+        if process_identity_hint(report.record.pid).as_deref() != Some(expected)
+            || !process_is_running(report.record.pid)
+        {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -576,6 +578,25 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
         let after = stat.rsplit_once(')')?.1;
         let fields: Vec<&str> = after.split_whitespace().collect();
         fields.get(19).map(|value| format!("proc-start-{value}"))
+    }
+}
+
+/// Whether the process can still execute. Unix zombies are already stopped even
+/// though `/proc/{pid}` remains until the original parent reaps the exit status.
+fn process_is_running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        let Some((_, after)) = stat.rsplit_once(')') else {
+            return false;
+        };
+        after.split_whitespace().next() != Some("Z")
+    }
+    #[cfg(windows)]
+    {
+        process_identity_hint(pid).is_some()
     }
 }
 
