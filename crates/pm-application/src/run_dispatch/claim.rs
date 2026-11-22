@@ -934,7 +934,7 @@ async fn claim_core_in_project(
                 executor_id = COALESCE($9, executor_id), \
                 execution_mode = $10,\
                 lease_client_id = $11 \
-          WHERE id = $1 \
+          WHERE id = $1 AND project_id = $12 AND status = 'queued' \
          RETURNING lease_generation",
     )
     .bind(run_id)
@@ -954,6 +954,7 @@ async fn claim_core_in_project(
         LeaseOwner::Client { device_id } => Some(device_id),
         _ => None,
     })
+    .bind(project_id)
     .fetch_one(&mut *tx)
     .await?;
 
