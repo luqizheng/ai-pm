@@ -1,0 +1,55 @@
+name: Frontend CI
+
+concurrency:
+  group: frontend-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "ai-frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  push:
+    branches: [master]
+    paths:
+      - "ai-frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    # The frontend depends on private *-services@1.10.1 packages hosted in the
+    # internal Verdaccio registry (ai-frontend/.npmrc). Never execute fork PR
+    # code on the internal-network self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, internal-registry]
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ai-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ai-frontend/.nvmrc
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check design tokens and localization
+        run: |
+          pnpm check:prism-tokens
+          pnpm check:i18n
+      - name: TypeScript and Vue type check
+        run: pnpm typecheck
+      - name: Frontend unit tests
+        run: pnpm test:unit
+      - name: ESLint and Prettier
+        run: pnpm lint
+      - name: Production build
+        run: pnpm build
