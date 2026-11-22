@@ -46,7 +46,10 @@ fn real_main() -> i32 {
         .enable_all()
         .build()
         .expect("tokio runtime builds");
-    match runtime.block_on(runner_loop::run_loop(&cfg, &client)) {
+    match runtime.block_on(async {
+        ai_pm_runner::metrics::start_from_env();
+        runner_loop::run_loop(&cfg, &client).await
+    }) {
         Ok(()) => EXIT_OK,
         Err(e) if e.is_unauthorized() => {
             // 已在循环内告警；此处保证进程退出码可被 supervisor 区分。
