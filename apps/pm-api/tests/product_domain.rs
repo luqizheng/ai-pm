@@ -647,6 +647,8 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     assert_eq!(st, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["message"], json!("product_abandoned"));
 
+    // PA-07 §12: Archived is not ordinarily restorable. The legacy
+    // restart action must not bypass Suspended -> Resuming -> Normal.
     let (st, body) = call(
         &w.app,
         "POST",
@@ -655,19 +657,8 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
         Some(json!({ "action": "restart" })),
     )
     .await;
-    assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], json!("normal"));
-
-    // active 建 Link 需要项目存在；bogus project → 404。
-    let (st, _) = call(
-        &w.app,
-        "POST",
-        &format!("/v1/pm/products/{}/links", w.product_id),
-        &owner_token,
-        Some(json!({ "project_id": Uuid::new_v4() })),
-    )
-    .await;
-    assert_eq!(st, StatusCode::NOT_FOUND);
+    assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["status"], json!("error"));
 
     // 生命周期审计。
     let audits: i64 = sqlx::query_scalar(
@@ -678,5 +669,5 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits, 2, "abandon + restart audits");
+    assert_eq!(audits, 1, "only the accepted abandon transition is audited");
 }
