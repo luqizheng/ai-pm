@@ -78,13 +78,13 @@ pub async fn claim_batch(pool: &PgPool) -> Result<Vec<CleanupEntry>, sqlx::Error
               WHERE status IN ('pending', 'cleaning')
                 AND next_retry_at <= now()
               ORDER BY next_retry_at, created_at
-              LIMIT 32
+              LIMIT $1
               FOR UPDATE SKIP LOCKED
          )
          UPDATE delivery.task_run_cleanup AS cleanup
             SET status = 'cleaning',
                 claim_token = gen_random_uuid(),
-                next_retry_at = now() + make_interval(secs => $1::float8),
+                next_retry_at = now() + make_interval(secs => $2::float8),
                 updated_at = now()
            FROM candidates
           WHERE cleanup.run_id = candidates.run_id
@@ -93,6 +93,7 @@ pub async fn claim_batch(pool: &PgPool) -> Result<Vec<CleanupEntry>, sqlx::Error
                    cleanup.max_attempts, cleanup.next_retry_at,
                    cleanup.last_error, cleanup.claim_token",
     )
+    .bind(CLEANUP_BATCH_LIMIT)
     .bind(CLEANUP_CLAIM_LEASE_SECS)
     .fetch_all(pool)
     .await
