@@ -10,7 +10,8 @@
 //!   Team Owner 恢复性任命（唯一显式 Owner 授予通道，第一轮；Member 任命/降级
 //!   Owner 归 PA §8-3 OPEN，不实现）。
 //! - **生命周期** {normal, suspended, resuming, archived}：Owner 可 abandon、
-//!   suspend、resume、complete_resume；恢复必须经过 suspended → resuming → normal，
+//!   suspend、resume、complete_resume；restart 仅是 resuming → normal 的兼容别名；
+//!   恢复必须经过 suspended → resuming → normal，
 //!   archived 不提供常规恢复；[`assert_product_active`] 对非 normal 状态 fail-closed，
 //!   历史读取不拦；状态变化不批量改写关联 Project / Task / Run。
 //! - 审计：`product_member.added/removed/role_changed` + `product.lifecycle_changed`
