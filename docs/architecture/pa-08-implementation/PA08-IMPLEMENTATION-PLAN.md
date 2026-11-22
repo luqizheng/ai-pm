@@ -92,7 +92,9 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Workspace reclamation 已记录每次成功删除的逻辑文件字节数（migration `0056`），并输出 `ai_pm_workspace_reclaimed_bytes_total`。该值不是物理磁盘块回收量。
 - Process-cleanup `needs_human` 列表已实现为项目范围 API：`GET /v1/pm/task-run-cleanups/needs-human?project_id=...`；项目可见性与 SQL tenant/project scope 双重约束。
 - 上述 reclaimed-byte accounting、needs-human API、metrics exposition、workspace build、Runner tests 及 PostgreSQL suites 已由 Hosted [Run #166 follow-up](https://github.com/luqizheng/ai-pm/actions/runs/44978431052) 验证通过。
-- 尚未完成：Worker loop/Runner MCP 操作 counters、Worker loopback metrics listener、filesystem capacity/available-space gauges、告警阈值与完整 scrape/endpoint integration tests。故 PA08-06 不得标记完成。
+- Worker loopback Prometheus listener 已实现，默认绑定 `127.0.0.1:9465`，可由 `AI_PM_WORKER_METRICS_ADDR` 覆盖；已接入 AI analysis/repo import claim、Run dispatch attempt/error、Run poll error、cleanup error 与 scrape counters，并补充 `/metrics` 200、非目标路径 404 的 HTTP 测试。指标不含实体 ID、凭据或高基数标签。
+- Worker cleanup failure counter 已接入 run-cleanup round 与 finished-process cleanup 两条错误路径。Worker exporter 当前提交仍须由最新 Hosted CI 验证。
+- 尚未完成：Runner MCP 操作 counters/可选 exporter、Worker workspace filesystem capacity/available-space gauges、告警规则/阈值、API scrape/endpoint integration tests。故 PA08-06 不得标记完成。
 
 ## 4. 全局红线
 
