@@ -3,6 +3,7 @@
 PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、可观测的工程闭环。
 
 - [PA-08 Implementation Plan](PA08-IMPLEMENTATION-PLAN.md)：范围、工作流、约束与验收门槛。
+- [PA08-00 Current-State Inventory](PA08-00-CURRENT-STATE-INVENTORY.md)：关键模块静态盘点与实施前风险。
 - 前置证据：[PA-07 最终验收](../pa-07-implementation/PA07-FINAL-IMPLEMENTATION-ACCEPTANCE.md)、[PA-07 当前差异核验](../pa-07-implementation/PA07-IMP-003-current-state-verification.md)。
 
 ## Workstream status
