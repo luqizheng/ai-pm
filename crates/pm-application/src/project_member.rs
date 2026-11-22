@@ -135,18 +135,37 @@ pub async fn apply_member_change(
     //      Grant: tenant → project → team
     //      Remove: team → project_member → tenant(FK/audit)
     //    的锁环（PostgreSQL deadlock）。Team 行锁保证授权资格检查与移除互斥。
-    let team_locked: Option<Uuid> = sqlx::query_scalar(
+    let team_ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT t.id FROM core.team t \
-          JOIN core.team_member tm ON tm.team_id = t.id \
-         WHERE t.tenant_id = $1 AND tm.principal_id = $2 \
-         FOR UPDATE OF t",
+         WHERE t.tenant_id = $1 \
+           AND EXISTS (SELECT 1 FROM core.team_member tm \
+                        WHERE tm.team_id = t.id AND tm.principal_id = $2) \
+         ORDER BY t.id FOR UPDATE",
     )
     .bind(tenant_id)
     .bind(op.target())
-    .fetch_optional(&mut *tx)
+    .fetch_all(&mut *tx)
     .await
     .map_err(db_err)?;
-    if team_locked.is_none() {
+    if team_ids.is_empty() {
+        return Err(ProjectMemberError::Conflict {
+            code: "NOT_TENANT_MEMBER",
+            message: "principal is not a member of this tenant",
+        });
+    }
+    // FOR UPDATE 等待期间，移除事务可能已经删除 team_member 行；
+    // 在拿到 Team 锁后用新语句重新检查，避免依赖等待前的旧快照。
+    let still_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
+           JOIN core.team t ON t.id = tm.team_id \
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2)",
+    )
+    .bind(tenant_id)
+    .bind(op.target())
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    if !still_member {
         return Err(ProjectMemberError::Conflict {
             code: "NOT_TENANT_MEMBER",
             message: "principal is not a member of this tenant",
@@ -177,7 +196,7 @@ pub async fn apply_member_change(
         return Err(ProjectMemberError::NotFound("project not found"));
     }
 
-    // 3) 判定调用人权限（实时查库，不读 token）。
+    // 4) 判定调用人权限（实时查库，不读 token）。
     if !is_manager(&mut tx, tenant_id, project_id, actor.principal_id).await? {
         return Err(ProjectMemberError::Forbidden("project owner required"));
     }
@@ -304,7 +323,7 @@ async fn grant(
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
            JOIN core.team t ON t.id = tm.team_id \
-          WHERE t.tenant_id = $1 AND tm.principal_id = $2 FOR UPDATE OF t)",
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2)",
     )
     .bind(tenant_id)
     .bind(principal_id)
