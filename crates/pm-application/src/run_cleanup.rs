@@ -40,7 +40,8 @@ pub struct CleanupEntry {
     pub max_attempts: i32,
     pub next_retry_at: DateTime<Utc>,
     pub last_error: Option<String>,
-    /// Fencing token for the current cleaning lease; absent outside a claim.
+    /// Internal fencing token; never expose it in serialized cleanup summaries.
+    #[serde(skip_serializing)]
     pub claim_token: Option<Uuid>,
 }
 
@@ -137,7 +138,7 @@ pub async fn mark_failed(
     .bind(run_id)
     .bind(claim_token)
     .bind(backoff_secs as f64)
-    .bind(error)
+    .bind(truncate_error(error))
     .execute(pool)
     .await?
     .rows_affected();
