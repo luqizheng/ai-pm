@@ -270,7 +270,10 @@ async fn main() {
                         tracing::info!(cleared = ok, failed, "run cleanup round");
                     }
                 }
-                Err(e) => tracing::warn!(error = %e, "run cleanup round failed"),
+                Err(e) => {
+                    dispatch_metrics.cleanup_error();
+                    tracing::warn!(error = %e, "run cleanup round failed");
+                },
             }
             // T-032 D3 旧路径保留为兜底：撤凭据前已遗留的终态行（无账本行的
             // 历史窗口——终止顺序反转引入的窗口，reconcile_orphans 不覆盖终态行）。
@@ -280,6 +283,7 @@ async fn main() {
             )
             .await
             {
+                dispatch_metrics.cleanup_error();
                 tracing::warn!(error = %e, "finished-run cleanup failed");
             }
             // F-5（审计 2026-11-07）：通信面可观测——每 ~30s 一次聚合日志
