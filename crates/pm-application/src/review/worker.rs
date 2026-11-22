@@ -116,14 +116,17 @@ async fn recover_stuck_reviews(
             crate::run_transition_guard::RunKind::Review,
             crate::run_transition_guard::RunStatus::TimedOut,
         ).await;
-        if let Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_)
-            | crate::run_transition_guard::RunTransitionGuardError::Invalid(
+        match guard {
+            Ok(_) => {}
+            Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+            | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
                 crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
-            )) = guard {
-            tx.commit().await?;
-            continue;
+            )) => {
+                tx.commit().await?;
+                continue;
+            }
+            Err(error) => return Err(ReviewError::Transition(error.to_string())),
         }
-        guard.map_err(|e| ReviewError::Transition(e.to_string()))?;
         let updated = sqlx::query(
             "UPDATE delivery.task_run \
                 SET status = 'timed_out', outcome = 'timed_out', finished_at = now(), \
@@ -223,14 +226,17 @@ async fn run_review(
         crate::run_transition_guard::RunKind::Review,
         crate::run_transition_guard::RunStatus::Succeeded,
     ).await;
-    if let Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_)
-        | crate::run_transition_guard::RunTransitionGuardError::Invalid(
+    match guard {
+        Ok(_) => {}
+        Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
-        )) = guard {
-        tx.rollback().await.ok();
-        return Ok(ReviewStep::Idle);
+        )) => {
+            tx.rollback().await.ok();
+            return Ok(ReviewStep::Idle);
+        }
+        Err(error) => return Err(ReviewError::Transition(error.to_string())),
     }
-    guard.map_err(|e| ReviewError::Transition(e.to_string()))?;
 
     persist_findings(&mut tx, &collected, review_run_id, &outcome).await?;
     sqlx::query(
