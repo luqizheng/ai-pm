@@ -214,7 +214,6 @@ async fn tick_reports_heartbeat_and_polls_commands() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-
 /// A terminate command must kill the real child and acknowledge the command
 /// with the current lease generation and an exit outcome.
 #[tokio::test]
@@ -471,7 +470,6 @@ async fn continue_command_refuses_frozen_start_without_spawning() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-
 /// A failed heartbeat must not advance the renewal clock; the next tick must
 /// retry immediately rather than waiting another full heartbeat interval.
 #[tokio::test]
@@ -518,7 +516,6 @@ async fn failed_heartbeat_keeps_renewal_due() {
     );
     let _ = std::fs::remove_dir_all(root);
 }
-
 
 /// A restarted Runner discovers the in-flight intervention, reacquires the
 /// same Run with a newer generation, and resumes in a process-less waiting state.
@@ -661,7 +658,6 @@ async fn restart_recovery_returns_none_when_no_runs_are_discoverable() {
     assert!(recover_inflight_run(&cfg, &client).await.unwrap().is_none());
     let _ = std::fs::remove_dir_all(root);
 }
-
 
 /// Startup discovery transport/server failure is not equivalent to an empty Run list.
 /// Recovery must fail closed so run_loop cannot proceed to claim replacement work.
@@ -928,7 +924,6 @@ async fn claim_and_start_surfaces_agent_spawn_failure() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-
 /// A delayed command response may be redelivered after an acknowledgement is
 /// delayed/lost. The Runner must acknowledge the duplicate without spawning a
 /// second continuation process.
@@ -1057,7 +1052,6 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
     }
     let _ = std::fs::remove_dir_all(root);
 }
-
 
 /// Command-poll transport failure must not advance the poll clock. The next
 /// supervision tick retries immediately and can consume the delayed response.
