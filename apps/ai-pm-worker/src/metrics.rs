@@ -95,6 +95,13 @@ pub async fn serve(
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(address).await?;
     tracing::info!(%address, "Worker loopback metrics listener started");
+    serve_listener(listener, metrics).await
+}
+
+async fn serve_listener(
+    listener: TcpListener,
+    metrics: std::sync::Arc<WorkerMetrics>,
+) -> std::io::Result<()> {
     loop {
         let (mut stream, _) = listener.accept().await?;
         let metrics = metrics.clone();
@@ -115,10 +122,10 @@ pub async fn serve(
                 metrics.scrapes.fetch_add(1, Ordering::Relaxed);
                 ("200 OK", metrics.render())
             } else {
-                ("404 Not Found", "not found\n".to_string())
+                ("404 Not Found", "not found\\n".to_string())
             };
             let response = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: text/plain; version=0.0.4; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\\r\\nContent-Type: text/plain; version=0.0.4; charset=utf-8\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{body}",
                 body.len()
             );
             if let Err(error) = stream.write_all(response.as_bytes()).await {
@@ -131,6 +138,37 @@ pub async fn serve(
 #[cfg(test)]
 mod tests {
     use super::WorkerMetrics;
+
+    #[tokio::test]
+    async fn metrics_endpoint_serves_prometheus_payload_and_rejects_other_paths() {
+        use super::{serve_listener, WorkerMetrics};
+        use std::sync::Arc;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::{TcpListener, TcpStream};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let metrics = Arc::new(WorkerMetrics::new());
+        metrics.run_dispatch_claim_attempt();
+        let server = tokio::spawn(serve_listener(listener, metrics.clone()));
+
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /metrics HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("Content-Type: text/plain; version=0.0.4"));
+        assert!(response.contains("ai_pm_worker_run_dispatch_claim_attempts_total 1"));
+        assert!(response.contains("ai_pm_worker_metrics_scrapes_total 1"));
+
+        let mut missing = TcpStream::connect(address).await.unwrap();
+        missing.write_all(b"GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n").await.unwrap();
+        let mut missing_response = String::new();
+        missing.read_to_string(&mut missing_response).await.unwrap();
+        assert!(missing_response.starts_with("HTTP/1.1 404 Not Found"));
+
+        server.abort();
+    }
 
     #[test]
     fn exposition_has_bounded_worker_counters_without_entity_labels() {
