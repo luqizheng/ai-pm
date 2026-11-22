@@ -197,7 +197,21 @@ async fn tick_reports_heartbeat_and_polls_commands() {
 async fn terminate_command_kills_child_and_acks_receipt() {
     let server = MockServer::start().await;
     let command_id = Uuid::new_v4();
-    let ack = Mock::given(method("POST"))
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_poll_commands" }
+        })))
+        .respond_with(structured(json!({ "commands": [{
+            "command_id": command_id,
+            "command_type": "agent.process.terminate",
+            "payload": { "issued_at": "2026-11-22T00:00:00Z" }
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
             "method": "tools/call",
@@ -212,8 +226,8 @@ async fn terminate_command_kills_child_and_acks_receipt() {
             }
         })))
         .respond_with(structured(json!({ "ok": true })))
-        .expect(1);
-    ack.mount(&server).await;
+        .expect(1)
+        .mount(&server).await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -245,16 +259,10 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         last_lease_attempt: None,
     };
 
-    ai_pm_runner::runner_loop::execute_command(
-        &cfg,
-        &client,
-        &mut run,
-        json!({
-            "command_id": command_id,
-            "command_type": "agent.process.terminate",
-            "payload": { "issued_at": "2026-11-22T00:00:00Z" }
-        }),
-    ).await;
+    run.last_command_poll = Instant::now() - Duration::from_secs(10);
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("tick should poll and execute terminate command");
 
     assert!(run.awaiting_continue);
     let child_id = run.process.as_ref().and_then(|p| p.child.id());
