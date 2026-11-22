@@ -909,6 +909,13 @@ async fn record_termination(
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+        ))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
+            crate::run_transition_guard::RunTransitionError::IllegalEdge {
+                kind: crate::run_transition_guard::RunKind::Delivery,
+                from: crate::run_transition_guard::RunStatus::Queued,
+                ..
+            }
         )) => {
             tx.commit().await?;
             return Ok(false);
@@ -920,7 +927,7 @@ async fn record_termination(
             SET status = $3, outcome = $3, finished_at = now(), terminated_at = now(), \
                 termination_reason = $4, \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1 AND status = $5 \
+          WHERE id = $1 AND project_id = $2 AND status = $5 \
          RETURNING task_id",
     )
     .bind(run_id)
@@ -1015,6 +1022,13 @@ async fn finish_run(
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+        ))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
+            crate::run_transition_guard::RunTransitionError::IllegalEdge {
+                kind: crate::run_transition_guard::RunKind::Delivery,
+                from: crate::run_transition_guard::RunStatus::Queued,
+                ..
+            }
         )) => {
             tx.commit().await?;
             return Ok(());
@@ -1025,7 +1039,7 @@ async fn finish_run(
         "UPDATE delivery.task_run \
             SET status = $3, outcome = $3, finished_at = now(), \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1 AND status = $4 \
+          WHERE id = $1 AND project_id = $2 AND status = $4 \
         RETURNING task_id",
     )
     .bind(run_id)
