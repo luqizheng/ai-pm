@@ -18,7 +18,8 @@ import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import TasksBacklogView from "@/views/project/tasks/backlog/TasksBacklogView.vue";
-import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsProjectPlaceholderView.vue";
+import SettingsProjectGeneralView from "@/views/project/settings/SettingsProjectGeneralView.vue";
+import SettingsProjectMembersView from "@/views/project/settings/SettingsProjectMembersView.vue";
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
 import SettingsProjectSshKeysView from "@/views/project/settings/SettingsProjectSshKeysView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
@@ -403,12 +404,12 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     {
       path: "/project/settings/general",
-      component: SettingsProjectPlaceholderView,
+      component: SettingsProjectGeneralView,
       meta: { title: "settings.nav.projectGeneral" }
     },
     {
       path: "/project/settings/members",
-      component: SettingsProjectPlaceholderView,
+      component: SettingsProjectMembersView,
       meta: { title: "settings.nav.projectMembers" }
     },
     {

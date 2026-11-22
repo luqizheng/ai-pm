@@ -268,6 +268,8 @@ fn build_router(
         .merge(crate::project_members::router())
         // 归档与 Run 取消（S01 · I1-D/P2）：归档事务收口 + cancel_run 外部入口。
         .merge(crate::project_lifecycle::router())
+        // 项目基本信息读改（P1 Settings General；守卫=生命周期管理者）。
+        .merge(crate::project_info::router())
         // 项目总控台聚合（S01 · I5-C）：六数据块纯读模型，按块降级。
         .merge(crate::command_center::router())
         // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。

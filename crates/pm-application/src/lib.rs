@@ -61,6 +61,7 @@ pub mod projc;
 pub mod issue_risk;
 pub mod work_item;
 pub mod project_gate;
+pub mod project_info;
 pub mod project_goal;
 pub mod project_import;
 pub mod project_member;

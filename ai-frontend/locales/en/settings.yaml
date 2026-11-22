@@ -272,6 +272,31 @@ settings:
       archive: Archive project
       archiveTitle: Archive this project?
       archiveDesc: Once archived, the project becomes read-only and members stop receiving task notifications.
+      description: Project identity, name, description and dangerous operations (close / reopen).
+      refresh: Refresh
+      loading: Loading project info…
+      noProject: Select a project first
+      infoTitle: Basic information
+      codeLabel: Project code
+      codeHint: Tenant-unique; knowledge path prefix — not editable here
+      customerLabel: Customer
+      nameLabel: Project name
+      descriptionLabel: Description
+      save: Save
+      noChanges: No unsaved changes
+      savedToast: Project info saved
+      dangerSectionTitle: Dangerous operations
+      closeTitle: Close project
+      closeHint: Queued runs cancel and in-flight imports finalize; reopening restores writes.
+      closeAction: Close project
+      closeConfirmTitle: Close this project?
+      closeConfirmDescription: The project enters the closed state — AI execution and writes stop; you can reopen it any time.
+      reopenAction: Reopen project
+      reopenConfirmTitle: Reopen this project?
+      reopenConfirmDescription: The project returns to the active state with writes and AI execution restored.
+      reopenedToast: "Project reopened ({status})"
+      closedToast: "Project closed ({status})"
+      cancel: Cancel
     members:
       membersTitle: Project members
       membersDesc: Manage project members and their project roles.
@@ -286,6 +311,29 @@ settings:
       roleDescViewer: Read-only access to project content.
       removeTitle: Remove this member?
       removeDesc: Once removed, the member loses access to this project.
+      description: Member list, roles and membership actions (grant / remove / ownership transfer).
+      refresh: Refresh
+      emptyTitle: No project members
+      colMember: Member
+      colRole: Role
+      colKind: Kind
+      colStatus: Status
+      active: Active
+      inactive: Inactive
+      addAction: Add member
+      addDescription: Pick an active principal to grant project membership (role is fixed to member).
+      pickPrincipal: Pick a principal
+      grantAction: Grant
+      grantedToast: Member granted
+      removeAction: Remove
+      removeConfirmTitle: Remove this member?
+      removeConfirmDescription: "{name} loses project membership and its visibility."
+      removedToast: Member removed
+      transferAction: Transfer ownership
+      transferConfirmTitle: Transfer project ownership?
+      transferConfirmDescription: "{name} becomes the project owner; the previous owner steps down to member."
+      transferredToast: Ownership transferred
+      authNote: Membership goes through the Product Member authorization surface (P4-ORG); principal activation lives in Team admin and is not duplicated here.
     roles:
       lead: Lead
       developer: Developer

@@ -46,6 +46,7 @@ pub mod pm_lists;
 pub mod pm_plans;
 pub mod pm_external_commits;
 pub mod pm_repositories;
+pub mod project_info;
 pub mod pm_requirement_read;
 pub mod pm_requirements;
 pub mod pm_reviews;

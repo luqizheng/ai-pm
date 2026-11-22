@@ -272,6 +272,31 @@ settings:
       archive: 归档项目
       archiveTitle: 归档该项目？
       archiveDesc: 归档后项目转为只读，成员不再收到任务通知。
+      description: 项目标识、名称、描述与危险操作（关闭 / 重开）。
+      refresh: 刷新
+      loading: 加载项目信息…
+      noProject: 请先选择项目
+      infoTitle: 基本信息
+      codeLabel: 项目标识
+      codeHint: 租户内唯一；知识库路径前缀，不可在此修改
+      customerLabel: 所属客户
+      nameLabel: 项目名称
+      descriptionLabel: 项目描述
+      save: 保存
+      noChanges: 无未保存变更
+      savedToast: 项目信息已保存
+      dangerSectionTitle: 危险操作
+      closeTitle: 关闭项目
+      closeHint: 关联 Run 取消、在飞导入终态化；恢复写入需重开。
+      closeAction: 关闭项目
+      closeConfirmTitle: 确认关闭该项目？
+      closeConfirmDescription: 关闭后项目进入 closed 态，AI 执行与写入停止；可随时重开。
+      reopenAction: 重开项目
+      reopenConfirmTitle: 确认重开该项目？
+      reopenConfirmDescription: 重开后恢复 active 态，写入与 AI 执行能力恢复。
+      reopenedToast: "项目已重开（{status}）"
+      closedToast: "项目已关闭（{status}）"
+      cancel: 取消
     members:
       membersTitle: 项目成员
       membersDesc: 管理项目成员及其项目角色。
@@ -286,6 +311,29 @@ settings:
       roleDescViewer: 只读访问项目内容。
       removeTitle: 移除该成员？
       removeDesc: 移除后该成员将失去对本项目的访问。
+      description: 成员列表、角色与授权动作（添加 / 移除 / 所有权转移）。
+      refresh: 刷新
+      emptyTitle: 暂无项目成员
+      colMember: 成员
+      colRole: 项目角色
+      colKind: 主体类型
+      colStatus: 状态
+      active: 活跃
+      inactive: 已停用
+      addAction: 添加成员
+      addDescription: 选择一个已激活的主体授予项目成员（角色固定 member）。
+      pickPrincipal: 选择主体
+      grantAction: 授予
+      grantedToast: 成员已添加
+      removeAction: 移除
+      removeConfirmTitle: 确认移除该成员？
+      removeConfirmDescription: "{name} 将失去该项目成员资格与对应可见性。"
+      removedToast: 成员已移除
+      transferAction: 所有权转移
+      transferConfirmTitle: 确认转移项目所有权？
+      transferConfirmDescription: "{name} 将成为新的项目 Owner；原 Owner 降级为 member。"
+      transferredToast: 所有权已转移
+      authNote: 成员资格走 Product Member 授权面（P4-ORG）；主体激活/停用在 Team 管理面，不在此复制。
     roles:
       lead: 负责人
       developer: 开发者

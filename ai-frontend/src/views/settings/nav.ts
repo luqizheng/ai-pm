@@ -70,13 +70,13 @@ export const TEAM_ICONS: Record<string, Component> = {
 /** 项目域应用侧栏条目（/project/settings/*；仓库 / SSH 私钥 / Runners 为真数据节）。
  *
  * Git Repositories / Runners 两节由原独立页面迁入（真数据）；General、
- * Members、AI Configuration 三节规划中（proposed 徽标 + 占位页），随后端
+ * Members 两节已落地（P1）；AI Configuration 仍规划中（proposed）。随后端
  * 能力逐个迁入。条目 id 同样是 i18n key（settings.nav.<id>）。 */
 export const PROJECT_SETTINGS_ROOT = "/project/settings";
 
 export const PROJECT_APP_NAV: SettingsNavEntry[] = [
-  { id: "projectGeneral", to: "/project/settings/general", proposed: true },
-  { id: "projectMembers", to: "/project/settings/members", proposed: true },
+  { id: "projectGeneral", to: "/project/settings/general" },
+  { id: "projectMembers", to: "/project/settings/members" },
   { id: "repositories", to: "/project/settings/repositories" },
   { id: "sshKeys", to: "/project/settings/ssh-keys" },
   { id: "runners", to: "/project/settings/runners" },
