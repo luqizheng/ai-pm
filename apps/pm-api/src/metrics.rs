@@ -73,7 +73,7 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
             "ai_pm_workspace_reclamation_backlog{{resource_kind=\"{kind}\",status=\"{status}\"}} {count}\n"
         ));
         out.push_str(&format!(
-            "ai_pm_workspace_reclaimed_bytes_total{{resource_kind=\"{kind}\"}} {reclaimed_bytes}\n"
+            "ai_pm_workspace_reclaimed_bytes_total{{resource_kind=\"{kind}\",status=\"{status}\"}} {reclaimed_bytes}\n"
         ));
     }
 
