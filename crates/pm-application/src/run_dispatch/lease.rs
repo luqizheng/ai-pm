@@ -59,6 +59,7 @@ pub(crate) async fn snapshot_repositories(
 /// 隔离已启动的执行器实例并记录终止结果（B3-2 的前置）。
 pub(crate) async fn isolate_started_run(
     tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
     run_id: Uuid,
     cfg: &RunDispatchConfig,
 ) -> Result<(), sqlx::Error> {
@@ -68,9 +69,10 @@ pub(crate) async fn isolate_started_run(
                 terminated_at = now(), termination_reason = 'lease_expired', \
                 infrastructure_retry_count = infrastructure_retry_count + 1, \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1",
+          WHERE id = $1 AND project_id = $2 AND status IN ('claimed', 'running')",
     )
     .bind(run_id)
+    .bind(project_id)
     .execute(&mut **tx)
     .await?;
     // 失败记录不可变（append-only）；基础设施类失败不计入任务执行连续失败（B3-4）。
@@ -134,13 +136,20 @@ pub(crate) async fn requeue_for_redispatch(
     tx: &mut Transaction<'_, Postgres>,
     run_id: Uuid,
 ) -> Result<(), sqlx::Error> {
+    let from_status = crate::run_transition_guard::lock_and_validate_transition(
+        tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::Queued,
+    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL, \
                 next_dispatch_at = now() \
-          WHERE id = $1",
+          WHERE id = $1 AND project_id = $2 AND status = $3",
     )
     .bind(run_id)
+    .bind(project_id)
+    .bind(from_status.as_str())
     .execute(&mut **tx)
     .await
     .map(|_| ())
@@ -161,7 +170,7 @@ pub(crate) async fn recover_lost_run(
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::TimedOut,
     ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-    isolate_started_run(tx, run_id, cfg).await?;
+    isolate_started_run(tx, project_id, run_id, cfg).await?;
     let created = insert_task_run(tx, project_id, task_id, None).await?;
     sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
         .bind(created.run_id)
@@ -186,17 +195,25 @@ pub(crate) async fn recover_lost_run(
 /// Run 落 `cancelled`（任务终态/不存在），并留审计。
 pub(crate) async fn cancel_run(
     tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
     run_id: Uuid,
     reason: &str,
 ) -> Result<(), sqlx::Error> {
+    let from_status = crate::run_transition_guard::lock_and_validate_transition(
+        tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::Cancelled,
+    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'cancelled', outcome = 'cancelled', finished_at = now(), \
                 release_reason = $2, lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1",
+          WHERE id = $1 AND project_id = $3 AND status = $4",
     )
     .bind(run_id)
     .bind(reason)
+    .bind(project_id)
+    .bind(from_status.as_str())
     .execute(&mut **tx)
     .await
     .map(|_| ())?;
