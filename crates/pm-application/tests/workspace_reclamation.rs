@@ -354,7 +354,7 @@ async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPoo
     let old_token = old.claim_token.unwrap();
     let current_token = current.claim_token.unwrap();
     assert!(
-        !pm_application::workspace_reclamation::mark_completed(&pool, old.id, old_token)
+        !pm_application::workspace_reclamation::mark_completed(&pool, old.id, old_token, 0)
             .await
             .unwrap(),
         "stale claimant cannot complete a newer claim"
