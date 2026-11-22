@@ -29,7 +29,7 @@ pub struct RunnerMetrics {
 }
 
 impl RunnerMetrics {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
             started_at: unix_seconds(),
             operations: [
@@ -169,7 +169,7 @@ fn sample(out: &mut String, name: &str, labels: &[(&str, &str)], value: u64) {
     let _ = writeln!(out, "}} {value}");
 }
 
-const fn unix_seconds() -> u64 {
+fn unix_seconds() -> u64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => duration.as_secs(),
         Err(_) => 0,
