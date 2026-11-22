@@ -228,7 +228,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
         if !orphan.alive {
             continue;
         }
-        match adapter::terminate_orphan(&orphan) {
+        let orphan_cleanup = adapter::terminate_orphan(&orphan);
+        crate::metrics::record_cleanup_attempt(orphan_cleanup.is_ok());
+        match orphan_cleanup {
             Ok(()) => tracing::warn!(
                 run_dir = %orphan.run_dir.display(),
                 pid = orphan.record.pid,
@@ -277,6 +279,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                 Some(run) => reacquire_active_run(cfg, client, run).await.map(|_| ()),
                 None => Ok(()),
             };
+            if has_local_child {
+                crate::metrics::record_cleanup_attempt(cleanup_result.is_ok());
+            }
             match cleanup_result {
                 Ok(()) => {
                     if has_local_child {
@@ -356,6 +361,7 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
         // ③ 活跃 Run 的通信拍：心跳 / 标记侦测 / 命令轮询。
         if let Some(run) = active.as_mut() {
             if let Err(e) = tick(cfg, client, run).await {
+                crate::metrics::record_supervision_error();
                 // I2：租约类拒绝 → 同主体续领（退避；R-16 方案 a 真进程落位）。
                 if e.is_lease_error() {
                     match reacquire_active_run(cfg, client, run).await {
