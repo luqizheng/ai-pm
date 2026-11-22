@@ -102,7 +102,10 @@ fn parse_out_path(stdout: &[u8]) -> Option<String> {
     if value.get("ok").and_then(|v| v.as_bool()) == Some(false) {
         return None;
     }
-    value.get("out").and_then(|v| v.as_str()).map(str::to_string)
+    value
+        .get("out")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }
 
 #[async_trait]
@@ -130,8 +133,8 @@ impl RenderAdapter for SeeCodeAdapter {
         }
         // 契约 trait 是同步的（八项断言在单测里同步跑），而子进程必须异步——
         // 用独立线程跑当前 runtime 的 block_on，避免与调用方 runtime 冲突。
-        let compiled = seecode_compiler::compile(spec)
-            .map_err(|e| RenderError::Rejected(e.to_string()))?;
+        let compiled =
+            seecode_compiler::compile(spec).map_err(|e| RenderError::Rejected(e.to_string()))?;
         let adapter = SeeCodeAdapter {
             cli: self.cli.clone(),
             timeout: self.timeout,
@@ -186,13 +189,12 @@ impl SeeCodeAdapter {
             .await
             .map_err(map_sandbox_error)?;
 
-        let html_path = parse_out_path(&render_stdout)
-            .ok_or_else(|| {
-                RenderError::Failed(format!(
-                    "render 未返回 out 路径：{}",
-                    String::from_utf8_lossy(&render_stdout)
-                ))
-            })?;
+        let html_path = parse_out_path(&render_stdout).ok_or_else(|| {
+            RenderError::Failed(format!(
+                "render 未返回 out 路径：{}",
+                String::from_utf8_lossy(&render_stdout)
+            ))
+        })?;
         let html_name = std::path::Path::new(&html_path)
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
@@ -222,9 +224,8 @@ impl SeeCodeAdapter {
                 .unwrap_or_else(|| "diagram".to_string())
                 + ".svg",
         );
-        let content = std::fs::read_to_string(&svg_path).map_err(|e| {
-            RenderError::Failed(format!("read {} failed: {e}", svg_path.display()))
-        })?;
+        let content = std::fs::read_to_string(&svg_path)
+            .map_err(|e| RenderError::Failed(format!("read {} failed: {e}", svg_path.display())))?;
 
         Ok(RenderOutput {
             format: OutputFormat::Svg,

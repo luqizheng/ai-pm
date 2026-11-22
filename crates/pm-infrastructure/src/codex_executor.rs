@@ -520,10 +520,18 @@ fn git_process_path(path: &Path) -> PathBuf {
     {
         const VERBATIM: &str = r"\\?\";
         const VERBATIM_UNC: &str = r"\\?\UNC\";
-        if let Some(rest) = path.as_os_str().to_str().and_then(|s| s.strip_prefix(VERBATIM_UNC)) {
+        if let Some(rest) = path
+            .as_os_str()
+            .to_str()
+            .and_then(|s| s.strip_prefix(VERBATIM_UNC))
+        {
             return PathBuf::from(format!(r"\\{rest}"));
         }
-        if let Some(rest) = path.as_os_str().to_str().and_then(|s| s.strip_prefix(VERBATIM)) {
+        if let Some(rest) = path
+            .as_os_str()
+            .to_str()
+            .and_then(|s| s.strip_prefix(VERBATIM))
+        {
             return PathBuf::from(rest);
         }
     }
