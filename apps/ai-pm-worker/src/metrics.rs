@@ -122,10 +122,10 @@ async fn serve_listener(
                 metrics.scrapes.fetch_add(1, Ordering::Relaxed);
                 ("200 OK", metrics.render())
             } else {
-                ("404 Not Found", "not found\\n".to_string())
+                ("404 Not Found", "not found\n".to_string())
             };
             let response = format!(
-                "HTTP/1.1 {status}\\r\\nContent-Type: text/plain; version=0.0.4; charset=utf-8\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{body}",
+                "HTTP/1.1 {status}\r\nContent-Type: text/plain; version=0.0.4; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             );
             if let Err(error) = stream.write_all(response.as_bytes()).await {
@@ -153,7 +153,7 @@ mod tests {
         let server = tokio::spawn(serve_listener(listener, metrics.clone()));
 
         let mut stream = TcpStream::connect(address).await.unwrap();
-        stream.write_all(b"GET /metrics HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n").await.unwrap();
+        stream.write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
         let mut response = String::new();
         stream.read_to_string(&mut response).await.unwrap();
         assert!(response.starts_with("HTTP/1.1 200 OK"));
@@ -162,7 +162,7 @@ mod tests {
         assert!(response.contains("ai_pm_worker_metrics_scrapes_total 1"));
 
         let mut missing = TcpStream::connect(address).await.unwrap();
-        missing.write_all(b"GET / HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n").await.unwrap();
+        missing.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
         let mut missing_response = String::new();
         missing.read_to_string(&mut missing_response).await.unwrap();
         assert!(missing_response.starts_with("HTTP/1.1 404 Not Found"));
