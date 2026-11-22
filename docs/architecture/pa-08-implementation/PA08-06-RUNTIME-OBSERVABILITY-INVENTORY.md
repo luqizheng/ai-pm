@@ -64,40 +64,28 @@ Never use `run_id`, `task_id`, `project_id`, `repository_id`, user identity, URL
 No Kafka, external SaaS, distributed tracing backend, or separate event-sourcing system is introduced.
 
 
-## 6. Implementation update — first API slice
+## 6. Implementation update — full implementation, Hosted validation pending
 
-The branch now contains `apps/pm-api/src/metrics.rs` and a `GET /metrics` route.
+The implementation slice now covers the API, Worker, Runner, filesystem capacity, reclamation accounting, and alert rules. This is an implementation-complete slice awaiting the latest Hosted run; it is not yet PA08-06 acceptance.
 
-Implemented:
-- Prometheus text exposition for Run counts and oldest active Run age, process-cleanup backlog by status, workspace reclamation backlog by resource/status, and the existing communication overview aggregates.
-- The route is inside the normal authenticated router; the existing public `/health` probe remains separate.
-- Scrape/database failures return HTTP 503 rather than presenting stale values as fresh.
-- Labels are limited to status/kind dimensions; entity IDs, user content, repository URLs, tokens and raw errors are excluded.
-- Label escaping has a unit test.
+### Implemented
 
-Implemented in the current PA08 branch:
-- Worker loopback Prometheus listener, bounded process counters, and HTTP endpoint tests for `/metrics` and 404 behavior.
-- Worker counters are wired to analysis/import claims, Run dispatch attempts/errors, Run polling errors, and cleanup errors.
+- **API:** authenticated `GET /metrics` exports Run counts/oldest active age, process-cleanup backlog, workspace-reclamation backlog, cumulative logical reclaimed bytes, and communication-overview aggregates. Database scrape failures return HTTP 503 with a fixed, non-diagnostic response.
+- **Worker:** optional loopback Prometheus listener (`AI_PM_WORKER_METRICS_ADDR`, default `127.0.0.1:9465`) exposes bounded claim/dispatch/poll/cleanup counters and workspace filesystem total/available bytes for the configured workspace root.
+- **Runner:** optional Prometheus exporter (`AI_PM_RUNNER_METRICS_ADDR`); disabled unless configured, loopback by default, and remote binding requires the explicit `AI_PM_RUNNER_METRICS_ALLOW_REMOTE=true` override. It exports bounded MCP operation/outcome, supervision-error, cleanup, uptime, and scrape counters.
+- **Reclamation accounting:** `ai_pm_workspace_reclaimed_bytes_total` is a monotonic Counter backed by migration `0057`; its only label is `resource_kind`. Byte values are logical regular-file sizes, not physical block accounting.
+- **HTTP/security tests:** authenticated and unauthenticated API scrape paths, Prometheus content type, HELP/TYPE exposition, real newline output, database-failure 503, and absence of project/user identifiers or raw diagnostics are covered. Worker and Runner exporters have endpoint/exposition tests.
+- **Alerts:** `infrastructure/monitoring/pa08-alerts.yml` includes pending Worker command age, process-cleanup and reclamation needs-human state, Worker workspace filesystem pressure, Runner supervision errors, and Runner cleanup errors.
 
-Remaining validation:
-- Confirm the new authenticated API `/metrics` HTTP integration tests on the latest PR head.
-- Validate `infrastructure/monitoring/pa08-alerts.yml` with Prometheus `promtool` and verify alert metric names/thresholds.
-- Confirm Worker/Runner exporters and filesystem gauges on Linux and Windows Hosted CI.
+### Hosted validation
 
-Implemented after the first API slice:
-- Logical reclaimed-byte accounting and the `ai_pm_workspace_reclaimed_bytes_total` metric.
-- Project/tenant-scoped process-cleanup `needs_human` listing API.
-- Hosted verification of the workspace build, Runner suite, PostgreSQL reclamation/cleanup suites, Product lifecycle/concurrency suites, and metrics exposition unit tests.
+The PA08 workflow now checks locked dependency metadata and public-registry resolution, workspace build, workspace Clippy, Runner integration tests, Worker/Runner metrics tests, PostgreSQL lifecycle/cleanup/reclamation tests, Product lifecycle/concurrency tests, authenticated API metrics tests, Prometheus rule syntax via `promtool`, and Windows mirror-lock plus Runner/Worker platform compilation.
 
-Verification update: the API aggregate metrics code and its label-escaping unit test passed [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). Reclaimed-byte accounting, needs-human API, and the full PA08 Hosted test workflow passed [Run #44978431052](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). PA08-02 delayed duplicate command and command-poll transport retry coverage also passed [Run #44979290867](https://github.com/luqizheng/ai-pm/actions/runs/44979290867). PA-07 blast-radius unit and integration jobs passed [Run #44979290858](https://github.com/luqizheng/ai-pm/actions/runs/44979290858). This does not close the remaining Runner exporter/counters, Worker filesystem gauges, alerting, or API scrape integration gates. The Worker exporter and HTTP endpoint test are now implemented but must pass the latest Hosted CI.
+Latest implementation head at the time of this update: `059bab5016b2d101ab4bee96224f99340dbb7ced`. Its PA08 Hosted workflow is running; no result from that SHA is counted as passed yet. Earlier partial Hosted runs remain historical evidence only and do not close the latest-head acceptance gate.
 
-This is deliberately a partial slice, not PA08-06 acceptance. See the implementation plan for remaining gates.
+### Remaining acceptance gate
 
+- Obtain a successful PA08 Hosted run against the latest PR head, including both Windows and Linux jobs.
+- Resolve any failures on the latest SHA and rerun the complete workflow.
+- Keep this inventory and the PR verification table aligned with the final successful run SHA.
 
-## 7. Implementation update — Runner and filesystem metrics
-
-- Runner now exposes an optional HTTP exporter configured by `AI_PM_RUNNER_METRICS_ADDR`; it is disabled by default, binds loopback unless `AI_PM_RUNNER_METRICS_ALLOW_REMOTE=true`, and exports only bounded operation/outcome dimensions.
-- Runner counters cover claim, discovery, heartbeat, command polling, command acknowledgement, lease reacquisition, interactions, supervision errors, orphan/lease-loss cleanup, uptime, and scrapes. Entity identifiers, MCP tool names outside the fixed allow-list, URLs, credentials, and raw errors are excluded.
-- Worker now exports workspace filesystem total and available bytes for the same workspace root used by Run dispatch/reclamation. Unix uses `statvfs`; Windows uses `GetDiskFreeSpaceExW`.
-- API `/metrics` integration tests now cover missing bearer rejection, authenticated exposition/content type and entity-ID exclusion, and database failure returning 503. These tests are added to Hosted CI but are not accepted until the latest head passes.
-- Runner startup now identity-checks and terminates orphaned child processes before recovery/claiming; this is part of the P0 single-Agent fencing work, not a metrics feature.
