@@ -33,8 +33,17 @@ env:
   CARGO_BUILD_RUSTC_WRAPPER: ""
 
 jobs:
-  public-registry-build:
-    runs-on: ubuntu-latest
+  windows-mirror-lock:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Windows OS-backed mirror lock semantics
+        run: cargo test -p pm-infrastructure --lib active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale --locked
+
+  public-registry-build:    runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
       postgres:
