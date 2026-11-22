@@ -28,6 +28,11 @@ pub trait WorkspaceReclaimer: Send + Sync {
         repository_id: Uuid,
         workspace_path: &str,
     ) -> Result<(), crate::run_dispatch::ExecutorError>;
+
+    async fn reclaim_repository_mirror(
+        &self,
+        repository_id: Uuid,
+    ) -> Result<(), crate::run_dispatch::ExecutorError>;
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
