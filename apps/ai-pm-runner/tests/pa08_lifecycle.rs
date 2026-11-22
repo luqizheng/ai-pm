@@ -602,3 +602,99 @@ async fn claim_and_start_surfaces_agent_spawn_failure() {
     assert!(result.is_err(), "a failed spawn must not produce an ActiveRun");
     let _ = std::fs::remove_dir_all(root);
 }
+
+
+/// A delayed command response may be redelivered after an acknowledgement is
+/// delayed/lost. The Runner must acknowledge the duplicate without spawning a
+/// second continuation process.
+#[tokio::test]
+async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
+    let server = MockServer::start().await;
+    let command_id = Uuid::new_v4();
+    let poll = Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_poll_commands" }
+        })))
+        .respond_with(
+            structured(json!({ "commands": [{
+                "command_id": command_id,
+                "command_type": "agent.task.continue",
+                "payload": {
+                    "response": { "answer": "continue once" },
+                    "guard": { "continuation_start_frozen": false }
+                }
+            }] }))
+            .set_delay(Duration::from_millis(100)),
+        )
+        .expect(2);
+    poll.mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(2)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 17,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now() - Duration::from_secs(10),
+        pending_interaction: None,
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+
+    let first_started = Instant::now();
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("first delayed command response should execute");
+    assert!(first_started.elapsed() >= Duration::from_millis(90));
+    assert!(!run.awaiting_continue);
+    let first_pid = run.process.as_ref().and_then(|process| process.child.id());
+    let first_session = run.process.as_ref().map(|process| process.session_id.clone());
+    assert!(first_pid.is_some(), "first delivery must spawn an Agent");
+
+    run.last_command_poll = Instant::now() - Duration::from_secs(10);
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("duplicate command response should be acknowledged idempotently");
+
+    let second_pid = run.process.as_ref().and_then(|process| process.child.id());
+    let second_session = run.process.as_ref().map(|process| process.session_id.clone());
+    assert_eq!(second_pid, first_pid, "duplicate delivery must not replace the live child");
+    assert_eq!(second_session, first_session, "duplicate delivery must reuse the existing session");
+    assert!(!run.awaiting_continue);
+
+    if let Some(process) = run.process.as_mut() {
+        let _ = process.child.kill().await;
+        let _ = process.child.wait().await;
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
