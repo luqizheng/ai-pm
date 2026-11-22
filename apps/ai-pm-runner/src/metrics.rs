@@ -56,6 +56,8 @@ impl RunnerMetrics {
     fn render(&self) -> String {
         let mut out = String::with_capacity(2048);
         metric(&mut out, "ai_pm_runner_uptime_seconds", "gauge", "Runner process uptime in seconds.", unix_seconds().saturating_sub(self.started_at));
+        let _ = writeln!(out, "# HELP ai_pm_runner_mcp_operations_total Runner MCP tool calls by bounded operation and outcome.");
+        let _ = writeln!(out, "# TYPE ai_pm_runner_mcp_operations_total counter");
         for (index, operation) in OPERATIONS.iter().enumerate() {
             for (outcome_index, outcome) in ["success", "error"].iter().enumerate() {
                 let value = self.operations[index][outcome_index].load(Ordering::Relaxed);
@@ -162,9 +164,9 @@ fn metric(out: &mut String, name: &str, kind: &str, help: &str, value: u64) {
 fn sample(out: &mut String, name: &str, labels: &[(&str, &str)], value: u64) {
     use std::fmt::Write;
     let _ = write!(out, "{name}{{");
-    for (index, (key, value)) in labels.iter().enumerate() {
+    for (index, (key, label_value)) in labels.iter().enumerate() {
         if index > 0 { let _ = write!(out, ","); }
-        let _ = write!(out, "{key}=\"{value}\"");
+        let _ = write!(out, "{key}=\"{label_value}\"");
     }
     let _ = writeln!(out, "}} {value}");
 }
