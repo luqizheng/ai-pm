@@ -1,6 +1,6 @@
 # PA08-04 — Workspace / Mirror Reclamation Inventory
 
-- **Status:** PROCESS-CLEANUP CLAIM FIX IMPLEMENTED; PostgreSQL CI VERIFICATION PENDING
+- **Status:** RUN-WORKTREE RECLAMATION IMPLEMENTED (DEFAULT-OFF); MIRROR RECLAMATION STAGED ONLY
 - **Date:** 2026-11-22
 - **Branch:** `pa-08/implementation-baseline`
 - **Purpose:** Establish ownership, safety gates, retention, and retry semantics before implementing resource reclamation.
@@ -74,7 +74,7 @@ Implemented correction (migration `0054_task_run_cleanup_claim_fencing.sql`):
 - Expired leases are reclaimable after Worker crash; stale Workers cannot mutate the new claimant's state.
 - The token is excluded from serialized cleanup summaries.
 
-Real PostgreSQL tests now cover concurrent duplicate claims, unexpired lease protection, expired lease recovery, stale-token rejection, valid failure/backoff/retry, and valid completion. Hosted CI verification is pending; no filesystem reclamation is enabled by this change.
+Real PostgreSQL tests cover concurrent duplicate claims, unexpired lease protection, expired lease recovery, stale-token rejection, valid failure/backoff/retry, retry exhaustion to `needs_human`, and valid completion. Verified in Hosted CI [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988).
 
 ## 5. Workspace reclamation ledger added
 
@@ -82,25 +82,25 @@ Migration `0055_workspace_reclamation_ledger.sql` adds a separate durable ledger
 
 `pm_application::workspace_reclamation::stage_candidates` now idempotently stages only eligible candidates (30-day default policy constant): terminal Run worktrees require completed process cleanup when an executor session exists; archived mirrors require no active Run or unfinished cleanup reference. Staging is metadata-only and does not delete files.
 
-Real PostgreSQL tests cover separate worktree/mirror identity, duplicate mirror rejection, invalid worktree shape, terminal retention, process-cleanup gating, archived mirror gating, and idempotent staging. Hosted CI verification is pending.
+Real PostgreSQL tests cover separate worktree/mirror identity, duplicate mirror rejection, invalid worktree shape, terminal retention, process-cleanup gating, archived mirror gating, idempotent staging, fenced claims, and second-check eligibility. Verified in [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988).
 
 ## 6. Filesystem reclamation primitives
 
-`CodexExecutor::reclaim_run_worktree` and `reclaim_repository_mirror` are implemented but are not yet wired to the Worker. They acquire the existing per-repository mirror lock. Worktree reclamation validates the DB-sourced relative path, rejects symlinks at every path component, canonicalizes beneath the Run root, removes only that repository worktree, and prunes stale Git worktree metadata; it preserves the Run root, logs, process evidence, and database history. Missing worktrees are idempotent and still trigger mirror prune when possible.
+`CodexExecutor::reclaim_run_worktree` and `reclaim_repository_mirror` are implemented. The periodic Worker is wired for Run worktrees only; mirror candidates are staged but deliberately not claimed or deleted until Repository archive/unarchive concurrency is guarded. They acquire the existing per-repository mirror lock. Worktree reclamation validates the DB-sourced relative path, rejects symlinks at every path component, canonicalizes beneath the Run root, removes only that repository worktree, and prunes stale Git worktree metadata; it preserves the Run root, logs, process evidence, and database history. Missing worktrees are idempotent and still trigger mirror prune when possible.
 
 Mirror reclamation canonicalizes beneath `git-mirror`, rejects symlinks/non-bare paths, runs Git prune, and refuses deletion if `git worktree list --porcelain` reports any linked worktree other than the bare mirror itself. It deletes only the mirror cache directory.
 
-Unit tests cover traversal rejection, missing worktree idempotency, and worktree/mirror symlink escape. Hosted CI verification is pending. These primitives deliberately require the caller to perform the second database eligibility check before invoking them.
+Unit tests cover traversal rejection, missing worktree idempotency, worktree/mirror symlink escape, mirror-lock symlink rejection, and a real Git lifecycle (linked-worktree refusal, worktree removal, and mirror removal). All passed in [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). The application Worker performs a second eligibility check before invoking the Run-worktree primitive.
 
-## 7. Planned implementation sequence
+## 7. Worker policy and remaining gates
 
-1. Complete Hosted CI verification for process-cleanup fencing, ledger constraints, candidate discovery, and filesystem safety tests.
-2. Implement a fenced reclamation worker with second-check DB eligibility, dry-run default, retry/backoff, and `needs_human` visibility. Do not conflate process termination status with disk deletion status.
-3. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors.
-4. Implement CodexExecutor filesystem operations with canonical path checks, mirror lock reuse, Git worktree removal/prune, and mirror worktree-list verification.
-5. Add second-check DB eligibility immediately before deletion, retry/backoff, and `needs_human` visibility.
-6. Wire a periodic reclamation round into `ai-pm-worker`; default dry-run and deletion disabled.
-7. Validate with real PostgreSQL concurrency tests and filesystem tests (including symlink escape, active Run, pending process cleanup, lock contention, and idempotent missing paths).
+- Candidate discovery runs periodically and is metadata-only. It uses a 30-day default retention (`AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS` can override it).
+- File deletion is disabled by default. Enabling requires `AI_PM_WORKSPACE_RECLAMATION_ENABLED=true`, `AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT=true`, and an absolute `AI_PM_WORKSPACE_ROOT`. The shared-root acknowledgement is required because worktrees are local filesystem resources.
+- The Worker claims only `run_worktree` rows. It revalidates terminal Run status, retention, the immutable repository snapshot path, process-cleanup completion, and the current fencing token before calling the filesystem adapter. Completion is recorded only after the adapter succeeds; failures use retry/backoff and eventually `needs_human`.
+- `repository_mirror` rows are staged but never claimed by the Worker yet. Before enabling mirror deletion, add a DB row-lock guard that serializes Repository unarchive/re-activation with mirror reclamation, while retaining the existing mirror lock and Git linked-worktree check.
+- Add operational query/requeue support for `needs_human` reclamation rows and include reclamation backlog/bytes in PA08-06 observability.
+
+This inventory remains a safety baseline. No Repository/Commit/Run/audit/artifact history is deleted; production deletion remains explicitly opt-in.
 
 ## 8. Verified source files
 
