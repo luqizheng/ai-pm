@@ -65,30 +65,29 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Real PostgreSQL evidence: [Run #52](https://github.com/luqizheng/ai-pm/actions/runs/44970075346) passed guard integration + unit tests; [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926) passed again with the active Reviewer archive cancellation scenario.
 - Latest Project-scoped infrastructure exhaustion compare-and-set hardening is pending [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176). Remaining gates: claim-vs-archive and stale lease token/generation concurrency tests.
 
-### PA08-04 — Workspace / mirror reclamation — WORKER WIRED; DEFAULT-OFF; HOSTED VERIFYING
+### PA08-04 — Workspace / mirror reclamation — WORKER WIRED; DEFAULT-OFF; HOSTED VERIFIED
 - Added migrations `0054` and `0055`: atomic process-cleanup claims with lease/fencing, and a separate worktree/mirror reclamation ledger.
 - Candidate staging is idempotent and metadata-only. Default retention is 30 days; Run worktrees require terminal retention and completed process cleanup; archived mirrors require no active Run or unfinished cleanup reference.
 - CodexExecutor has guarded worktree/mirror primitives: canonical path checks, symlink rejection, shared mirror lock, Git worktree remove/prune, and linked-worktree refusal before mirror deletion.
 - Worker now runs both Run-worktree and Repository-mirror rounds. Mirror reclamation locks the Repository row and keeps that transaction open through the filesystem adapter, serializing against Repository archive/update writes; the existing mirror lock and Git linked-worktree checks remain in force.
 - File deletion is disabled by default. Enablement requires `AI_PM_WORKSPACE_RECLAMATION_ENABLED=true`, `AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT=true`, and an absolute `AI_PM_WORKSPACE_ROOT`. The Worker performs fenced claims and a second DB eligibility check before filesystem operations.
 - Added `needs_human` listing and explicit operator requeue application operations. Backlog/bytes metrics remain PA08-06.
-- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). The expanded mirror-lock and worker integration suite is being revalidated in [Run #131](https://github.com/luqizheng/ai-pm/actions/runs/44974426580); Run #130 caught a stale assertion in the mirror staging test, which was corrected before the latest run.
-- Remaining PA08-04 gates: confirm latest Hosted CI success and integrate reclamation backlog/bytes into PA08-06 observability.
+- Earlier complete validation: [Run #117](https://github.com/luqizheng/ai-pm/actions/runs/44973471988). Expanded mirror-lock, worker, ledger, process-cleanup and Codex path-safety tests all pass in [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084).
+- File deletion remains opt-in and disabled by default. Reclamation backlog is now included in the initial PA08-06 API metrics endpoint; reclaimed-byte accounting remains open.
 
-### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFYING
+### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFIED
 - Added an explicit source-state/action matrix from PA-07 §§4/11/12: `normal → suspended → resuming → normal`, with `resuming → suspended` for a renewed pause and `abandon → archived` from non-archived states.
 - Archived is terminal for ordinary lifecycle operations. Retained legacy `restart` only as a compatibility alias for `resuming → normal` (migration 0044); it is rejected from `suspended`/`archived`, so it cannot bypass Portfolio Review or restore archived Products.
 - Product Owner authorization, Product row lock, source-state validation, status update, and lifecycle audit remain one transaction. Invalid transitions have no DML or audit side effects.
 - Added API integration coverage for the complete suspend/resume sequence, invalid source-state actions, archived terminal behavior, and audit invariance. See [PA08-05 Product Lifecycle Inventory](PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md).
-- Hosted verification: [Run #133](https://github.com/luqizheng/ai-pm/actions/runs/44974739861) is in progress. Concurrency coverage for Product lifecycle vs Run claim/start remains to be completed.
+- Hosted verification: [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084) passed the Product lifecycle API and Product gate vs Run claim concurrency suites.
 
 
-### PA08-06 — Runtime observability
-- 提供可抓取的 Prometheus 格式指标或仓库既有指标协议；优先复用现有依赖和运行时。
-- 至少覆盖 Run 状态数量/持续时间、claim/heartbeat/submit 结果、Runner loop 错误、cleanup backlog/needs-human、workspace/mirror 磁盘水位与回收量。
-- 指标标签必须有界；禁止使用 run_id、task_id、project_id 等高基数标识作为 label。
-- 对阈值只产生可操作的结构化告警/事件；不引入新消息平台或外部 SaaS 依赖。
-- 提供健康检查/诊断说明及指标测试。
+### PA08-06 — Runtime observability — PARTIAL IMPLEMENTATION
+- `pm-api` 已新增受现有 Bearer 鉴权保护的 `GET /metrics`，输出 Prometheus text exposition；数据库聚合覆盖 Run 状态/活跃年龄、process-cleanup 状态、workspace reclamation 状态，以及现有 communication overview。
+- Label 仅使用 Run kind/status、cleanup status、resource kind/status 等有限状态维度；不输出任何 entity ID、用户内容、仓库 URL、凭据或原始错误。
+- 数据库 scrape 查询失败返回 503，不会把旧值伪装成当前值。指标实现与转义测试见 `apps/pm-api/src/metrics.rs`。
+- 尚未完成：Worker loop/Runner MCP 操作 counters、Worker loopback metrics listener、filesystem capacity/available-space、reclaimed bytes accounting、process-cleanup `needs_human` 列表接口、阈值告警与完整 Hosted CI 证据。故 PA08-06 不得标记完成。
 
 ## 4. 全局红线
 
@@ -119,4 +118,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 已接入 Run worktree 与 Repository mirror 两种回收轮次，生产删除默认关闭；扩展镜像锁与 Worker 验证正在 Hosted CI 中进行。PA08-05 已实现 PA-07 Product 状态源状态校验，Hosted CI 与并发覆盖仍在进行；PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过。PA08-06 当前仅完成 API 数据库聚合指标的第一阶段，仍未完成 Worker/Runner 监控、磁盘容量和回收量统计。Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 已接入 Run worktree 与 Repository mirror 两种回收轮次，生产删除默认关闭；扩展镜像锁与 Worker 验证正在 Hosted CI 中进行。PA08-05 已实现 PA-07 Product 状态源状态校验，Hosted CI 与并发覆盖仍在进行；PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
