@@ -169,6 +169,7 @@ async fn serve_listener(
 
 #[cfg(test)]
 mod tests {
+    use super::WorkerMetrics;
     #[tokio::test]
     async fn metrics_endpoint_serves_prometheus_payload_and_rejects_other_paths() {
         use super::{serve_listener, WorkerMetrics};
