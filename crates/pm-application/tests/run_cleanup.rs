@@ -58,13 +58,45 @@ async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool
 
     let first = run_cleanup::claim_batch(&pool).await.unwrap();
     assert_eq!(first.len(), 1, "first worker should claim the pending cleanup");
+    let first_token = first[0].claim_token.expect("claimed row has a fencing token");
 
-    // A cleaning row must be protected by an unexpired claim lease. The current
-    // implementation leaves next_retry_at unchanged, so this assertion exposes
-    // duplicate claims before the PA08-04 fix.
+    // A cleaning row must be protected by an unexpired claim lease.
     let second = run_cleanup::claim_batch(&pool).await.unwrap();
     assert!(
         second.is_empty(),
         "second worker must not reclaim an unexpired cleaning row"
     );
+
+    // Simulate a crashed worker by expiring the lease. A new claim gets a new
+    // token, and the old worker must not be able to complete the newer claim.
+    sqlx::query(
+        "UPDATE delivery.task_run_cleanup SET next_retry_at = now() - interval '1 second' WHERE run_id = $1",
+    )
+    .bind(_run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let reclaimed = run_cleanup::claim_batch(&pool).await.unwrap();
+    assert_eq!(reclaimed.len(), 1, "expired cleanup lease is recoverable");
+    let new_token = reclaimed[0].claim_token.expect("reclaimed row has a new token");
+    assert_ne!(first_token, new_token, "reclaim must rotate the fencing token");
+
+    assert!(
+        !run_cleanup::mark_completed(&pool, _run_id, first_token).await.unwrap(),
+        "stale worker cannot complete a row reclaimed by another worker"
+    );
+    assert!(
+        run_cleanup::mark_completed(&pool, _run_id, new_token).await.unwrap(),
+        "current worker can complete its own claim"
+    );
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1",
+    )
+    .bind(_run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "completed");
 }
