@@ -70,6 +70,10 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run Runner integration tests
         run: cargo test -p ai-pm-runner --tests --locked
+      - name: Run Runner metrics exporter unit tests
+        run: cargo test -p ai-pm-runner --lib metrics::tests --locked
+      - name: Run Worker filesystem metrics unit tests
+        run: cargo test -p ai-pm-worker --bin ai-pm-worker metrics::tests --locked
       - name: Run Run transition guard PostgreSQL integration tests
         run: cargo test -p pm-application --test run_transition_guard --locked
       - name: Run process cleanup PostgreSQL integration tests
