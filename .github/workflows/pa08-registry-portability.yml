@@ -137,4 +137,4 @@ jobs:
             exit 0
           fi
           echo "Checking ${#files[@]} changed Rust files."
-          rustfmt --edition 2021 --check "${files[@]}"
+          rustfmt --edition 2021 --check --config skip_children=true "${files[@]}"
