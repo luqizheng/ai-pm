@@ -527,12 +527,7 @@ async fn claim_core_in_project(
     .await?;
 
     let Some(task) = task else {
-        crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id,
-            crate::run_transition_guard::RunKind::Delivery,
-            crate::run_transition_guard::RunStatus::Cancelled,
-        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
-        cancel_run(&mut tx, run_id, "task_missing").await?;
+        cancel_run(&mut tx, project_id, run_id, "task_missing").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
             return Err(RunDispatchError::TaskNotFound);
@@ -555,12 +550,7 @@ async fn claim_core_in_project(
         .map(|s| s.is_terminal())
         .unwrap_or(true);
     if terminal_or_gone {
-        crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id,
-            crate::run_transition_guard::RunKind::Delivery,
-            crate::run_transition_guard::RunStatus::Cancelled,
-        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
-        cancel_run(&mut tx, run_id, "task_terminal").await?;
+        cancel_run(&mut tx, project_id, run_id, "task_terminal").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
             return Err(RunDispatchError::TaskNotReady(task_state));
@@ -636,12 +626,7 @@ async fn claim_core_in_project(
                 .await?;
                 task_state = "ready".to_string();
             }
-            crate::run_transition_guard::lock_and_validate_transition(
-                &mut tx, project_id, run_id,
-                crate::run_transition_guard::RunKind::Delivery,
-                crate::run_transition_guard::RunStatus::Queued,
-            ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
-            requeue_for_redispatch(&mut tx, run_id).await?;
+            requeue_for_redispatch(&mut tx, project_id, run_id).await?;
             audit_run(
                 &mut tx,
                 project_id,
