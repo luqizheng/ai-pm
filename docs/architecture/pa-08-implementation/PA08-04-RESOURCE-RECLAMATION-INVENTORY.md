@@ -76,17 +76,23 @@ Implemented correction (migration `0054_task_run_cleanup_claim_fencing.sql`):
 
 Real PostgreSQL tests now cover concurrent duplicate claims, unexpired lease protection, expired lease recovery, stale-token rejection, valid failure/backoff/retry, and valid completion. Hosted CI verification is pending; no filesystem reclamation is enabled by this change.
 
-## 5. Planned implementation sequence
+## 5. Workspace reclamation ledger added
 
-1. Complete Hosted CI verification for the atomic process-cleanup claim lease + fencing token fix.
-2. Add a separate workspace-reclamation ledger. Do not conflate process termination status with disk deletion status.
+Migration `0055_workspace_reclamation_ledger.sql` adds a separate durable ledger for `run_worktree` and `repository_mirror` resources. It stores only tenant/project/run/repository identity and a validated relative path, plus pending/cleaning/completed/needs_human retry state and fencing-token fields. Partial unique indexes enforce one worktree record per Run/repository and one mirror record per repository. Foreign keys preserve the referenced Run repository snapshot and Repository row; no cascade deletion is used.
+
+Real PostgreSQL schema tests cover separate worktree/mirror identity, duplicate mirror rejection, and invalid worktree shape rejection. Hosted CI verification is pending.
+
+## 6. Planned implementation sequence
+
+1. Complete Hosted CI verification for process-cleanup fencing and the new reclamation ledger schema tests.
+2. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors. Do not conflate process termination status with disk deletion status.
 3. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors.
 4. Implement CodexExecutor filesystem operations with canonical path checks, mirror lock reuse, Git worktree removal/prune, and mirror worktree-list verification.
 5. Add second-check DB eligibility immediately before deletion, retry/backoff, and `needs_human` visibility.
 6. Wire a periodic reclamation round into `ai-pm-worker`; default dry-run and deletion disabled.
 7. Validate with real PostgreSQL concurrency tests and filesystem tests (including symlink escape, active Run, pending process cleanup, lock contention, and idempotent missing paths).
 
-## 6. Verified source files
+## 7. Verified source files
 
 - `crates/pm-infrastructure/src/codex_executor.rs`
 - `crates/pm-application/src/run_cleanup.rs`
@@ -95,4 +101,4 @@ Real PostgreSQL tests now cover concurrent duplicate claims, unexpired lease pro
 - `apps/ai-pm-runner/src/workspace.rs`
 - `migrations/0001_baseline.sql`
 
-This document is an inventory and safety baseline. No filesystem deletion behavior is implemented or enabled by this commit.
+This document is an inventory and safety baseline. The independent ledgers are in place, but no filesystem deletion behavior is implemented or enabled.
