@@ -286,6 +286,7 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
         if lease_lost_cleanup_pending {
             let has_local_child = active.as_ref().and_then(|run| run.process.as_ref()).is_some();
             let cleanup_result = match active.as_mut() {
+                Some(run) if has_local_child && lease_reacquired_after_loss => terminate_reacquired_agent(run).await,
                 Some(run) if has_local_child => match run.process.as_mut() {
                     Some(process) => adapter::terminate_spawned(process)
                         .await
@@ -482,6 +483,17 @@ fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(),
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     std::fs::write(path, bytes)
 }
+async fn terminate_reacquired_agent(run: &mut ActiveRun) -> Result<(), mcp::RunnerError> {
+    if let Some(process) = run.process.as_mut() {
+        adapter::terminate_spawned(process)
+            .await
+            .map_err(|error| mcp::RunnerError::Adapter(error.to_string()))?;
+        run.process = None;
+    }
+    run.awaiting_continue = true;
+    Ok(())
+}
+
 fn required_nonempty_string(value: &Value, field: &str) -> Result<String, mcp::RunnerError> {
     value.get(field).and_then(Value::as_str).filter(|value| !value.is_empty())
         .map(str::to_string)
@@ -1145,5 +1157,48 @@ mod tests {
             backoff_base_ms: 2000,
             backoff_cap_ms: 60_000,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{terminate_reacquired_agent, ActiveRun};
+    use crate::adapter;
+    use std::time::Instant;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn new_lease_generation_reaps_old_agent_before_resume() {
+        let root = std::env::temp_dir().join(format!("aipm-reacquire-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        #[cfg(unix)]
+        let command = "sleep 30";
+        #[cfg(windows)]
+        let command = "ping -n 30 127.0.0.1";
+        let process = adapter::spawn_agent(command, &root, &[], None).unwrap();
+        let pid = process.pid;
+        let mut run = ActiveRun {
+            project_id: Uuid::nil(),
+            task_id: Uuid::new_v4(),
+            run_id: Uuid::new_v4(),
+            lease_token: "new-generation-token".into(),
+            lease_generation: 2,
+            worker_id: "runner:test".into(),
+            run_dir: root.clone(),
+            stage: "started".into(),
+            process: Some(process),
+            last_heartbeat: Instant::now(),
+            last_detect: Instant::now(),
+            last_command_poll: Instant::now(),
+            pending_interaction: None,
+            awaiting_continue: false,
+            lease_failures: 0,
+            last_lease_attempt: None,
+        };
+        terminate_reacquired_agent(&mut run).await.expect("old generation Agent must be terminated and reaped");
+        assert!(run.process.is_none());
+        assert!(run.awaiting_continue);
+        assert!(!adapter::is_pid_alive(pid), "old Agent process must not survive generation fencing");
+        let _ = std::fs::remove_dir_all(root);
     }
 }
