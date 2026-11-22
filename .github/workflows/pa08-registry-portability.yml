@@ -74,6 +74,10 @@ jobs:
         run: cargo test -p pm-application --test run_cleanup --locked
       - name: Run workspace reclamation ledger PostgreSQL integration tests
         run: cargo test -p pm-application --test workspace_reclamation --locked
+      - name: Run Product lifecycle API integration tests
+        run: cargo test -p pm-api --test product_domain --locked
+      - name: Run Product gate vs Run claim concurrency integration tests
+        run: cargo test -p pm-api --test run_claim_lifecycle --locked
       - name: Run application transition guard unit tests
         run: cargo test -p pm-application --lib run_transition_guard --locked
       - name: Run Codex reclamation path safety unit tests
