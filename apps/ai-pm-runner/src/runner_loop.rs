@@ -561,7 +561,6 @@ pub async fn tick(
 ) -> Result<(), mcp::RunnerError> {
     // ① 心跳 = 续租（stage 已推进过 started，重复上报仅续租）。
     if run.last_heartbeat.elapsed() >= Duration::from_secs(cfg.heartbeat_secs) {
-        run.last_heartbeat = Instant::now();
         client
             .report_progress(
                 run.project_id,
@@ -572,6 +571,9 @@ pub async fn tick(
                 "runner heartbeat",
             )
             .await?;
+        // Advance the heartbeat clock only after Platform confirms renewal.
+        // A transport/HTTP failure must be retried on the next supervision tick.
+        run.last_heartbeat = Instant::now();
     }
 
     // ② 标记文件侦测（N-2 ①→②：`interaction.{event_id}.json` → pm_report_interaction）。
