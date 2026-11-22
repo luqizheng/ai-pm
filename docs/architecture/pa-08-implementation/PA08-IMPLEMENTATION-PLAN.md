@@ -86,7 +86,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Hosted verification: [Run #150](https://github.com/luqizheng/ai-pm/actions/runs/44975873084) passed the Product lifecycle API and Product gate vs Run claim concurrency suites.
 
 
-### PA08-06 — Runtime observability — PARTIAL IMPLEMENTATION
+### PA08-06 — Runtime observability — IMPLEMENTED; LATEST HOSTED VALIDATION PENDING
 - `pm-api` 已新增受现有 Bearer 鉴权保护的 `GET /metrics`，输出 Prometheus text exposition；数据库聚合覆盖 Run 状态/活跃年龄、process-cleanup 状态、workspace reclamation 状态，以及现有 communication overview。
 - Label 仅使用 Run kind/status、cleanup status、resource kind/status 等有限状态维度；不输出任何 entity ID、用户内容、仓库 URL、凭据或原始错误。
 - 数据库 scrape 查询失败返回 503，不会把旧值伪装成当前值。指标实现与转义测试见 `apps/pm-api/src/metrics.rs`。
@@ -95,7 +95,11 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - 上述 reclaimed-byte accounting、needs-human API、metrics exposition、workspace build、Runner tests 及 PostgreSQL suites 已由 Hosted [Run #166 follow-up](https://github.com/luqizheng/ai-pm/actions/runs/44978431052) 验证通过。
 - Worker loopback Prometheus listener 已实现，默认绑定 `127.0.0.1:9465`，可由 `AI_PM_WORKER_METRICS_ADDR` 覆盖；已接入 AI analysis/repo import claim、Run dispatch attempt/error、Run poll error、cleanup error 与 scrape counters，并补充 `/metrics` 200、非目标路径 404 的 HTTP 测试。指标不含实体 ID、凭据或高基数标签。
 - Worker cleanup failure counter 已接入 run-cleanup round 与 finished-process cleanup 两条错误路径。Worker exporter 当前提交仍须由最新 Hosted CI 验证。
-- 尚未完成：Runner MCP 操作 counters/可选 exporter、Worker workspace filesystem capacity/available-space gauges、告警规则/阈值、API scrape/endpoint integration tests。故 PA08-06 不得标记完成。
+- 新增 Runner 可选 Prometheus exporter：`AI_PM_RUNNER_METRICS_ADDR` 未设置时关闭；默认仅允许 loopback，非 loopback 需显式 `AI_PM_RUNNER_METRICS_ALLOW_REMOTE=true`。固定 operation/outcome 维度覆盖 claim/discover/heartbeat/command poll/ack/lease reacquire/interaction，并输出 supervision、cleanup、uptime、scrape counters。
+- Worker 已新增 workspace filesystem total/available byte gauges：Unix 使用 `statvfs`，Windows 使用 `GetDiskFreeSpaceExW`，采样根路径与 Run dispatch workspace root 一致。
+- API `/metrics` HTTP 集成测试已覆盖无 Bearer 401、认证成功的 Prometheus content type/HELP/TYPE/sample/ID 排除，以及 DB failure 503。
+- `infrastructure/monitoring/pa08-alerts.yml` 已加入 Prometheus `promtool check rules` Hosted CI 验证步骤。
+- 最新 Runner/Worker exporter、filesystem gauges、API endpoint tests 与 alert validation 均已加入 Hosted CI；须等待最新 commit 的 PA08/PA07 jobs 通过后才能关闭 PA08-06。
 
 ## 4. 全局红线
 
@@ -126,4 +130,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 基础生命周期测试已由 Run #28 验证；延迟重复 continue 与命令轮询 HTTP 503 即时重试补充测试及完整 Runner suite 已由 Hosted Run #44979290867 验证通过。更广泛的 lease/transport 故障注入仍待补齐。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过（包含回收 Worker、PostgreSQL 账本、Product lifecycle API 与 Product gate vs Run claim 并发测试）；reclaimed-byte accounting 与 process-cleanup needs-human API 后续由 Hosted Run #44978431052 验证通过。PA08-06 API 聚合指标、回收字节指标、needs-human API 已由 Hosted Run #44978431052 验证；Worker/Runner 运行指标、Worker exporter、文件系统容量指标、阈值告警及完整 endpoint/scrape 集成测试仍未完成。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 基础生命周期、命令轮询 503 retry 与 Continue duplicate baseline 已有历史通过证据；本轮新增 fail-closed startup discovery、orphan process identity fencing、lease generation advance validation、Continue/Terminate ACK 503 redelivery 与不重复启动测试，等待最新 Hosted CI。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试）。PA08-04 与 PA08-05 已由 Hosted CI Run #150 验证通过；本轮 mirror lock 已改为 OS-backed persistent advisory lock，并新增 stale-mtime contender test 与 Windows Hosted job，等待最新验证。PA08-06 API、Worker、Runner exporters、filesystem gauges、API HTTP tests 和 promtool alert validation 已实现并纳入 CI，等待最新验证。PA08-04 文件删除默认关闭。本文件状态以代码、测试和 CI 证据为准。
