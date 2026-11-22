@@ -1,13 +1,8 @@
 # PA07-IMP-002 §4 P2 定向回归 CI：blast radius 按实际影响条数计。
 #
-# 演进史：首版（github/master 015e524a）跑 ubuntu-latest，两轮实测失败——
-# ① sccache 包装缺失（.cargo/config.toml 默认 rustc-wrapper=sccache，hosted
-# runner 未装）→ 以 RUSTC_WRAPPER=env 直通透传修复（6339ef3a）；② 私有
-# registry 不可达——Cargo.lock 有 4 个 kellnr crate（digua_*，
-# sparse+http://192.168.2.103:16444），GitHub hosted runner 无法访问内网，
-# 依赖解析必死于网络错误。②是网络限制不是代码失败，不得据此判红代码，
-# 也不得删测试换绿；终态：runs-on 落 self-hosted 标签，作为内部 runner
-# 的执行入口（可访问私有 registry 的机器打 `internal-registry` 标签即可）。
+# PA08-01 将 Digua 依赖迁移至公开 crates.io 后，本回归工作流不再需要
+# 内部 Registry。两个 job 均使用 GitHub Hosted Runner，避免 self-hosted
+# 标签缺少在线 runner 时回归任务长期 queued。
 #
 # RUSTC_WRAPPER=env：环境变量优先于 config 的 sccache；值 `env` 是直通透传
 # （`env rustc ...` 等价直接调 rustc），未装 sccache 的机器也能构建。
@@ -63,7 +58,7 @@ jobs:
   # 实例，如 postgres://aipm:aipm@<host>:<port>/aipm）。未配置变量时本 job
   # 主动跳过（结论=SKIP，不是 PASS），避免 CI 假绿。
   integration:
-    runs-on: [self-hosted, internal-registry]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
