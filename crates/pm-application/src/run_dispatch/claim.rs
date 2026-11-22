@@ -1015,7 +1015,7 @@ async fn claim_core_in_project(
 
     // Probe 模式：立即释放回 queued（不启动执行器）。
     if opts.mode == DispatchMode::Probe {
-        requeue_for_redispatch(&mut tx, run_id).await?;
+        requeue_for_redispatch(&mut tx, project_id, run_id).await?;
         sqlx::query("UPDATE delivery.task_run SET release_reason = 'probe_release' WHERE id = $1")
             .bind(run_id)
             .execute(&mut *tx)
