@@ -223,7 +223,7 @@ impl CodexExecutor {
         run_id: Uuid,
         repository_id: Uuid,
         workspace_path: &str,
-    ) -> Result<(), ExecutorError> {
+    ) -> Result<u64, ExecutorError> {
         let _lock = self.lock_mirror(repository_id)?;
         let target = resolve_run_worktree_target(&self.root, run_id, workspace_path)?;
         let mirror = resolve_repository_mirror_target(&self.root, repository_id)?;
@@ -245,8 +245,9 @@ impl CodexExecutor {
                     )));
                 }
             }
-            return Ok(());
+            return Ok(0);
         };
+        let reclaimed_bytes = directory_size_bytes(&target)?;
 
         if let Some(mirror) = mirror {
             ensure_bare_mirror(&mirror).await?;
@@ -282,7 +283,7 @@ impl CodexExecutor {
                 ExecutorError::Other(format!("remove orphaned worktree directory failed: {e}"))
             })?;
         }
-        Ok(())
+        Ok(reclaimed_bytes)
     }
 
 
@@ -291,11 +292,12 @@ impl CodexExecutor {
     pub async fn reclaim_repository_mirror(
         &self,
         repository_id: Uuid,
-    ) -> Result<(), ExecutorError> {
+    ) -> Result<u64, ExecutorError> {
         let _lock = self.lock_mirror(repository_id)?;
         let Some(mirror) = resolve_repository_mirror_target(&self.root, repository_id)? else {
-            return Ok(());
+            return Ok(0);
         };
+        let reclaimed_bytes = directory_size_bytes(&mirror)?;
 
         ensure_bare_mirror(&mirror).await?;
         let prune = tokio::process::Command::new("git")
@@ -346,7 +348,7 @@ impl CodexExecutor {
 
         std::fs::remove_dir_all(&mirror)
             .map_err(|e| ExecutorError::Other(format!("remove bare mirror failed: {e}")))?;
-        Ok(())
+        Ok(reclaimed_bytes)
     }
 
     /// 镜像仓不存在则 `clone --mirror`（临时目录 → 原子发布），存在则
@@ -470,6 +472,30 @@ impl CodexExecutor {
         .map_err(|e| ExecutorError::Other(format!("git worktree add failed: {e}")))?;
         Ok(())
     }
+}
+
+/// Estimate logical file bytes without following symlinks.
+fn directory_size_bytes(root: &Path) -> Result<u64, ExecutorError> {
+    let mut total = 0u64;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        let metadata = std::fs::symlink_metadata(&path)
+            .map_err(|e| ExecutorError::Other(format!("inspect reclamation size failed: {e}")))?;
+        if metadata.file_type().is_symlink() {
+            total = total.saturating_add(metadata.len());
+        } else if metadata.is_dir() {
+            for entry in std::fs::read_dir(&path)
+                .map_err(|e| ExecutorError::Other(format!("read reclamation directory failed: {e}")))?
+            {
+                let entry = entry
+                    .map_err(|e| ExecutorError::Other(format!("read reclamation entry failed: {e}")))?;
+                pending.push(entry.path());
+            }
+        } else if metadata.is_file() {
+            total = total.saturating_add(metadata.len());
+        }
+    }
+    Ok(total)
 }
 
 async fn ensure_bare_mirror(mirror: &Path) -> Result<(), ExecutorError> {
@@ -725,14 +751,14 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for CodexExecutor
         run_id: Uuid,
         repository_id: Uuid,
         workspace_path: &str,
-    ) -> Result<(), ExecutorError> {
+    ) -> Result<u64, ExecutorError> {
         CodexExecutor::reclaim_run_worktree(self, run_id, repository_id, workspace_path).await
     }
 
     async fn reclaim_repository_mirror(
         &self,
         repository_id: Uuid,
-    ) -> Result<(), ExecutorError> {
+    ) -> Result<u64, ExecutorError> {
         CodexExecutor::reclaim_repository_mirror(self, repository_id).await
     }
 }
