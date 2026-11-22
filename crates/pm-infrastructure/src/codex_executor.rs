@@ -719,6 +719,18 @@ impl CodexLaunchProfile {
 }
 
 #[async_trait::async_trait]
+impl pm_application::workspace_reclamation::WorkspaceReclaimer for CodexExecutor {
+    async fn reclaim_run_worktree(
+        &self,
+        run_id: Uuid,
+        repository_id: Uuid,
+        workspace_path: &str,
+    ) -> Result<(), ExecutorError> {
+        CodexExecutor::reclaim_run_worktree(self, run_id, repository_id, workspace_path).await
+    }
+}
+
+#[async_trait::async_trait]
 impl RunExecutor for CodexExecutor {
     fn kind(&self) -> &'static str {
         "codex"
