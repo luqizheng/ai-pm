@@ -696,9 +696,58 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
         .expect(0)
         .mount(&server).await;
     let root = temp_dir();
+    let orphan_dir = root.join(Uuid::new_v4().to_string());
+    let mut orphan = spawn_agent(&sleeper_cmd(30), &orphan_dir, &[], None)
+        .expect("previous Runner Agent must start for the fencing test");
+    let orphan_pid = orphan.pid;
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     assert!(run_loop(&cfg, &client).await.is_err());
+    assert!(
+        ai_pm_runner::adapter::is_pid_alive(orphan_pid),
+        "discovery failure must not terminate an old Agent before its lease can be fenced"
+    );
+    terminate(&mut orphan.child).await.expect("test must reap its child");
+    server.verify().await;
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Missing lease generation cannot prove that a replacement Runner fenced the old owner.
+#[tokio::test]
+async fn restart_recovery_rejects_missing_lease_generation() {
+    let server = MockServer::start().await;
+    let run_id = Uuid::new_v4();
+    let task_id = Uuid::new_v4();
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "runs": [{
+            "run_id": run_id,
+            "task_id": task_id
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_reacquire_lease" }
+        })))
+        .respond_with(structured(json!({})))
+        .expect(0)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let error = match recover_inflight_run(&cfg, &client).await {
+        Err(error) => error,
+        Ok(_) => panic!("missing lease generation must fail closed"),
+    };
+    assert!(error.to_string().contains("lease_generation"));
     server.verify().await;
     let _ = std::fs::remove_dir_all(root);
 }

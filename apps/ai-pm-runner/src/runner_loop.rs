@@ -167,12 +167,15 @@ pub async fn recover_inflight_run(
         .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid task_id".into()))?;
-    let previous_generation = match entry.get("lease_generation") {
-        Some(value) => value.as_i64().filter(|generation| *generation > 0).ok_or_else(|| {
-            mcp::RunnerError::Malformed("discovered Run has an invalid lease_generation".into())
-        })?,
-        None => 0,
-    };
+    let previous_generation = entry
+        .get("lease_generation")
+        .and_then(Value::as_i64)
+        .filter(|generation| *generation > 0)
+        .ok_or_else(|| {
+            mcp::RunnerError::Malformed(
+                "discovered Run is missing or has an invalid lease_generation".into(),
+            )
+        })?;
 
     let mut last_error = None;
     let mut reacquired = None;
@@ -239,10 +242,11 @@ pub async fn recover_inflight_run(
 
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::RunnerError> {
     cfg.validate().map_err(mcp::RunnerError::Adapter)?;
-    // A replacement Runner must not start a second Agent while a previous
-    // instance's child may still be executing. Terminate only when the
-    // persisted PID identity anchor still matches; any unconfirmed cleanup
-    // fails startup closed before recovery or new Task claims.
+    let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await?;
+    // Fence any previously supervised Run before touching its Agent process.
+    // Discovery failure must leave the old process untouched and block all claims.
+    // After successful recovery (including a confirmed empty result), clean up
+    // identity-matched orphan Agents before entering the claim loop.
     for orphan in adapter::scan_orphans(&cfg.workspace_root) {
         if !orphan.alive {
             continue;
@@ -269,7 +273,6 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
     }
     // pm_discover_runs is both the authenticated startup probe and the recovery
     // gate. Do not list or claim Tasks until recovery state is explicitly known.
-    let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await?;
     let mut logged_awaiting = false;
     let mut lease_lost_cleanup_pending = false;
     let mut lease_reacquired_after_loss = false;
