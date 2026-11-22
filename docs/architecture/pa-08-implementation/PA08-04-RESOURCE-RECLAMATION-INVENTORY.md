@@ -80,12 +80,14 @@ Real PostgreSQL tests now cover concurrent duplicate claims, unexpired lease pro
 
 Migration `0055_workspace_reclamation_ledger.sql` adds a separate durable ledger for `run_worktree` and `repository_mirror` resources. It stores only tenant/project/run/repository identity and a validated relative path, plus pending/cleaning/completed/needs_human retry state and fencing-token fields. Partial unique indexes enforce one worktree record per Run/repository and one mirror record per repository. Foreign keys preserve the referenced Run repository snapshot and Repository row; no cascade deletion is used.
 
-Real PostgreSQL schema tests cover separate worktree/mirror identity, duplicate mirror rejection, and invalid worktree shape rejection. Hosted CI verification is pending.
+`pm_application::workspace_reclamation::stage_candidates` now idempotently stages only eligible candidates (30-day default policy constant): terminal Run worktrees require completed process cleanup when an executor session exists; archived mirrors require no active Run or unfinished cleanup reference. Staging is metadata-only and does not delete files.
+
+Real PostgreSQL tests cover separate worktree/mirror identity, duplicate mirror rejection, invalid worktree shape, terminal retention, process-cleanup gating, archived mirror gating, and idempotent staging. Hosted CI verification is pending.
 
 ## 6. Planned implementation sequence
 
-1. Complete Hosted CI verification for process-cleanup fencing and the new reclamation ledger schema tests.
-2. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors. Do not conflate process termination status with disk deletion status.
+1. Complete Hosted CI verification for process-cleanup fencing, ledger constraints, and candidate discovery tests.
+2. Add filesystem path/symlink validation and dry-run candidate inspection output. Do not conflate process termination status with disk deletion status.
 3. Add dry-run candidate discovery for terminal Run worktrees and archived repository mirrors.
 4. Implement CodexExecutor filesystem operations with canonical path checks, mirror lock reuse, Git worktree removal/prune, and mirror worktree-list verification.
 5. Add second-check DB eligibility immediately before deletion, retry/backoff, and `needs_human` visibility.
