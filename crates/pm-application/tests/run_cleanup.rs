@@ -188,4 +188,20 @@ async fn cleanup_failure_exhaustion_escalates_to_needs_human(pool: PgPool) {
         run_cleanup::claim_batch(&pool).await.unwrap().is_empty(),
         "needs_human rows must not be automatically reclaimed"
     );
+
+    let (tenant_id, project_id): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT tenant_id, project_id FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let escalations = run_cleanup::list_needs_human(&pool, tenant_id, project_id, 50)
+        .await
+        .unwrap();
+    assert_eq!(escalations.len(), 1);
+    assert_eq!(escalations[0].run_id, run_id);
+    assert_eq!(escalations[0].project_id, project_id);
+    assert_eq!(escalations[0].run_status, "cancelled");
+    assert_eq!(escalations[0].last_error.as_deref(), Some("permanent terminate failure"));
 }
