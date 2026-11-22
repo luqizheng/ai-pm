@@ -258,6 +258,28 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         last_lease_attempt: None,
     };
 
+    assert!(first_pid.is_some(), "first delivery must spawn an Agent");
+    // The first acknowledgement is deliberately lost (HTTP 503). The next poll
+    // must redeliver the same command and the Runner must only re-ack it.
+    drop(failed_ack);
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
+
     run.last_command_poll = Instant::now() - Duration::from_secs(10);
     tick(&cfg, &client, &mut run)
         .await
@@ -677,7 +699,7 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
         .expect(2);
     poll.mount(&server).await;
 
-    Mock::given(method("POST"))
+    let failed_ack = Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
             "method": "tools/call",
@@ -691,9 +713,10 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
                 }
             }
         })))
-        .respond_with(structured(json!({ "ok": true })))
-        .expect(2)
-        .mount(&server).await;
+        .respond_with(ResponseTemplate::new(503).set_body_string("ack temporarily unavailable"))
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
