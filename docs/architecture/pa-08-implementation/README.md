@@ -30,6 +30,8 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 - Exercises the production `claim_and_start` path against a scripted Wiremock Platform: ready-task discovery, claim response parsing, run-context retrieval, lease-owner routing identity, and actual child-process spawn/cleanup.
 - Covers the empty-queue path without claiming or spawning.
 - CI now runs `cargo test -p ai-pm-runner --tests --locked` after the workspace build.
-- This is an initial lifecycle slice, not completion: heartbeat/command progression, restart recovery, and failure-injection coverage remain open.
+- Initial CI run [#7](https://github.com/luqizheng/ai-pm/actions/runs/44968483995) passed the workspace build and Runner integration tests for the claim/spawn and empty-queue cases.
+- Expanded heartbeat/command-tick coverage is in the latest CI run [#10](https://github.com/luqizheng/ai-pm/actions/runs/44968579673), currently pending.
+- This is an initial lifecycle slice, not completion: terminate/continue command outcomes, restart recovery, and broader transport/lease/spawn failure-injection coverage remain open.
 
 Status changes require code/test evidence. A plan or merged documentation is not implementation completion.
