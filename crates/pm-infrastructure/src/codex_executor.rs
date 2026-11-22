@@ -36,8 +36,6 @@ use uuid::Uuid;
 /// 日志大小上限（env `AI_PM_RUN_LOG_MAX_BYTES`，默认 50 MiB）。超限后继续读
 /// 但丢弃（防管道背压阻塞子进程），文件尾追加一次截断标记。
 const LOG_MAX_BYTES_DEFAULT: u64 = 50 * 1024 * 1024;
-/// 镜像仓锁的陈旧阈值（秒）：持锁进程崩溃后锁文件残留，超时视为陈旧可清除。
-const MIRROR_LOCK_STALE_SECS: u64 = 600;
 
 /// SSH 协议仓库 url（决定是否需要落临时私钥）。与迁移 0022 起的判定口径
 /// 一致：`git@` scp 风格或 `ssh://` 前缀。
@@ -154,13 +152,33 @@ impl CodexExecutor {
     /// T-032 §6.1：镜像仓跨进程锁（每 repo_id 一把；原子 create_new + 陈旧检测）。
     /// 双 Run 并发首 clone / 并发 fetch 在此串行化；持锁进程崩溃后的残留锁在
     /// 超时后可安全清除。
+    /// Acquire a kernel-managed advisory lock for this repository mirror.
+    /// The lock file is intentionally persistent: deleting a locked inode can
+    /// let a later opener lock a different inode while existing holders continue.
     fn lock_mirror(&self, repository_id: Uuid) -> Result<MirrorLockGuard, ExecutorError> {
+        let path = self.mirror_lock_path(repository_id)?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(120);
+        loop {
+            if let Some(guard) = self.try_lock_mirror_path(&path)? {
+                return Ok(guard);
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(ExecutorError::Other(format!("mirror lock timeout: {}", path.display())));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    fn try_lock_mirror(&self, repository_id: Uuid) -> Result<Option<MirrorLockGuard>, ExecutorError> {
+        let path = self.mirror_lock_path(repository_id)?;
+        self.try_lock_mirror_path(&path)
+    }
+
+    fn mirror_lock_path(&self, repository_id: Uuid) -> Result<PathBuf, ExecutorError> {
         let mirror_dir = self.root.join("git-mirror");
         if let Ok(meta) = std::fs::symlink_metadata(&mirror_dir) {
             if meta.file_type().is_symlink() {
-                return Err(ExecutorError::Other(
-                    "git-mirror root is a symlink; refusing mirror lock".into(),
-                ));
+                return Err(ExecutorError::Other("git-mirror root is a symlink; refusing mirror lock".into()));
             }
         }
         std::fs::create_dir_all(&mirror_dir)
@@ -170,50 +188,29 @@ impl CodexExecutor {
         let mirror_dir_canonical = std::fs::canonicalize(&mirror_dir)
             .map_err(|e| ExecutorError::Other(format!("canonicalize mirror root failed: {e}")))?;
         if !mirror_dir_canonical.starts_with(&root_canonical) {
-            return Err(ExecutorError::Other(
-                "git-mirror root escapes configured workspace root".into(),
-            ));
+            return Err(ExecutorError::Other("git-mirror root escapes configured workspace root".into()));
         }
-        let path = mirror_dir.join(format!("{repository_id}.lock"));
-        let deadline = std::time::Instant::now() + Duration::from_secs(120);
-        loop {
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&path)
-            {
-                Ok(_) => {
-                    return Ok(MirrorLockGuard { path });
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // 陈旧锁检测：mtime 超阈值 → 视为持锁进程已崩溃，清除重试。
-                    if let Ok(meta) = std::fs::metadata(&path) {
-                        if let Ok(modified) = meta.modified() {
-                            if modified.elapsed().unwrap_or_default()
-                                > Duration::from_secs(MIRROR_LOCK_STALE_SECS)
-                            {
-                                let _ = std::fs::remove_file(&path);
-                                continue;
-                            }
-                        }
-                    }
-                    if std::time::Instant::now() >= deadline {
-                        return Err(ExecutorError::Other(format!(
-                            "mirror lock timeout: {}",
-                            path.display()
-                        )));
-                    }
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-                Err(e) => {
-                    return Err(ExecutorError::Other(format!(
-                        "acquire mirror lock failed: {e}"
-                    )));
-                }
-            }
-        }
+        Ok(mirror_dir.join(format!("{repository_id}.lock")))
     }
 
+    fn try_lock_mirror_path(&self, path: &Path) -> Result<Option<MirrorLockGuard>, ExecutorError> {
+        if let Ok(meta) = std::fs::symlink_metadata(path) {
+            if meta.file_type().is_symlink() {
+                return Err(ExecutorError::Other("mirror lock path is a symlink; refusing lock".into()));
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)
+            .map_err(|e| ExecutorError::Other(format!("open mirror lock failed: {e}")))?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(MirrorLockGuard { _file: file })),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(std::fs::TryLockError::Error(error)) => Err(ExecutorError::Other(format!("acquire OS mirror lock failed: {error}"))),
+        }
+    }
     /// Reclaim one per-Run Git worktree. Caller must have revalidated the
     /// reclamation ledger row and process-cleanup state immediately beforehand.
     /// Only the repository worktree directory is removed; Run logs and metadata
@@ -615,15 +612,10 @@ fn resolve_repository_mirror_target(
     Ok(Some(canonical))
 }
 
-/// 镜像锁 RAII：Drop 时删除锁文件。
+/// Kernel lock lifetime is tied to this open file handle; process exit/crash releases it.
+/// The empty lock file remains on disk to avoid unlink/recreate inode races.
 struct MirrorLockGuard {
-    path: PathBuf,
-}
-
-impl Drop for MirrorLockGuard {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
+    _file: std::fs::File,
 }
 
 // ---------------------------------------------------------------------------
@@ -1444,6 +1436,28 @@ mod imp008_tests {
 
     fn temp_root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("pa08-{label}-{}", Uuid::new_v4()))
+    }
+
+    #[test]
+    fn active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale() {
+        let root = temp_root("mirror-lock-stale-mtime");
+        std::fs::create_dir_all(&root).unwrap();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .unwrap();
+        let executor = CodexExecutor::new(pool, "codex".into(), vec![], root.clone(), 1);
+        let repository_id = Uuid::new_v4();
+        let first = executor.lock_mirror(repository_id).expect("first holder acquires lock");
+        let lock_path = root.join("git-mirror").join(format!("{repository_id}.lock"));
+        let file = std::fs::OpenOptions::new().write(true).open(&lock_path).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(std::time::UNIX_EPOCH)).unwrap();
+        assert!(executor.try_lock_mirror(repository_id).unwrap().is_none(),
+            "stale mtime must never allow a contender to steal a live kernel lock");
+        drop(first);
+        let second = executor.try_lock_mirror(repository_id).unwrap();
+        assert!(second.is_some(), "lock must become available after the holder drops");
+        drop(second);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
