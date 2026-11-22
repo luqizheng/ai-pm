@@ -10,6 +10,25 @@ use sqlx::PgPool;
 pub const DEFAULT_RETENTION_DAYS: i32 = 30;
 const CLAIM_LEASE_SECS: f64 = 300.0;
 const CLAIM_BATCH_LIMIT: i64 = 32;
+const FAILURE_BACKOFF_SECS: i64 = 60;
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ReclamationRoundReport {
+    pub claimed: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub skipped: usize,
+}
+
+#[async_trait::async_trait]
+pub trait WorkspaceReclaimer: Send + Sync {
+    async fn reclaim_run_worktree(
+        &self,
+        run_id: Uuid,
+        repository_id: Uuid,
+        workspace_path: &str,
+    ) -> Result<(), crate::run_dispatch::ExecutorError>;
+}
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ReclamationEntry {
@@ -115,7 +134,7 @@ pub async fn claim_batch(pool: &PgPool) -> Result<Vec<ReclamationEntry>, sqlx::E
     sqlx::query_as::<_, ReclamationEntry>(
         "WITH candidates AS ( \
              SELECT id FROM delivery.workspace_reclamation \
-              WHERE status IN ('pending', 'cleaning') AND next_retry_at <= now() \
+              WHERE resource_kind = 'run_worktree' AND status IN ('pending', 'cleaning') AND next_retry_at <= now() \
               ORDER BY next_retry_at, created_at \
               LIMIT $1 FOR UPDATE SKIP LOCKED \
          ) \
@@ -280,4 +299,80 @@ fn truncate_error(error: &str) -> String {
     let mut out: String = trimmed.chars().take(480).collect();
     out.push('…');
     out
+}
+
+
+/// Process one fenced batch of Run worktrees. Repository mirrors are staged in
+/// the same ledger but deliberately not claimed by this worker until their
+/// archive/unarchive concurrency guard is implemented. The caller must gate
+/// this function behind an explicit deletion-enabled setting; default behavior
+/// is candidate staging only.
+pub async fn run_worktree_reclamation_round(
+    pool: &PgPool,
+    reclaimer: &dyn WorkspaceReclaimer,
+    retention_days: i32,
+) -> Result<ReclamationRoundReport, sqlx::Error> {
+    let batch = claim_batch(pool).await?;
+    let mut report = ReclamationRoundReport {
+        claimed: batch.len(),
+        ..ReclamationRoundReport::default()
+    };
+
+    for entry in batch {
+        let Some(token) = entry.claim_token else {
+            report.failed += 1;
+            continue;
+        };
+        let eligible = revalidate_candidate(pool, &entry, retention_days).await?;
+        if !eligible {
+            let recorded = mark_failed(
+                pool,
+                entry.id,
+                token,
+                "candidate failed second eligibility check",
+                FAILURE_BACKOFF_SECS,
+            )
+            .await?;
+            if recorded {
+                report.skipped += 1;
+            } else {
+                report.failed += 1;
+            }
+            continue;
+        }
+
+        let run_id = entry.run_id.ok_or_else(|| {
+            sqlx::Error::Protocol("run_worktree candidate is missing run_id".into())
+        })?;
+        match reclaimer
+            .reclaim_run_worktree(run_id, entry.repository_id, &entry.relative_path)
+            .await
+        {
+            Ok(()) => {
+                if mark_completed(pool, entry.id, token).await? {
+                    report.completed += 1;
+                } else {
+                    // Filesystem removal is idempotent. A new claimant can
+                    // safely complete the ledger on its next pass.
+                    report.failed += 1;
+                }
+            }
+            Err(error) => {
+                if mark_failed(
+                    pool,
+                    entry.id,
+                    token,
+                    &error.to_string(),
+                    FAILURE_BACKOFF_SECS,
+                )
+                .await?
+                {
+                    report.failed += 1;
+                } else {
+                    report.skipped += 1;
+                }
+            }
+        }
+    }
+    Ok(report)
 }
