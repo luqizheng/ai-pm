@@ -2,7 +2,8 @@
 //! through the real MCP client and a scripted Platform endpoint.
 use ai_pm_runner::adapter::terminate;
 use ai_pm_runner::mcp::McpClient;
-use ai_pm_runner::runner_loop::{claim_and_start, Config};
+use ai_pm_runner::runner_loop::{claim_and_start, tick, ActiveRun, Config};
+use std::time::{Duration, Instant};
 use serde_json::json;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -124,5 +125,67 @@ async fn claim_and_start_returns_none_for_empty_queue() {
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     let active = claim_and_start(&cfg, &client).await.unwrap();
     assert!(active.is_none());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A single supervision tick renews the lease before polling the command channel.
+#[tokio::test]
+async fn tick_reports_heartbeat_and_polls_commands() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_report_progress" }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_poll_commands",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "run_id": Uuid::nil(),
+                    "worker_id": "client:pa08-test-device"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "commands": [] })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let now = Instant::now();
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::nil(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 4,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: now - Duration::from_secs(120),
+        last_detect: now,
+        last_command_poll: now - Duration::from_secs(10),
+        pending_interaction: None,
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("heartbeat and command poll should succeed");
+    assert!(run.last_heartbeat.elapsed() < Duration::from_secs(2));
+    assert!(run.last_command_poll.elapsed() < Duration::from_secs(2));
     let _ = std::fs::remove_dir_all(root);
 }
