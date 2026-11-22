@@ -110,3 +110,45 @@ async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool
     .unwrap();
     assert_eq!(status, "completed");
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn current_claim_failure_releases_lease_and_schedules_retry(pool: PgPool) {
+    let run_id = enqueue_cleanup(&pool, "PA08-CLEANUP-RETRY").await;
+    let first = run_cleanup::claim_batch(&pool).await.unwrap();
+    assert_eq!(first.len(), 1);
+    let token = first[0].claim_token.expect("claim token");
+
+    assert!(
+        run_cleanup::mark_failed(&pool, run_id, token, "simulated terminate failure", 60)
+            .await
+            .unwrap(),
+        "current claimant may record its failure"
+    );
+
+    let row: (String, i32, Option<Uuid>, String) = sqlx::query_as(
+        "SELECT status, attempts, claim_token, last_error FROM delivery.task_run_cleanup WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "pending");
+    assert_eq!(row.1, 1);
+    assert!(row.2.is_none());
+    assert_eq!(row.3, "simulated terminate failure");
+
+    let premature = run_cleanup::claim_batch(&pool).await.unwrap();
+    assert!(premature.is_empty(), "retry backoff must be respected");
+
+    sqlx::query(
+        "UPDATE delivery.task_run_cleanup SET next_retry_at = now() - interval '1 second' WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let retry = run_cleanup::claim_batch(&pool).await.unwrap();
+    assert_eq!(retry.len(), 1);
+    assert_ne!(retry[0].claim_token, Some(token));
+}
