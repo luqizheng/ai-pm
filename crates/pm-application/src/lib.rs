@@ -83,6 +83,7 @@ pub mod run_cleanup;
 pub mod run_context;
 pub mod run_dispatch;
 pub mod run_events;
+pub mod run_transition_guard;
 pub mod run_executor;
 pub mod secret;
 pub mod snapshot_analysis;
