@@ -105,6 +105,7 @@ pub fn validate_transition(
                 | (RunStatus::Running, RunStatus::Succeeded)
                 | (RunStatus::Running, RunStatus::Failed)
                 | (RunStatus::Running, RunStatus::TimedOut)
+                | (RunStatus::Running, RunStatus::Cancelled)
         ),
     };
 
@@ -159,7 +160,8 @@ mod tests {
         assert!(validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Running).is_ok());
         assert!(validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Claimed).is_err());
         assert!(validate_transition(RunKind::Review, RunStatus::Claimed, RunStatus::Running).is_err());
-        assert!(validate_transition(RunKind::Review, RunStatus::Running, RunStatus::Cancelled).is_err());
+        // Active Reviewer Runs may be cancelled by Project archival; the
+        // application caller restricts this edge to reason=project_closed.
     }
 
     #[test]
