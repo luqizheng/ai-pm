@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle harness verified; PA08-03 inventory started)
+- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle slice VERIFIED; PA08-03 guard IMPLEMENTED, final hardening CI pending)
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -57,11 +57,13 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Additional command-path tests exercise real child-process termination + ack through production polling, continue spawning + human-reply injection through production polling, and frozen-guard refusal. The command-path suite passed in [Run #19](https://github.com/luqizheng/ai-pm/actions/runs/44968871944). Heartbeat retry hardening (clock advances only after Platform confirms renewal) and its HTTP 503 regression test passed in [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44969004043). Restart recovery/reacquire, empty discovery, and spawn failure are now covered by production-path tests and passed in [Run #28](https://github.com/luqizheng/ai-pm/actions/runs/44969367934), including `cargo check --workspace --locked` and `cargo test -p ai-pm-runner --tests --locked`. This verifies the Runner lifecycle slice implemented so far; delayed/duplicate command responses and broader lease/transport failure injection remain follow-up coverage.
 - Next refactor target: isolate time/scheduling decisions and process lifecycle operations behind narrow seams only where needed by the remaining tests. Do not introduce production sleeps or a parallel test-only state machine.
 
-### PA08-03 — Run transition guard — INVENTORY STARTED
-- Static write-path inventory committed at `PA08-03-RUN-TRANSITION-INVENTORY.md`; it distinguishes Delivery Runs from Reviewer Runs sharing `delivery.task_run` and records existing conditional SQL/lock protections.
-- 守卫统一校验合法边、终态不可覆盖、lease token / generation fencing、幂等重复事件及状态版本。
-- 数据库事务内完成锁定、校验和写入；禁止将外部进程/网络操作放入状态事务。
-- 将现有 claim、executor、lease、archive 写路径逐一迁入；保留必要的事务边界和审计/outbox 语义。
+### PA08-03 — Run transition guard — IMPLEMENTED (initial acceptance slice)
+- Static source inventory and implementation evidence: `PA08-03-RUN-TRANSITION-INVENTORY.md`.
+- Added `run_transition_guard.rs`: typed RunKind/RunStatus parsing, separate Delivery/Reviewer matrices, terminal immutability, and transaction-scoped `SELECT ... FOR UPDATE` validation.
+- Integrated into delivery claim/start/requeue/isolation/cancel/finish/termination, MCP first-start, Project archive, and Reviewer claim/success/failure/timeout paths. Existing Task transitions remain routed through `apply_task_transition`.
+- Project archive is the only allowed active Reviewer Run cancellation reason; Reviewer lease/session and verdict semantics remain isolated.
+- Real PostgreSQL evidence: [Run #52](https://github.com/luqizheng/ai-pm/actions/runs/44970075346) passed guard integration + unit tests; [Run #57](https://github.com/luqizheng/ai-pm/actions/runs/44970217926) passed again with the active Reviewer archive cancellation scenario.
+- Latest Project-scoped infrastructure exhaustion compare-and-set hardening is pending [Run #58](https://github.com/luqizheng/ai-pm/actions/runs/44970354176). Remaining gates: claim-vs-archive and stale lease token/generation concurrency tests.
 
 ### PA08-04 — Workspace / mirror reclamation
 - 先定义可回收候选：没有活跃 Run、没有数据库引用、已超过明确保留期、路径位于受控 workspace 根目录。
@@ -113,4 +115,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；其余待补的延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 已完成静态写路径盘点，尚未修改生产状态写入。其余工作流尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 的转换守卫已实施，并在 Run #52 / #57 的真实 PostgreSQL 与单元测试中通过；最后一项 Project 范围 compare-and-set 收紧正在 Run #58 验证。PA08-04 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
