@@ -79,6 +79,8 @@ Not yet implemented:
 - Worker and Runner operation counters / exporters.
 - Worker loopback listener and filesystem capacity/available-space gauges.
 - Reclaimed-byte accounting and cleanup needs-human listing API.
-- Full scrape/endpoint integration tests, alerting thresholds and hosted CI verification.
+- Full scrape/endpoint integration tests and alerting thresholds.
+
+Verification update: the API aggregate metrics code and its label-escaping unit test passed Hosted PA-08 Registry Portability [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). PA-07 blast-radius unit and integration jobs also passed [Run #159](https://github.com/luqizheng/ai-pm/actions/runs/44976642479). This verifies the first API slice only; it does not close the remaining bullets above.
 
 This is deliberately a partial slice, not PA08-06 acceptance. See the implementation plan for remaining gates.
