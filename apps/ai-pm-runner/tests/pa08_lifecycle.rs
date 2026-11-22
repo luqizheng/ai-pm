@@ -581,7 +581,10 @@ async fn restart_recovery_rejects_non_advancing_lease_generation() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    let error = recover_inflight_run(&cfg, &client).await.expect_err("same generation must not fence old Agent");
+    let error = match recover_inflight_run(&cfg, &client).await {
+        Err(error) => error,
+        Ok(_) => panic!("same generation must not fence old Agent"),
+    };
     assert!(error.to_string().contains("did not fence prior generation"));
     let _ = std::fs::remove_dir_all(root);
 }
@@ -626,7 +629,10 @@ async fn restart_recovery_fails_closed_when_discovery_returns_503() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    let error = recover_inflight_run(&cfg, &client).await.expect_err("503 must block startup recovery");
+    let error = match recover_inflight_run(&cfg, &client).await {
+        Err(error) => error,
+        Ok(_) => panic!("503 must block startup recovery"),
+    };
     assert!(error.to_string().contains("503"), "unexpected error: {error}");
     let _ = std::fs::remove_dir_all(root);
 }
@@ -648,7 +654,10 @@ async fn restart_recovery_rejects_malformed_discovery_payload() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    let error = recover_inflight_run(&cfg, &client).await.expect_err("malformed payload must fail closed");
+    let error = match recover_inflight_run(&cfg, &client).await {
+        Err(error) => error,
+        Ok(_) => panic!("malformed payload must fail closed"),
+    };
     assert!(error.to_string().contains("runs array"), "unexpected error: {error}");
     let _ = std::fs::remove_dir_all(root);
 }
