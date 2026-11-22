@@ -759,13 +759,12 @@ async fn start_failed(
                 lease_token_hash = NULL, dispatch_attempts = dispatch_attempts + 1, \
                 infrastructure_retry_count = infrastructure_retry_count + 1, \
                 next_dispatch_at = now() + make_interval(secs => \
-                    LEAST($3::float8, power(2, dispatch_attempts))::float8), \
+                    LEAST($2::float8, power(2, dispatch_attempts))::float8), \
                 release_reason = 'executor_start_failed' \
-          WHERE id = $1 AND status = $4 AND project_id = $5 \
+          WHERE id = $1 AND status = $3 AND project_id = $4 \
          RETURNING status, infrastructure_retry_count",
     )
     .bind(run_id)
-    .bind(detail)
     .bind(cfg.backoff_cap_secs)
     .bind(from_status.as_str())
     .bind(project_id)
