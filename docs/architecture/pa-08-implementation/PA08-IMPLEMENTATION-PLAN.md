@@ -77,7 +77,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 
 ### PA08-05 — Product lifecycle integrity — IMPLEMENTED; HOSTED VERIFYING
 - Added an explicit source-state/action matrix from PA-07 §§4/11/12: `normal → suspended → resuming → normal`, with `resuming → suspended` for a renewed pause and `abandon → archived` from non-archived states.
-- Archived is terminal for ordinary lifecycle operations. Removed the legacy `restart` shortcut because it allowed `archived → normal`, contrary to PA-07 §12. Resume must not bypass Portfolio Review.
+- Archived is terminal for ordinary lifecycle operations. Retained legacy `restart` only as a compatibility alias for `resuming → normal` (migration 0044); it is rejected from `suspended`/`archived`, so it cannot bypass Portfolio Review or restore archived Products.
 - Product Owner authorization, Product row lock, source-state validation, status update, and lifecycle audit remain one transaction. Invalid transitions have no DML or audit side effects.
 - Added API integration coverage for the complete suspend/resume sequence, invalid source-state actions, archived terminal behavior, and audit invariance. See [PA08-05 Product Lifecycle Inventory](PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md).
 - Hosted verification: [Run #133](https://github.com/luqizheng/ai-pm/actions/runs/44974739861) is in progress. Concurrency coverage for Product lifecycle vs Run claim/start remains to be completed.
