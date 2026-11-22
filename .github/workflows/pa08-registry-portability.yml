@@ -171,15 +171,13 @@ jobs:
             -c "ALTER SYSTEM SET checkpoint_timeout = '30min';"
           docker restart "$pg_container" >/dev/null
           for attempt in $(seq 1 60); do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres >/dev/null 2>&1; then
+            if docker exec "$pg_container" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
-          pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres
-          psql "$DATABASE_URL" -Atc "SHOW max_locks_per_transaction;"
-      - name: Seed disposable PostgreSQL template with current migrations
-        run: cargo run --locked -p pm-application --example seed_template1
+          docker exec "$pg_container" pg_isready -U postgres -d postgres
+          docker exec "$pg_container" psql -U postgres -d postgres -Atc "SHOW max_locks_per_transaction;"
       - name: Run this complete-workspace test partition
         run: cargo nextest run --archive-file nextest-archive.tar.zst --partition hash:${{ matrix.shard }}/4 --test-threads 2 --no-fail-fast
 
