@@ -72,3 +72,5 @@ jobs:
         run: cargo test -p pm-application --test workspace_reclamation --locked
       - name: Run application transition guard unit tests
         run: cargo test -p pm-application --lib run_transition_guard --locked
+      - name: Run Codex reclamation path safety unit tests
+        run: cargo test -p pm-infrastructure codex_executor::imp008_tests --locked
