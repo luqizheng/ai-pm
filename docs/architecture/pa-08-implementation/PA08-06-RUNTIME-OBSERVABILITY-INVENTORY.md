@@ -5,7 +5,7 @@
 ## 1. Current-state facts
 
 - Workspace dependencies contain no Prometheus, `metrics`, or OpenTelemetry exporter.
-- `pm-api` is an Axum service with a single main listener; no `/metrics` endpoint is mounted.
+- `pm-api` is an Axum service with a single main listener and an authenticated `GET /metrics` Prometheus text exposition endpoint.
 - `ai-pm-worker` has no HTTP listener or metrics dependency. It emits structured logs for claim/poll/cleanup/reclamation errors.
 - `ai-pm-runner` is a client process and uses `tracing`; it does not expose an HTTP metrics endpoint.
 - `pm_application::comm_overview::load_comm_overview` already aggregates shielded Runs, unconsumed interaction responses, open interaction chains, pending worker commands, and oldest pending command age. The Worker logs these fields every 500 dispatch-loop ticks.
@@ -78,9 +78,13 @@ Implemented:
 Not yet implemented:
 - Worker and Runner operation counters / exporters.
 - Worker loopback listener and filesystem capacity/available-space gauges.
-- Reclaimed-byte accounting and cleanup needs-human listing API.
 - Full scrape/endpoint integration tests and alerting thresholds.
 
-Verification update: the API aggregate metrics code and its label-escaping unit test passed Hosted PA-08 Registry Portability [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). PA-07 blast-radius unit and integration jobs also passed [Run #159](https://github.com/luqizheng/ai-pm/actions/runs/44976642479). This verifies the first API slice only; it does not close the remaining bullets above.
+Implemented after the first API slice:
+- Logical reclaimed-byte accounting and the `ai_pm_workspace_reclaimed_bytes_total` metric.
+- Project/tenant-scoped process-cleanup `needs_human` listing API.
+- Hosted verification of the workspace build, Runner suite, PostgreSQL reclamation/cleanup suites, Product lifecycle/concurrency suites, and metrics exposition unit tests.
+
+Verification update: the API aggregate metrics code and its label-escaping unit test passed [Run #156](https://github.com/luqizheng/ai-pm/actions/runs/44976642473). Reclaimed-byte accounting, needs-human API, and the full PA08 Hosted test workflow passed [Run #44978431052](https://github.com/luqizheng/ai-pm/actions/runs/44978431052). PA08-02 delayed duplicate command and command-poll transport retry coverage also passed [Run #44979290867](https://github.com/luqizheng/ai-pm/actions/runs/44979290867). PA-07 blast-radius unit and integration jobs passed [Run #44979290858](https://github.com/luqizheng/ai-pm/actions/runs/44979290858). This does not close the remaining Worker/Runner exporter, filesystem gauge, alerting, or scrape integration gates.
 
 This is deliberately a partial slice, not PA08-06 acceptance. See the implementation plan for remaining gates.
