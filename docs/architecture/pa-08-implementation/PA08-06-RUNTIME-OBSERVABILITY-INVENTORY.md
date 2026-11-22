@@ -9,9 +9,9 @@
 - `ai-pm-worker` has no HTTP listener or metrics dependency. It emits structured logs for claim/poll/cleanup/reclamation errors.
 - `ai-pm-runner` is a client process and uses `tracing`; it does not expose an HTTP metrics endpoint.
 - `pm_application::comm_overview::load_comm_overview` already aggregates shielded Runs, unconsumed interaction responses, open interaction chains, pending worker commands, and oldest pending command age. The Worker logs these fields every 500 dispatch-loop ticks.
-- `delivery.task_run_cleanup` has fenced retry and `needs_human` state plus explicit requeue, but no bounded list operation.
-- `delivery.workspace_reclamation` has `needs_human` listing and explicit operator requeue.
-- Workspace reclamation records completion but do not record reclaimed byte counts. No filesystem capacity/available-space gauge is collected.
+- `delivery.task_run_cleanup` has fenced retry and `needs_human` state plus explicit requeue; the application exposes a bounded project/tenant-scoped list and the API exposes it at `GET /v1/pm/task-run-cleanups/needs-human`.
+- `delivery.workspace_reclamation` has `needs_human` listing, explicit operator requeue, and logical reclaimed-byte accounting (migration `0056`). The API exports cumulative logical bytes by bounded resource/status labels.
+- No filesystem capacity/available-space gauge is collected yet. Logical reclaimed bytes are measured from regular-file sizes before deletion and do not represent physical block accounting.
 - Existing operational logs include entity IDs in individual diagnostic events. Such identifiers must not become Prometheus labels.
 
 ## 2. Minimal implementation direction
@@ -57,7 +57,7 @@ Never use `run_id`, `task_id`, `project_id`, `repository_id`, user identity, URL
 1. Add typed SQL aggregate snapshots and tests for Run, cleanup, reclamation, and communication metrics.
 2. Add API `/metrics` exposition and response/content-type tests.
 3. Add Worker metrics listener and filesystem capacity gauges, defaulting to loopback.
-4. Add reclamation byte accounting and process-cleanup `needs_human` list query.
+4. Add reclamation byte accounting and process-cleanup `needs_human` list query. **Completed:** migration `0056`, logical reclaimed-byte metric, and project-scoped needs-human API.
 5. Instrument Worker and Runner operation counters with bounded dimensions.
 6. Add exporter tests, security assertions, and Hosted CI steps.
 
