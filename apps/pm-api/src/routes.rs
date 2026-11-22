@@ -232,6 +232,8 @@ fn build_router(
     };
     Router::new()
         .route("/health", get(health_handler))
+        // PA08-06: bounded, database-backed Prometheus exposition (bearer-auth protected).
+        .route("/metrics", get(metrics_handler))
         // 首管理员初始化探测（空库强制注册）：公开，状态来自启动检查 + 记号文件。
         .route("/v1/pm/setup/status", get(crate::setup::status_handler))
         .route("/api/v1/events", post(submit_event_handler))
@@ -863,4 +865,28 @@ fn internal_error() -> Response {
         Json(json!({ "error": "internal" })),
     )
         .into_response()
+}
+
+
+/// Prometheus text exposition. This endpoint is covered by the normal bearer
+/// authentication layer; it never exposes entity identifiers or diagnostic text.
+async fn metrics_handler(State(state): State<AppState>) -> Response {
+    match crate::metrics::render(&state.pool).await {
+        Ok(body) => (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
+            body,
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!(error = ?error, "metrics scrape failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "metrics temporarily unavailable",
+            )
+                .into_response()
+        }
+    }
 }
