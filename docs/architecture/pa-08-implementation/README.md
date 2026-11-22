@@ -23,6 +23,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 - GitHub Actions: [Run #4 — public-registry-build](https://github.com/luqizheng/ai-pm/actions/runs/44967203110)
 - Result: `completed / success`
 - Verified steps: locked Cargo metadata, all four Digua crates sourced from crates.io, and `cargo check --workspace --locked`.
+- PA-07 blast-radius regression was migrated to GitHub Hosted runners after the public-registry cutover; the first new hosted run is [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44968929358). PostgreSQL integration remains a true skip unless `AIPM_TEST_DATABASE_URL` is configured.
 
 ### PA08-02 current slice
 
