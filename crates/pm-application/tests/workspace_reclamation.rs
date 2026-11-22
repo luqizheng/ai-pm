@@ -706,3 +706,51 @@ async fn mirror_reclamation_skips_repository_reactivated_after_candidate_staging
     assert_eq!(report.skipped, 1);
     assert_eq!(adapter.mirror_calls.load(Ordering::SeqCst), 0);
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-MIRROR-RESTAGE").await;
+    stage_mirror_candidate(&pool, &fx).await;
+
+    let first_adapter = FakeReclaimer::default();
+    let first = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+        &pool, &first_adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.completed, 1);
+
+    sqlx::query(
+        "UPDATE integration.project_repository SET status = 'verified', updated_at = now() WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1,
+        "a newly archived repository must restage its previously completed mirror record"
+    );
+    let second_adapter = FakeReclaimer::default();
+    let second = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+        &pool, &second_adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.completed, 1);
+    assert_eq!(second_adapter.mirror_calls.load(Ordering::SeqCst), 1);
+}
