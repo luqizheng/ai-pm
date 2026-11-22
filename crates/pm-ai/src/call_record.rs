@@ -34,6 +34,10 @@ pub const PURPOSE_PC_SNAPSHOT_ANALYSIS: &str = "pc_snapshot_analysis";
 /// 独立值而非复用 `conversation_reply`：账本上必须能分开「闲聊成本」与
 /// 「编排成本」（`purpose` 是自由 TEXT，0041 无 CHECK，零迁移）。
 pub const PURPOSE_DISCOVERY_ORCHESTRATION: &str = "discovery_orchestration";
+/// P0 外部 Commit 采纳闭环：外部提交的 AI 分析调用（迁移 0054；
+/// analysis_mode='llm' 与派生回退在 `integration.external_commit.analysis_mode`
+/// 对账）。
+pub const PURPOSE_EXTERNAL_COMMIT_ANALYSIS: &str = "external_commit_analysis";
 
 /// Maps an analysis-chain [`ModelError`] onto the §11 error taxonomy
 /// (migration 0041 comment: authentication / connection / timeout /

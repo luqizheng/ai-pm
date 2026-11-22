@@ -1,7 +1,8 @@
 //! 只读 git 子进程封装：参数数组、禁交互、显式超时、临时密钥用完即删。
 //!
 //! 本模块只允许 `ls-remote` / `clone` / `log` / `show` / `ls-tree` 这类只读命令；
-//! 不提供 push，也不写仓库 config。
+//! `fetch` 仅限刷新 AI-PM 自己持有的 bare clone 缓存（`repo_cache_dir`）——
+//! 对远端仍是只读，不触碰任何用户工作区；不提供 push，也不写仓库 config。
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -263,6 +264,41 @@ pub async fn clone_bare(
     let _ = std::fs::remove_file(&known_hosts);
     if !output.status.success() {
         let _ = std::fs::remove_dir_all(dest);
+        return Err(classify(&String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(())
+}
+
+/// 刷新 AI-PM 自己持有的 bare clone 缓存。
+///
+/// bare clone 没有默认 fetch refspec（裸 fetch 只更新 FETCH_HEAD，不前进
+/// `refs/heads/*`），因此带显式 refspec `+refs/heads/*:refs/heads/*`——与
+/// `clone --bare` 的分支布局一致。只对 [`crate::repo_facts::repo_cache_dir`]
+/// 下的缓存目录调用；远端访问仍是只读（fetch = 拉取对象），绝不指向用户
+/// 工作区。外部 Commit 发现扫描用它避免每次全量重 clone。
+pub async fn fetch_bare(
+    cache_dir: &Path,
+    key: Option<&Path>,
+    timeout: Duration,
+) -> Result<(), GitError> {
+    let known_hosts = std::env::temp_dir().join(format!("ai-pm-known-hosts-{}", Uuid::new_v4()));
+    let mut cmd = prepare_command(key, Some(&known_hosts));
+    cmd.arg("-C")
+        .arg(cache_dir)
+        .arg("fetch")
+        .arg("origin")
+        .arg("+refs/heads/*:refs/heads/*")
+        .arg("--prune");
+    cmd.kill_on_drop(true);
+
+    let child = cmd.spawn().map_err(|e| GitError::Io(e.to_string()))?;
+    let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(e)) => return Err(GitError::Io(e.to_string())),
+        Err(_) => return Err(GitError::Timeout),
+    };
+    let _ = std::fs::remove_file(&known_hosts);
+    if !output.status.success() {
         return Err(classify(&String::from_utf8_lossy(&output.stderr)));
     }
     Ok(())

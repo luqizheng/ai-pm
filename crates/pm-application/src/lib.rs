@@ -34,6 +34,7 @@ pub mod docproc_ops;
 pub mod docproc_parse;
 pub mod docproc_service;
 pub mod execution_read;
+pub mod external_commit;
 pub mod git_access;
 pub mod ingestion;
 pub mod intake;

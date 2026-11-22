@@ -32,7 +32,7 @@ const MAX_KEY_LABEL_LEN: usize = 64;
 
 mod repo;
 mod ssh_key;
-mod support;
+pub(crate) mod support;
 mod url;
 
 pub use repo::*;

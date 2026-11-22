@@ -79,6 +79,10 @@ pub(crate) struct AppState {
     ///
     /// 关系未 active 即**不可投影**（专家裁决：未会签 ≠ 默认允许）。
     pub(crate) viz_registry: Arc<pm_domain::visualization::RelationRegistry>,
+    /// P0 外部 Commit 采纳闭环：外部提交 AI 分析模型（迁移 0054）。
+    /// 生产 = `LlmCommitAnalysisModel::from_env`（无 provider 自动派生回退）。
+    pub(crate) commit_model:
+        std::sync::Arc<dyn pm_application::external_commit::CommitAnalysisModel>,
 }
 
 /// DK-A 对话载体判定装配：开关 + 意图分类器。生产 = [`ConversationRouting::from_env`]
@@ -191,6 +195,9 @@ fn build_router(
         ))
         .expect("viz relation registry yaml must parse"),
     );
+    let commit_model = std::sync::Arc::new(pm_ai::commit_model::LlmCommitAnalysisModel::from_env(
+        pool.clone(),
+    ));
     let state = AppState {
         pool,
         executor,
@@ -201,6 +208,7 @@ fn build_router(
             .map(|s| s as std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>),
         conversation_routing,
         viz_registry,
+        commit_model,
     };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
@@ -282,6 +290,8 @@ fn build_router(
         .merge(crate::team_onboarding::router())
         // 项目 ↔ 代码仓库关系 + 项目级 SSH 凭据（P0 CRUD）。
         .merge(crate::pm_repositories::router())
+        // P0 外部 Commit 采纳闭环（迁移 0054）。
+        .merge(crate::pm_external_commits::router())
         // D-5 · 仓库分析报告：列表 / 详情 / 关闭（知识审阅报告页签 + review-center 卡片）。
         .merge(crate::analysis_reports::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。

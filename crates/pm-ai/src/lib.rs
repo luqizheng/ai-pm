@@ -7,6 +7,7 @@ pub mod chat_context;
 pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
+pub mod commit_model;
 pub mod conversation_router_model;
 pub mod discovery_context;
 pub mod discovery_orchestrator;
