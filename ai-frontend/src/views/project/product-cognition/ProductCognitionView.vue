@@ -149,7 +149,7 @@ watch(projectId, () => {
 <template>
   <PageFrame
     :title="t('shell.app.side.item.productCognition')"
-    :description="t('s01.knowledge.tab.pc')"
+
   >
     <div class="product-cognition">
       <div class="product-cognition__actions">
@@ -160,7 +160,7 @@ watch(projectId, () => {
           {{ t("review.tabs.proposal") }}
         </Button>
         <Button variant="ghost" size="sm" :disabled="loading" @click="load">
-          {{ t("common.action.refresh") }}
+          {{ t("environments.action.refresh") }}
         </Button>
       </div>
 
