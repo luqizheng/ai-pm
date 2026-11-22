@@ -232,13 +232,8 @@ async fn terminate_command_kills_child_and_acks_receipt() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    let process = ai_pm_runner::adapter::spawn_agent(
-        &cfg.agent_cmd,
-        &root,
-        &[],
-        None,
-    ).expect("spawn long-lived child");
-
+    let process = ai_pm_runner::adapter::spawn_agent(&cfg.agent_cmd, &root, &[], None)
+        .expect("spawn long-lived child");
     let mut run = ActiveRun {
         project_id: Uuid::nil(),
         task_id: Uuid::new_v4(),
@@ -251,43 +246,15 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         process: Some(process),
         last_heartbeat: Instant::now(),
         last_detect: Instant::now(),
-        last_command_poll: Instant::now(),
+        last_command_poll: Instant::now() - Duration::from_secs(10),
         pending_interaction: None,
         awaiting_continue: false,
         lease_failures: 0,
         last_lease_attempt: None,
     };
-
-    assert!(first_pid.is_some(), "first delivery must spawn an Agent");
-    // The first acknowledgement is deliberately lost (HTTP 503). The next poll
-    // must redeliver the same command and the Runner must only re-ack it.
-    drop(failed_ack);
-    Mock::given(method("POST"))
-        .and(path("/mcp"))
-        .and(body_partial_json(json!({
-            "method": "tools/call",
-            "params": {
-                "name": "pm_ack_command",
-                "arguments": {
-                    "project_id": Uuid::nil(),
-                    "command_id": command_id,
-                    "worker_id": "client:pa08-test-device",
-                    "outcome": "acked"
-                }
-            }
-        })))
-        .respond_with(structured(json!({ "ok": true })))
-        .expect(1)
-        .mount(&server).await;
-
-    run.last_command_poll = Instant::now() - Duration::from_secs(10);
-    tick(&cfg, &client, &mut run)
-        .await
-        .expect("tick should poll and execute terminate command");
-
+    tick(&cfg, &client, &mut run).await.expect("terminate command should be acknowledged");
     assert!(run.awaiting_continue);
-    let child_id = run.process.as_ref().and_then(|p| p.child.id());
-    assert!(child_id.is_none(), "terminate must reap the child process");
+    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "terminate must reap the child process");
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -750,6 +717,26 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
     let first_pid = run.process.as_ref().and_then(|process| process.child.id());
     let first_session = run.process.as_ref().map(|process| process.session_id.clone());
     assert!(first_pid.is_some(), "first delivery must spawn an Agent");
+    // The first acknowledgement is deliberately lost (HTTP 503). The next poll
+    // redelivers the same command; the second ACK succeeds without a second spawn.
+    drop(failed_ack);
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_ack_command",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "command_id": command_id,
+                    "worker_id": "client:pa08-test-device",
+                    "outcome": "acked"
+                }
+            }
+        })))
+        .respond_with(structured(json!({ "ok": true })))
+        .expect(1)
+        .mount(&server).await;
 
     run.last_command_poll = Instant::now() - Duration::from_secs(10);
     tick(&cfg, &client, &mut run)
