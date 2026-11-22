@@ -101,6 +101,7 @@ pub mod team_llm_catalog;
 pub mod team_onboarding;
 pub mod visualization;
 pub mod worker_command;
+pub mod workspace_reclamation;
 
 pub use acceptance_overview::{
     load_overview, AcceptanceBadge, AcceptanceCounts, AcceptanceOverview, AcceptanceTask,
