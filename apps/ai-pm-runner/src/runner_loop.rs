@@ -134,6 +134,101 @@ pub struct ActiveRun {
     pub last_lease_attempt: Option<Instant>,
 }
 
+/// Recover a pending human-intervention Run after Runner process restart.
+/// Exposed as a narrow production seam so lifecycle recovery is integration-tested.
+pub async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Option<ActiveRun> {
+    let discovered = match client.discover_runs(cfg.project_id).await {
+        Ok(value) => value,
+        Err(e) => {
+            tracing::warn!(error = %e, "startup discovery failed; starting without recovery");
+            return None;
+        }
+    };
+    let runs = discovered
+        .get("runs")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if runs.len() > 1 {
+        // I5：多发现项显式告警——V1 单 Run 串行，余项待当前 Run 终局后
+        // 下轮 discover 再领（幂等、无副作用）。
+        tracing::warn!(
+            count = runs.len(),
+            "multiple recoverable runs discovered; single-run runner takes the first, rest re-discovered later"
+        );
+    }
+    let entry = runs.first()?.clone();
+    let run_id: Uuid = entry.get("run_id")?.as_str()?.parse().ok()?;
+    let task_id: Uuid = entry.get("task_id")?.as_str()?.parse().ok()?;
+    // I4：续领失败退避重试（有界），耗尽后转入正常循环（平台侧恢复路径接管）。
+    let mut attempt: u32 = 0;
+    let reacquired = loop {
+        match client.reacquire_lease(cfg.project_id, run_id).await {
+            Ok(value) => break Some(value),
+            Err(e) => {
+                if e.is_unauthorized() {
+                    tracing::error!(error = %e, "credential rejected during recovery reacquire");
+                    return None;
+                }
+                attempt += 1;
+                let delay = backoff_delay_ms(attempt, cfg.backoff_base_ms, cfg.backoff_cap_ms);
+                tracing::warn!(
+                    error = %e, attempt, retry_in_ms = delay,
+                    "recovery reacquire failed; backing off"
+                );
+                if attempt >= 5 {
+                    break None;
+                }
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
+        }
+    };
+    let Some(reacquired) = reacquired else {
+        tracing::error!(run = %run_id, "recovery reacquire exhausted bounded retries; run left to platform recovery paths");
+        return None;
+    };
+    let run_dir = cfg.workspace_root.join(run_id.to_string());
+    let _ = std::fs::create_dir_all(&run_dir);
+    tracing::info!(
+        run = %run_id,
+        generation = %reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(0),
+        rerouted = %reacquired.get("rerouted_commands").and_then(|v| v.as_i64()).unwrap_or(0),
+        "recovered in-flight run after offline window (same-owner re-lease)"
+    );
+    Some(ActiveRun {
+        project_id: cfg.project_id,
+        task_id,
+        run_id,
+        lease_token: reacquired
+            .get("lease_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        lease_generation: reacquired
+            .get("lease_generation")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(1) as i32,
+        worker_id: reacquired
+            .get("worker_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        run_dir,
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
+        pending_interaction: entry
+            .get("interaction_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok()),
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    })
+}
+
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::RunnerError> {
     cfg.validate().map_err(mcp::RunnerError::Adapter)?;
     // Q-RC-5：孤儿扫描只报告不强杀。
@@ -159,102 +254,7 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
     let mut logged_awaiting = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
 
-    // R-11/§3.6 启动恢复：发现名下 start_wait 且有可投递 continue 的在途
-    // Run → 续领（generation+1 + 命令改路由）→ 以 awaiting_continue 态返回
-    //（本机无进程句柄；continue 到达时按既有路径 spawn 新 Session）。
-    // ACP-C4：terminate 确认前置不变（continue 仍被情形 6 过滤直至确认）。
-    async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Option<ActiveRun> {
-        let discovered = match client.discover_runs(cfg.project_id).await {
-            Ok(value) => value,
-            Err(e) => {
-                tracing::warn!(error = %e, "startup discovery failed; starting without recovery");
-                return None;
-            }
-        };
-        let runs = discovered
-            .get("runs")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        if runs.len() > 1 {
-            // I5：多发现项显式告警——V1 单 Run 串行，余项待当前 Run 终局后
-            // 下轮 discover 再领（幂等、无副作用）。
-            tracing::warn!(
-                count = runs.len(),
-                "multiple recoverable runs discovered; single-run runner takes the first, rest re-discovered later"
-            );
-        }
-        let entry = runs.first()?.clone();
-        let run_id: Uuid = entry.get("run_id")?.as_str()?.parse().ok()?;
-        let task_id: Uuid = entry.get("task_id")?.as_str()?.parse().ok()?;
-        // I4：续领失败退避重试（有界），耗尽后转入正常循环（平台侧恢复路径接管）。
-        let mut attempt: u32 = 0;
-        let reacquired = loop {
-            match client.reacquire_lease(cfg.project_id, run_id).await {
-                Ok(value) => break Some(value),
-                Err(e) => {
-                    if e.is_unauthorized() {
-                        tracing::error!(error = %e, "credential rejected during recovery reacquire");
-                        return None;
-                    }
-                    attempt += 1;
-                    let delay = backoff_delay_ms(attempt, cfg.backoff_base_ms, cfg.backoff_cap_ms);
-                    tracing::warn!(
-                        error = %e, attempt, retry_in_ms = delay,
-                        "recovery reacquire failed; backing off"
-                    );
-                    if attempt >= 5 {
-                        break None;
-                    }
-                    tokio::time::sleep(Duration::from_millis(delay)).await;
-                }
-            }
-        };
-        let Some(reacquired) = reacquired else {
-            tracing::error!(run = %run_id, "recovery reacquire exhausted bounded retries; run left to platform recovery paths");
-            return None;
-        };
-        let run_dir = cfg.workspace_root.join(run_id.to_string());
-        let _ = std::fs::create_dir_all(&run_dir);
-        tracing::info!(
-            run = %run_id,
-            generation = %reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(0),
-            rerouted = %reacquired.get("rerouted_commands").and_then(|v| v.as_i64()).unwrap_or(0),
-            "recovered in-flight run after offline window (same-owner re-lease)"
-        );
-        Some(ActiveRun {
-            project_id: cfg.project_id,
-            task_id,
-            run_id,
-            lease_token: reacquired
-                .get("lease_token")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            lease_generation: reacquired
-                .get("lease_generation")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(1) as i32,
-            worker_id: reacquired
-                .get("worker_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            run_dir,
-            stage: "started".into(),
-            process: None,
-            last_heartbeat: Instant::now(),
-            last_detect: Instant::now(),
-            last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
-            pending_interaction: entry
-                .get("interaction_id")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse().ok()),
-            awaiting_continue: true,
-            lease_failures: 0,
-            last_lease_attempt: None,
-        })
-    }
+
 
     loop {
         // ① 进程收割与退出判定。
