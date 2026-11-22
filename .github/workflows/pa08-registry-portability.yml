@@ -116,7 +116,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
       - name: Build and archive the complete workspace test suite
-        run: cargo nextest archive --workspace --locked --archive-file nextest-archive.tar.zst --zstd-level 0
+        run: cargo nextest archive --workspace --locked --archive-file nextest-archive.tar.zst --zstd-level 3
       - uses: actions/upload-artifact@v4
         with:
           name: pa08-linux-nextest-archive
