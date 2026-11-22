@@ -64,8 +64,12 @@ jobs:
           for crate in digua_common_jwt digua_common_consul digua_file_sdk digua_http_client; do
             grep -A3 -F "name = \"$crate\"" Cargo.lock | grep -F "registry+https://github.com/rust-lang/crates.io-index"
           done
+      - name: Check formatting
+        run: cargo fmt --all -- --check
       - name: Build workspace from public registries
         run: cargo check --workspace --locked
+      - name: Run workspace Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run Runner integration tests
         run: cargo test -p ai-pm-runner --tests --locked
       - name: Run Run transition guard PostgreSQL integration tests
@@ -84,3 +88,5 @@ jobs:
         run: cargo test -p pm-infrastructure codex_executor::imp008_tests --locked
       - name: Run PA08-06 metrics exposition unit tests
         run: cargo test -p pm-api --lib metrics::tests --locked
+      - name: Run PA08-06 authenticated metrics HTTP integration tests
+        run: cargo test -p pm-api --test auth metrics_endpoint --locked
