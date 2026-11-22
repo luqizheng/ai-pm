@@ -296,6 +296,61 @@ pub async fn reap(spawned: &mut SpawnedProcess) -> Option<ExitOutcome> {
     }
 }
 
+/// Terminate a process left by a previous Runner instance, but only when the
+/// persisted process identity still matches. This prevents PID-reuse kills.
+pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
+    if !report.alive {
+        return Ok(());
+    }
+    let expected = report.record.identity_hint.as_deref().ok_or_else(|| {
+        AdapterError::Invalid("orphan process has no identity anchor; refusing unsafe termination".into())
+    })?;
+    let Some(actual) = process_identity_hint(report.record.pid) else {
+        return Ok(());
+    };
+    if actual != expected {
+        // PID has been reused or the recorded process is already gone. Never
+        // terminate a process whose creation identity differs from the record.
+        return Ok(());
+    }
+
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(-(report.record.pid as i32), libc::SIGKILL) };
+        if result != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(AdapterError::Io(error));
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("taskkill")
+            .args(["/PID", &report.record.pid.to_string(), "/T", "/F"])
+            .output()?;
+        if !output.status.success() && process_identity_hint(report.record.pid).as_deref() == Some(expected) {
+            return Err(AdapterError::Invalid(format!(
+                "taskkill failed for orphan pid {}: {}",
+                report.record.pid,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+    }
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        if process_identity_hint(report.record.pid).as_deref() != Some(expected) {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    Err(AdapterError::Invalid(format!(
+        "orphan pid {} still matches its recorded process identity after termination",
+        report.record.pid
+    )))
+}
+
 /// 扫描未上报标记文件（P2-1 收敛：文件名含 event_id）：
 /// `{run_dir}/.aipm/interaction.{event_id}.json` 与子目录 `{workspace_path}/
 /// .aipm/…` 两层约定。文件名 event_id 与正文不一致 = 非法（双键必须一致）。
