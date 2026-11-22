@@ -32,6 +32,22 @@ jobs:
   public-registry-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -48,3 +64,7 @@ jobs:
         run: cargo check --workspace --locked
       - name: Run Runner integration tests
         run: cargo test -p ai-pm-runner --tests --locked
+      - name: Run Run transition guard PostgreSQL integration tests
+        run: cargo test -p pm-application --test run_transition_guard --locked
+      - name: Run application transition guard unit tests
+        run: cargo test -p pm-application --lib run_transition_guard --locked
