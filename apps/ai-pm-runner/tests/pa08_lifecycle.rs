@@ -545,7 +545,53 @@ async fn restart_recovery_returns_none_when_no_runs_are_discoverable() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    assert!(recover_inflight_run(&cfg, &client).await.is_none());
+    assert!(recover_inflight_run(&cfg, &client).await.unwrap().is_none());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+
+/// Startup discovery transport/server failure is not equivalent to an empty Run list.
+/// Recovery must fail closed so run_loop cannot proceed to claim replacement work.
+#[tokio::test]
+async fn restart_recovery_fails_closed_when_discovery_returns_503() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let error = recover_inflight_run(&cfg, &client).await.expect_err("503 must block startup recovery");
+    assert!(error.to_string().contains("503"), "unexpected error: {error}");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A successful RPC with a missing or malformed runs field is not proof of emptiness.
+#[tokio::test]
+async fn restart_recovery_rejects_malformed_discovery_payload() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "unexpected": [] })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let error = recover_inflight_run(&cfg, &client).await.expect_err("malformed payload must fail closed");
+    assert!(error.to_string().contains("runs array"), "unexpected error: {error}");
     let _ = std::fs::remove_dir_all(root);
 }
 
