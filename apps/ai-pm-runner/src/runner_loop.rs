@@ -1162,10 +1162,40 @@ mod tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{terminate_reacquired_agent, ActiveRun};
+    use super::{terminate_reacquired_agent, write_cleanup_escalation_evidence, ActiveRun};
     use crate::adapter;
     use std::time::Instant;
     use uuid::Uuid;
+
+    #[test]
+    fn failed_child_termination_writes_cleanup_escalation_evidence_without_lease_token() {
+        let root = std::env::temp_dir().join(format!("aipm-cleanup-evidence-{}", Uuid::new_v4()));
+        let run = ActiveRun {
+            project_id: Uuid::nil(),
+            task_id: Uuid::new_v4(),
+            run_id: Uuid::new_v4(),
+            lease_token: "must-not-be-written".into(),
+            lease_generation: 8,
+            worker_id: "runner:test".into(),
+            run_dir: root.clone(),
+            stage: "started".into(),
+            process: None,
+            last_heartbeat: Instant::now(),
+            last_detect: Instant::now(),
+            last_command_poll: Instant::now(),
+            pending_interaction: None,
+            awaiting_continue: false,
+            lease_failures: 0,
+            last_lease_attempt: None,
+        };
+        write_cleanup_escalation_evidence(&run, "injected termination failure").unwrap();
+        let path = root.join(".aipm").join("cleanup-needs-human.json");
+        let evidence = std::fs::read_to_string(&path).unwrap();
+        assert!(evidence.contains("injected termination failure"));
+        assert!(evidence.contains("lease_generation"));
+        assert!(!evidence.contains("must-not-be-written"));
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[tokio::test]
     async fn new_lease_generation_reaps_old_agent_before_resume() {
