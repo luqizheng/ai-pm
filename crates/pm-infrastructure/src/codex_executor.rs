@@ -198,6 +198,119 @@ impl CodexExecutor {
         }
     }
 
+    /// Reclaim one per-Run Git worktree. Caller must have revalidated the
+    /// reclamation ledger row and process-cleanup state immediately beforehand.
+    /// Only the repository worktree directory is removed; Run logs and metadata
+    /// remain untouched.
+    pub async fn reclaim_run_worktree(
+        &self,
+        run_id: Uuid,
+        repository_id: Uuid,
+        workspace_path: &str,
+    ) -> Result<(), ExecutorError> {
+        let _lock = self.lock_mirror(repository_id)?;
+        let Some(target) = resolve_run_worktree_target(&self.root, run_id, workspace_path)? else {
+            return Ok(());
+        };
+        let mirror = self.root.join("git-mirror").join(repository_id.to_string());
+        if mirror.join("HEAD").is_file() {
+            let output = tokio::process::Command::new("git")
+                .arg("--git-dir")
+                .arg(&mirror)
+                .args(["worktree", "remove", "--force"])
+                .arg(&target)
+                .output()
+                .await
+                .map_err(|e| ExecutorError::Other(format!("git worktree remove failed: {e}")))?;
+            if !output.status.success() {
+                return Err(ExecutorError::Other(format!(
+                    "git worktree remove failed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            let prune = tokio::process::Command::new("git")
+                .arg("--git-dir")
+                .arg(&mirror)
+                .args(["worktree", "prune"])
+                .output()
+                .await
+                .map_err(|e| ExecutorError::Other(format!("git worktree prune failed: {e}")))?;
+            if !prune.status.success() {
+                return Err(ExecutorError::Other(format!(
+                    "git worktree prune failed: {}",
+                    String::from_utf8_lossy(&prune.stderr).trim()
+                )));
+            }
+        } else {
+            std::fs::remove_dir_all(&target).map_err(|e| {
+                ExecutorError::Other(format!("remove orphaned worktree directory failed: {e}"))
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Reclaim a shared bare mirror only when Git confirms no linked worktrees
+    /// remain. Repository/Commit database rows and remote history are untouched.
+    pub async fn reclaim_repository_mirror(
+        &self,
+        repository_id: Uuid,
+    ) -> Result<(), ExecutorError> {
+        let _lock = self.lock_mirror(repository_id)?;
+        let Some(mirror) = resolve_repository_mirror_target(&self.root, repository_id)? else {
+            return Ok(());
+        };
+
+        let prune = tokio::process::Command::new("git")
+            .arg("--git-dir")
+            .arg(&mirror)
+            .args(["worktree", "prune"])
+            .output()
+            .await
+            .map_err(|e| ExecutorError::Other(format!("git worktree prune failed: {e}")))?;
+        if !prune.status.success() {
+            return Err(ExecutorError::Other(format!(
+                "git worktree prune failed: {}",
+                String::from_utf8_lossy(&prune.stderr).trim()
+            )));
+        }
+
+        let listing = tokio::process::Command::new("git")
+            .arg("--git-dir")
+            .arg(&mirror)
+            .args(["worktree", "list", "--porcelain"])
+            .output()
+            .await
+            .map_err(|e| ExecutorError::Other(format!("git worktree list failed: {e}")))?;
+        if !listing.status.success() {
+            return Err(ExecutorError::Other(format!(
+                "git worktree list failed: {}",
+                String::from_utf8_lossy(&listing.stderr).trim()
+            )));
+        }
+        let mirror_canonical = std::fs::canonicalize(&mirror)
+            .map_err(|e| ExecutorError::Other(format!("canonicalize mirror failed: {e}")))?;
+        for line in String::from_utf8_lossy(&listing.stdout).lines() {
+            let Some(path) = line.strip_prefix("worktree ") else {
+                continue;
+            };
+            let linked = std::fs::canonicalize(path).map_err(|e| {
+                ExecutorError::Other(format!(
+                    "cannot verify linked worktree path {path}; refusing mirror deletion: {e}"
+                ))
+            })?;
+            if linked != mirror_canonical {
+                return Err(ExecutorError::Other(format!(
+                    "mirror still has linked worktree {}",
+                    linked.display()
+                )));
+            }
+        }
+
+        std::fs::remove_dir_all(&mirror)
+            .map_err(|e| ExecutorError::Other(format!("remove bare mirror failed: {e}")))?;
+        Ok(())
+    }
+
     /// 镜像仓不存在则 `clone --mirror`（临时目录 → 原子发布），存在则
     /// `fetch --all --prune`；随后从镜像建 worktree 并 detach 到 `base_commit`。
     async fn checkout(
@@ -319,6 +432,107 @@ impl CodexExecutor {
         .map_err(|e| ExecutorError::Other(format!("git worktree add failed: {e}")))?;
         Ok(())
     }
+}
+
+/// Resolve a Run worktree without following any symlink below the Run root.
+/// Missing roots/targets are idempotent no-ops; malformed paths and symlink
+/// escapes fail closed.
+fn resolve_run_worktree_target(
+    root: &Path,
+    run_id: Uuid,
+    workspace_path: &str,
+) -> Result<Option<PathBuf>, ExecutorError> {
+    let relative = validate_workspace_path(workspace_path)?;
+    if relative.is_empty() {
+        return Err(ExecutorError::Other("workspace_path must not be empty".into()));
+    }
+    let root_canonical = match std::fs::canonicalize(root) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(ExecutorError::Other(format!("canonicalize workspace root failed: {error}"))),
+    };
+    let run_root = root.join(run_id.to_string());
+    let run_meta = match std::fs::symlink_metadata(&run_root) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(ExecutorError::Other(format!("inspect Run root failed: {error}"))),
+    };
+    if run_meta.file_type().is_symlink() {
+        return Err(ExecutorError::Other("Run root is a symlink; refusing reclamation".into()));
+    }
+    let run_canonical = std::fs::canonicalize(&run_root)
+        .map_err(|e| ExecutorError::Other(format!("canonicalize Run root failed: {e}")))?;
+    if !run_canonical.starts_with(&root_canonical) {
+        return Err(ExecutorError::Other("Run root escapes configured workspace root".into()));
+    }
+
+    let mut current = run_root;
+    let components: Vec<_> = Path::new(&relative).components().collect();
+    for (index, component) in components.iter().enumerate() {
+        current.push(component.as_os_str());
+        let meta = match std::fs::symlink_metadata(&current) {
+            Ok(meta) => meta,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(ExecutorError::Other(format!("inspect worktree path failed: {error}"))),
+        };
+        if meta.file_type().is_symlink() {
+            return Err(ExecutorError::Other("worktree path contains a symlink; refusing reclamation".into()));
+        }
+        if index + 1 < components.len() && !meta.is_dir() {
+            return Err(ExecutorError::Other("worktree path parent is not a directory".into()));
+        }
+    }
+    let target = std::fs::canonicalize(&current)
+        .map_err(|e| ExecutorError::Other(format!("canonicalize worktree failed: {e}")))?;
+    if !target.starts_with(&run_canonical) || !target.starts_with(&root_canonical) {
+        return Err(ExecutorError::Other("worktree target escapes configured Run root".into()));
+    }
+    if !target.is_dir() {
+        return Err(ExecutorError::Other("worktree target is not a directory".into()));
+    }
+    Ok(Some(target))
+}
+
+/// Resolve a mirror only beneath the canonical git-mirror directory. The
+/// per-repository lock must already be held by the caller.
+fn resolve_repository_mirror_target(
+    root: &Path,
+    repository_id: Uuid,
+) -> Result<Option<PathBuf>, ExecutorError> {
+    let root_canonical = std::fs::canonicalize(root)
+        .map_err(|e| ExecutorError::Other(format!("canonicalize workspace root failed: {e}")))?;
+    let mirror_root = root.join("git-mirror");
+    let root_meta = match std::fs::symlink_metadata(&mirror_root) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(ExecutorError::Other(format!("inspect mirror root failed: {error}"))),
+    };
+    if root_meta.file_type().is_symlink() {
+        return Err(ExecutorError::Other("git-mirror root is a symlink; refusing reclamation".into()));
+    }
+    let mirror_root_canonical = std::fs::canonicalize(&mirror_root)
+        .map_err(|e| ExecutorError::Other(format!("canonicalize mirror root failed: {e}")))?;
+    if !mirror_root_canonical.starts_with(&root_canonical) {
+        return Err(ExecutorError::Other("git-mirror root escapes workspace root".into()));
+    }
+    let mirror = mirror_root.join(repository_id.to_string());
+    let meta = match std::fs::symlink_metadata(&mirror) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(ExecutorError::Other(format!("inspect mirror failed: {error}"))),
+    };
+    if meta.file_type().is_symlink() {
+        return Err(ExecutorError::Other("repository mirror is a symlink; refusing reclamation".into()));
+    }
+    let canonical = std::fs::canonicalize(&mirror)
+        .map_err(|e| ExecutorError::Other(format!("canonicalize repository mirror failed: {e}")))?;
+    if !canonical.starts_with(&mirror_root_canonical) || !canonical.starts_with(&root_canonical) {
+        return Err(ExecutorError::Other("repository mirror escapes configured mirror root".into()));
+    }
+    if !canonical.is_dir() || !canonical.join("HEAD").is_file() {
+        return Err(ExecutorError::Other("repository mirror is not a bare Git repository".into()));
+    }
+    Ok(Some(canonical))
 }
 
 /// 镜像锁 RAII：Drop 时删除锁文件。
