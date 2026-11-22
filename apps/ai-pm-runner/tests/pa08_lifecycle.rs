@@ -278,8 +278,6 @@ async fn continue_command_spawns_session_and_injects_reply() {
     let command_id = Uuid::new_v4();
     Mock::given(method("POST"))
         .and(path("/mcp"))
-     Mock::given(method("POST"))
-        .and(path("/mcp"))
         .and(body_partial_json(json!({
             "method": "tools/call",
             "params": { "name": "pm_poll_commands" }
