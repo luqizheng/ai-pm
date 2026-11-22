@@ -55,7 +55,7 @@
 
 **PA-08 处置（已实施，Hosted CI 验证中）**
 - 已按 PA-07 §§4/11/12 实施显式转换矩阵：`normal → suspended → resuming → normal`，允许 `resuming → suspended` 再次暂停，非归档状态可 abandon 到 `archived`。
-- `archived` 不提供普通恢复；移除旧 `restart` action（此前允许 archived→normal，与 PA-07 §12 冲突）。`complete_resume` 仅允许从 `resuming` 到 `normal`。
+- `archived` 不提供普通恢复；`restart` 仅保留为 `resuming → normal` 的兼容别名（与 migration 0044 一致）；从 `suspended` / `archived` 均拒绝。`complete_resume` 同样仅允许从 `resuming` 到 `normal`。
 - Product Owner 校验、Product 行锁、源状态校验、状态更新与审计同事务；非法跳转不写状态、不写审计。
 - API 集成测试覆盖完整恢复路径、非法源状态、归档终态和审计无副作用。详情见 `PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md`。
 - Product transition 与 Run claim/start 的并发覆盖仍待补齐，不能把当前状态转换单测视为并发验收。
