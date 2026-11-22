@@ -52,7 +52,6 @@ async fn main() {
         .await
         .expect("database pool");
 
-
     let metrics = Arc::new(metrics::WorkerMetrics::new());
     let metrics_addr =
         std::env::var("AI_PM_WORKER_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9465".to_string());
