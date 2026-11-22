@@ -72,6 +72,8 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // P4-ORG Product 域（product.rs）：product / product_member 变更留痕
     // （governance.tenant_audit_log，发布者四列）
     ("crates/pm-application/src/product.rs", 1),
+    // P1 Project Settings General：项目基本信息更新审计（四身份列显式写入）
+    ("crates/pm-application/src/project_info.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {
