@@ -262,6 +262,13 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
             .unwrap(),
         1
     );
+    assert!(
+        pm_application::workspace_reclamation::claim_batch(&pool)
+            .await
+            .unwrap()
+            .is_empty(),
+        "mirror candidates remain unclaimed until archive/unarchive concurrency is guarded"
+    );
 
     let row: (String, Option<Uuid>, String) = sqlx::query_as(
         "SELECT resource_kind, run_id, relative_path \
