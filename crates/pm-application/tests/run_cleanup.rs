@@ -93,6 +93,10 @@ async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool
         "stale worker cannot complete a row reclaimed by another worker"
     );
     assert!(
+        !run_cleanup::mark_failed(&pool, _run_id, first_token, "stale failure", 1).await.unwrap(),
+        "stale worker cannot overwrite the newer worker's retry state"
+    );
+    assert!(
         run_cleanup::mark_completed(&pool, _run_id, new_token).await.unwrap(),
         "current worker can complete its own claim"
     );
