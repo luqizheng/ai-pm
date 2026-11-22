@@ -415,3 +415,50 @@ async fn continue_command_refuses_frozen_start_without_spawning() {
     assert!(!root.join(".aipm").join("reply.json").exists());
     let _ = std::fs::remove_dir_all(root);
 }
+
+
+/// A failed heartbeat must not advance the renewal clock; the next tick must
+/// retry immediately rather than waiting another full heartbeat interval.
+#[tokio::test]
+async fn failed_heartbeat_keeps_renewal_due() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_report_progress" }
+        })))
+        .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+        lease_token: "test-lease-token".into(),
+        lease_generation: 13,
+        worker_id: "client:pa08-test-device".into(),
+        run_dir: root.clone(),
+        stage: "started".into(),
+        process: None,
+        last_heartbeat: Instant::now() - Duration::from_secs(120),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
+    };
+
+    let result = tick(&cfg, &client, &mut run).await;
+    assert!(result.is_err(), "HTTP 503 must propagate as a failed heartbeat");
+    assert!(
+        run.last_heartbeat.elapsed() >= Duration::from_secs(cfg.heartbeat_secs),
+        "failed renewal must remain due for the next tick"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
