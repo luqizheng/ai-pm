@@ -706,7 +706,7 @@ pub struct AnalyzeOutcome {
 /// LLM 不可用（`Ok(None)`）→ 结构化派生（[`derived_analysis`]）；
 /// LLM 调用/解析失败 → 行入 `failed`（attempts/last_error 可观测，可重试）。
 /// `root` = 项目知识库根：当前文档正文从 Git 工作树读（Markdown+Git 权威，
-/// 数据库只存修订账目——`ai.document_revision` 无正文列）。
+/// 数据库只存修订账目——数据库不承载 Markdown 正文）。
 pub async fn analyze_external_commit(
     pool: &PgPool,
     root: &crate::knowledge::KnowledgeRoot,
@@ -1066,13 +1066,9 @@ async fn load_candidates(
     }
 
     // 文档路径段 → doc_key 匹配（path_match）。
-    let docs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT doc_key, doc_type FROM ai.project_document WHERE project_id = $1 LIMIT 100",
-    )
-    .bind(project_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let docs = crate::knowledge::list_document_identities(pool, project_id, 100)
+        .await
+        .unwrap_or_default();
     let path_stems: HashSet<String> = changed_files
         .iter()
         .flat_map(|f| {
@@ -1131,39 +1127,21 @@ async fn load_known_docs(
     root: &crate::knowledge::KnowledgeRoot,
     project_id: Uuid,
 ) -> Vec<KnownDoc> {
-    let rows = sqlx::query(
-        "SELECT d.doc_key, d.doc_type, d.canonical_path, \
-                r.id AS revision_id, r.git_commit_sha \
-         FROM ai.project_document d \
-         LEFT JOIN LATERAL ( \
-             SELECT id, git_commit_sha FROM ai.document_revision \
-              WHERE document_id = d.id AND status = 'published' \
-              ORDER BY revision_no DESC LIMIT 1 \
-         ) r ON true \
-         WHERE d.project_id = $1 \
-         ORDER BY d.created_at DESC LIMIT 20",
+    let documents = crate::knowledge::list_published_document_context(
+        pool, root, project_id, 20, MAX_DOC_CONTEXT_CHARS,
     )
-    .bind(project_id)
-    .fetch_all(pool)
     .await
     .unwrap_or_else(|err| {
         tracing::warn!(%project_id, error = %err, "load_known_docs query failed");
         Vec::new()
     });
-    rows.iter()
-        .map(|row| {
-            let canonical_path: String = row.get("canonical_path");
-            let current_markdown = std::fs::read_to_string(root.path().join(&canonical_path))
-                .ok()
-                .map(|text| text.chars().take(MAX_DOC_CONTEXT_CHARS).collect::<String>());
-            KnownDoc {
-                doc_key: row.get("doc_key"),
-                doc_type: row.get("doc_type"),
-                current_markdown,
-                current_revision_id: row.try_get::<Option<Uuid>, _>("revision_id").ok().flatten(),
-            }
-        })
-        .collect()
+
+    documents.into_iter().map(|document| KnownDoc {
+        doc_key: document.doc_key,
+        doc_type: document.doc_type,
+        current_markdown: document.markdown,
+        current_revision_id: document.revision_id,
+    }).collect()
 }
 
 // ── 3. 澄清（Clarification） ──────────────────────────────────────────────
@@ -1524,18 +1502,10 @@ async fn current_published_revision(
     project_id: Uuid,
     doc_key: &str,
 ) -> Option<Uuid> {
-    sqlx::query_scalar(
-        "SELECT r.id FROM ai.document_revision r \
-         JOIN ai.project_document d ON d.id = r.document_id \
-         WHERE d.project_id = $1 AND d.doc_key = $2 AND r.status = 'published' \
-         ORDER BY r.revision_no DESC LIMIT 1",
-    )
-    .bind(project_id)
-    .bind(doc_key)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
+    crate::knowledge::current_published_revision_id(pool, project_id, doc_key)
+        .await
+        .ok()
+        .flatten()
 }
 
 fn proposal_record(doc_key: &str, outcome: &crate::knowledge_proposal::ProposalOutcome) -> serde_json::Value {
