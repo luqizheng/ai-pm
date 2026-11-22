@@ -231,15 +231,31 @@ pub async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Opti
 
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::RunnerError> {
     cfg.validate().map_err(mcp::RunnerError::Adapter)?;
-    // Q-RC-5：孤儿扫描只报告不强杀。
+    // A replacement Runner must not start a second Agent while a previous
+    // instance's child may still be executing. Terminate only when the
+    // persisted PID identity anchor still matches; any unconfirmed cleanup
+    // fails startup closed before recovery or new Task claims.
     for orphan in adapter::scan_orphans(&cfg.workspace_root) {
-        tracing::warn!(
-            run_dir = %orphan.run_dir.display(),
-            pid = orphan.record.pid,
-            session = %orphan.record.session_id,
-            alive = orphan.alive,
-            "orphan agent process from previous instance reported (no action taken)"
-        );
+        if !orphan.alive {
+            continue;
+        }
+        match adapter::terminate_orphan(&orphan) {
+            Ok(()) => tracing::warn!(
+                run_dir = %orphan.run_dir.display(),
+                pid = orphan.record.pid,
+                session = %orphan.record.session_id,
+                "terminated identity-matched Agent left by previous Runner instance"
+            ),
+            Err(error) => {
+                if let Err(evidence_error) = write_orphan_cleanup_escalation_evidence(&orphan, &error.to_string()) {
+                    tracing::error!(run_dir = %orphan.run_dir.display(), error = %evidence_error, "failed to persist orphan cleanup escalation evidence");
+                }
+                return Err(mcp::RunnerError::Adapter(format!(
+                    "startup blocked: orphan Agent cleanup could not be confirmed for pid {}: {}",
+                    orphan.record.pid, error
+                )));
+            }
+        }
     }
     // I1：启动自检——轻量调用验证凭据；401/403 即退出（不进入 401 循环）。
     if let Err(e) = client.list_ready_tasks(cfg.project_id).await {
@@ -396,6 +412,28 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
     }
 }
 
+/// Persist startup cleanup evidence for an orphan that could not be safely reaped.
+fn write_orphan_cleanup_escalation_evidence(
+    orphan: &adapter::OrphanReport,
+    error: &str,
+) -> Result<(), std::io::Error> {
+    let directory = orphan.run_dir.join(".aipm");
+    std::fs::create_dir_all(&directory)?;
+    let run_id = orphan.run_dir.file_name().and_then(|name| name.to_str());
+    let evidence = json!({
+        "schema_version": "aipm.runner-cleanup-escalation.v1",
+        "run_id": run_id,
+        "pid": orphan.record.pid,
+        "session_id": orphan.record.session_id,
+        "identity_hint": orphan.record.identity_hint,
+        "reason": "previous_runner_orphan_cleanup_unconfirmed",
+        "error": error,
+        "recorded_at": chrono::Utc::now().to_rfc3339(),
+    });
+    let bytes = serde_json::to_vec_pretty(&evidence)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    std::fs::write(directory.join("cleanup-needs-human.json"), bytes)
+}
 /// Persist local evidence when a child cannot be confirmed terminated. Credentials are excluded.
 fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(), std::io::Error> {
     let directory = run.run_dir.join(".aipm");
