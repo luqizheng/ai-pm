@@ -2,10 +2,10 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
+use sqlx::PgPool;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 struct Fx {
@@ -175,9 +175,10 @@ async fn ledger_rejects_duplicate_mirror_and_invalid_worktree_shape(pool: PgPool
     assert!(matches!(invalid_shape, sqlx::Error::Database(_)));
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
-async fn worktree_candidate_requires_terminal_retention_and_completed_process_cleanup(pool: PgPool) {
+async fn worktree_candidate_requires_terminal_retention_and_completed_process_cleanup(
+    pool: PgPool,
+) {
     let fx = seed(&pool, "PA08-WR-WORKTREE-STAGE").await;
     sqlx::query(
         "UPDATE delivery.task_run \
@@ -274,7 +275,9 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
     );
     let worktree_adapter = FakeReclaimer::default();
     let worktree_report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
-        &pool, &worktree_adapter, 30,
+        &pool,
+        &worktree_adapter,
+        30,
     )
     .await
     .unwrap();
@@ -307,7 +310,6 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
     assert!(row.1.is_none());
     assert_eq!(row.2, format!("git-mirror/{}", fx.repository_id));
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPool) {
@@ -370,19 +372,16 @@ async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPoo
             .await
             .unwrap()
     );
-    assert!(
-        pm_application::workspace_reclamation::mark_failed(
-            &pool,
-            current.id,
-            current_token,
-            "simulated filesystem failure",
-            60,
-        )
-        .await
-        .unwrap()
-    );
+    assert!(pm_application::workspace_reclamation::mark_failed(
+        &pool,
+        current.id,
+        current_token,
+        "simulated filesystem failure",
+        60,
+    )
+    .await
+    .unwrap());
 }
-
 
 #[derive(Default)]
 struct FakeReclaimer {
@@ -437,11 +436,10 @@ async fn stage_mirror_candidate(pool: &PgPool, fx: &Fx) {
         "the old Run worktree must be staged before the mirror"
     );
     let adapter = FakeReclaimer::default();
-    let worktree_report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
-        pool, &adapter, 30,
-    )
-    .await
-    .unwrap();
+    let worktree_report =
+        pm_application::workspace_reclamation::run_worktree_reclamation_round(pool, &adapter, 30)
+            .await
+            .unwrap();
     assert_eq!(worktree_report.completed, 1);
     assert_eq!(
         pm_application::workspace_reclamation::stage_candidates(pool, 30)
@@ -470,22 +468,20 @@ async fn worktree_reclamation_round_marks_success_only_after_adapter_returns(poo
     );
 
     let adapter = FakeReclaimer::default();
-    let report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
-        &pool, &adapter, 30,
-    )
-    .await
-    .unwrap();
+    let report =
+        pm_application::workspace_reclamation::run_worktree_reclamation_round(&pool, &adapter, 30)
+            .await
+            .unwrap();
     assert_eq!(report.claimed, 1);
     assert_eq!(report.completed, 1);
     assert_eq!(adapter.calls.load(Ordering::SeqCst), 1);
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.workspace_reclamation WHERE run_id = $1",
-    )
-    .bind(fx.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.workspace_reclamation WHERE run_id = $1")
+            .bind(fx.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "completed");
 }
 
@@ -512,20 +508,22 @@ async fn worktree_reclamation_round_skips_candidate_that_fails_second_check(pool
         .unwrap();
 
     let adapter = FakeReclaimer::default();
-    let report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
-        &pool, &adapter, 30,
-    )
-    .await
-    .unwrap();
+    let report =
+        pm_application::workspace_reclamation::run_worktree_reclamation_round(&pool, &adapter, 30)
+            .await
+            .unwrap();
     assert_eq!(report.claimed, 1);
     assert_eq!(report.skipped, 1);
     assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_round_rechecks_archive_state_under_repository_lock(pool: PgPool) {
-    let fx = seed(&pool, "mirror_reclamation_round_rechecks_archive_state_under_repository_lock").await;
+    let fx = seed(
+        &pool,
+        "mirror_reclamation_round_rechecks_archive_state_under_repository_lock",
+    )
+    .await;
     stage_mirror_candidate(&pool, &fx).await;
 
     let adapter = FakeReclaimer::default();
@@ -591,7 +589,11 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLoc
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter(pool: PgPool) {
-    let fx = seed(&pool, "mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter").await;
+    let fx = seed(
+        &pool,
+        "mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter",
+    )
+    .await;
     stage_mirror_candidate(&pool, &fx).await;
 
     let adapter = RepositoryLockProbe {
@@ -616,9 +618,11 @@ async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    assert!(adapter.updated.load(Ordering::SeqCst), "blocked reactivation should proceed after commit");
+    assert!(
+        adapter.updated.load(Ordering::SeqCst),
+        "blocked reactivation should proceed after commit"
+    );
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgPool) {
@@ -636,29 +640,25 @@ async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgP
             .unwrap(),
         1
     );
-    sqlx::query(
-        "UPDATE delivery.workspace_reclamation SET max_attempts = 1 WHERE run_id = $1",
-    )
-    .bind(fx.run_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE delivery.workspace_reclamation SET max_attempts = 1 WHERE run_id = $1")
+        .bind(fx.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let claimed = pm_application::workspace_reclamation::claim_batch(&pool)
         .await
         .unwrap();
     let token = claimed[0].claim_token.unwrap();
-    assert!(
-        pm_application::workspace_reclamation::mark_failed(
-            &pool,
-            claimed[0].id,
-            token,
-            "operator review required",
-            60,
-        )
-        .await
-        .unwrap()
-    );
+    assert!(pm_application::workspace_reclamation::mark_failed(
+        &pool,
+        claimed[0].id,
+        token,
+        "operator review required",
+        60,
+    )
+    .await
+    .unwrap());
 
     let needs_human = pm_application::workspace_reclamation::list_needs_human(&pool, 10)
         .await
@@ -684,10 +684,13 @@ async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgP
     assert!(status.2.is_none());
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_skips_repository_reactivated_after_candidate_staging(pool: PgPool) {
-    let fx = seed(&pool, "mirror_reclamation_skips_repository_reactivated_after_candidate_staging").await;
+    let fx = seed(
+        &pool,
+        "mirror_reclamation_skips_repository_reactivated_after_candidate_staging",
+    )
+    .await;
     stage_mirror_candidate(&pool, &fx).await;
     sqlx::query(
         "UPDATE integration.project_repository SET status = 'verified', updated_at = now() WHERE id = $1",
@@ -708,7 +711,6 @@ async fn mirror_reclamation_skips_repository_reactivated_after_candidate_staging
     assert_eq!(adapter.mirror_calls.load(Ordering::SeqCst), 0);
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(pool: PgPool) {
     let fx = seed(&pool, "PA08-WR-MIRROR-RESTAGE").await;
@@ -716,7 +718,9 @@ async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(po
 
     let first_adapter = FakeReclaimer::default();
     let first = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
-        &pool, &first_adapter, 30,
+        &pool,
+        &first_adapter,
+        30,
     )
     .await
     .unwrap();
@@ -748,14 +752,15 @@ async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(po
     );
     let second_adapter = FakeReclaimer::default();
     let second = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
-        &pool, &second_adapter, 30,
+        &pool,
+        &second_adapter,
+        30,
     )
     .await
     .unwrap();
     assert_eq!(second.completed, 1);
     assert_eq!(second_adapter.mirror_calls.load(Ordering::SeqCst), 1);
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn reclaimed_byte_totals_remain_monotonic_across_reclamation_cycles(pool: PgPool) {
@@ -820,6 +825,12 @@ async fn reclaimed_byte_totals_remain_monotonic_across_reclamation_cycles(pool: 
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(total, 12, "counter total must include both successful cycles");
-    assert_eq!(latest_operation_bytes, 5, "ledger row retains latest operation size");
+    assert_eq!(
+        total, 12,
+        "counter total must include both successful cycles"
+    );
+    assert_eq!(
+        latest_operation_bytes, 5,
+        "ledger row retains latest operation size"
+    );
 }

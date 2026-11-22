@@ -187,13 +187,20 @@ async fn metrics_endpoint_returns_authenticated_prometheus_exposition(pool: PgPo
     .await
     .unwrap();
     sqlx::query("UPDATE core.tenant SET provider = 'lmms', external_key = '1' WHERE id = $1")
-        .bind(SYSTEM_TENANT).execute(&pool).await.unwrap();
+        .bind(SYSTEM_TENANT)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO core.principal_identity (provider, tenant_id, subject, principal_id) \
          VALUES ('lmms', $1, $2, $3)",
     )
-    .bind(SYSTEM_TENANT).bind(boot.human_id.to_string()).bind(boot.human_id)
-    .execute(&pool).await.unwrap();
+    .bind(SYSTEM_TENANT)
+    .bind(boot.human_id.to_string())
+    .bind(boot.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let app = router_with_auth(pool, test_jwks());
     let token = sign(
         json!({ "sub": boot.human_id, "tid": 1, "username": "metrics-test", "roles": ["tenant_admin"], "permissions": [] }),
@@ -202,7 +209,10 @@ async fn metrics_endpoint_returns_authenticated_prometheus_exposition(pool: PgPo
     let response = app.oneshot(metrics_request(Some(&token))).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
-        response.headers().get("content-type").and_then(|v| v.to_str().ok()),
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
         Some("text/plain; version=0.0.4; charset=utf-8"),
     );
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -220,8 +230,14 @@ async fn metrics_endpoint_returns_authenticated_prometheus_exposition(pool: PgPo
         }),
         "Prometheus sample lines must contain a metric name and numeric value"
     );
-    assert!(exposition.contains('\n'), "exposition must use real newline characters");
-    assert!(!exposition.contains("\\n"), "exposition must not contain literal backslash-n sequences");
+    assert!(
+        exposition.contains('\n'),
+        "exposition must use real newline characters"
+    );
+    assert!(
+        !exposition.contains("\\n"),
+        "exposition must not contain literal backslash-n sequences"
+    );
     assert!(!exposition.contains(&boot.project_id.to_string()));
     assert!(!exposition.contains(&boot.human_id.to_string()));
     assert!(!exposition.contains("metrics-test"));

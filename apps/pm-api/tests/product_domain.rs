@@ -58,7 +58,10 @@ async fn send(app: &axum::Router, request: Request<Body>) -> (StatusCode, Value)
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn call(
@@ -197,7 +200,14 @@ fn members_uri(product_id: Uuid) -> String {
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_requires_team_owner(pool: PgPool) {
     let (app, _t, team_id, _owner) = team_world(pool.clone()).await;
-    let member = seed_member(&app, &pool, team_id, &token_for("usr-owner", 1), "usr-member").await;
+    let member = seed_member(
+        &app,
+        &pool,
+        team_id,
+        &token_for("usr-owner", 1),
+        "usr-member",
+    )
+    .await;
     let (st, body) = call(
         &app,
         "POST",
@@ -675,7 +685,6 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     assert_eq!(audits, 1, "only the accepted abandon transition is audited");
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
     let w = product_world(pool.clone()).await;
@@ -759,12 +768,11 @@ async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
         json!("product_lifecycle_transition_invalid")
     );
 
-    let final_status: String =
-        sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
-            .bind(w.product_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let final_status: String = sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
+        .bind(w.product_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(final_status, "archived");
 
     let audits: i64 = sqlx::query_scalar(

@@ -917,10 +917,14 @@ async fn claim_core_in_project(
     };
 
     crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, run_id,
+        &mut tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::Claimed,
-    ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let lease_generation: i32 = sqlx::query_scalar(
         "UPDATE delivery.task_run \
             SET status = 'claimed', stage = 'dispatch', claimed_at = now(), \

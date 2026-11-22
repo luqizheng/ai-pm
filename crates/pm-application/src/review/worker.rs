@@ -112,15 +112,18 @@ async fn recover_stuck_reviews(
     for (run_id, project_id, task_id, attempt_no) in stuck {
         let mut tx = pool.begin().await?;
         let guard = crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id,
+            &mut tx,
+            project_id,
+            run_id,
             crate::run_transition_guard::RunKind::Review,
             crate::run_transition_guard::RunStatus::TimedOut,
-        ).await;
+        )
+        .await;
         match guard {
             Ok(_) => {}
             Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
             | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-                crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+                crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
             )) => {
                 tx.commit().await?;
                 continue;
@@ -165,10 +168,14 @@ async fn claim_review_run(pool: &PgPool) -> Result<Option<Uuid>, ReviewError> {
         return Ok(None);
     };
     crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, run_id,
+        &mut tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Review,
         crate::run_transition_guard::RunStatus::Running,
-    ).await.map_err(|e| ReviewError::Transition(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| ReviewError::Transition(e.to_string()))?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'running', started_at = now(), stage = NULL \
@@ -222,15 +229,18 @@ async fn run_review(
     // Lock + validate before findings are persisted: timeout/failure may have won
     // the race while the deterministic review pipeline was running.
     let guard = crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, collected.project_id, review_run_id,
+        &mut tx,
+        collected.project_id,
+        review_run_id,
         crate::run_transition_guard::RunKind::Review,
         crate::run_transition_guard::RunStatus::Succeeded,
-    ).await;
+    )
+    .await;
     match guard {
         Ok(_) => {}
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
         )) => {
             tx.rollback().await.ok();
             return Ok(ReviewStep::Idle);
@@ -341,15 +351,18 @@ async fn fail_review(
 
     let mut tx = pool.begin().await?;
     let guard = crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, review_run_id,
+        &mut tx,
+        project_id,
+        review_run_id,
         crate::run_transition_guard::RunKind::Review,
         crate::run_transition_guard::RunStatus::Failed,
-    ).await;
+    )
+    .await;
     match guard {
         Ok(_) => {}
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
         )) => {
             tx.rollback().await.ok();
             return Ok(ReviewStep::Idle);

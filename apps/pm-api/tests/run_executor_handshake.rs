@@ -213,7 +213,9 @@ async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
     let _ = owner;
 
     // 清理账本里有该 Run（cancel_run 已登记）→ 后续轮次会兜底终止残留进程。
-    let entries = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100).await.unwrap();
+    let entries = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100)
+        .await
+        .unwrap();
     let _ = entries;
 }
 
@@ -333,7 +335,9 @@ async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(status, run_cleanup::STATUS_NEEDS_HUMAN, "达到阈值转人工");
-    let queue = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100).await.unwrap();
+    let queue = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100)
+        .await
+        .unwrap();
     assert!(
         queue.iter().any(|entry| entry.run_id == run_id),
         "I1-040：人工队列可查询"

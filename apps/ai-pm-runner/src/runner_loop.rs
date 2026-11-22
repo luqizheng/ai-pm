@@ -145,9 +145,11 @@ pub async fn recover_inflight_run(
     let runs = discovered
         .get("runs")
         .and_then(Value::as_array)
-        .ok_or_else(|| mcp::RunnerError::Malformed(
-            "pm_discover_runs response must contain a runs array".into(),
-        ))?;
+        .ok_or_else(|| {
+            mcp::RunnerError::Malformed(
+                "pm_discover_runs response must contain a runs array".into(),
+            )
+        })?;
     let Some(entry) = runs.first() else {
         return Ok(None);
     };
@@ -161,12 +163,16 @@ pub async fn recover_inflight_run(
         .get("run_id")
         .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid run_id".into()))?;
+        .ok_or_else(|| {
+            mcp::RunnerError::Malformed("recoverable Run is missing a valid run_id".into())
+        })?;
     let task_id = entry
         .get("task_id")
         .and_then(Value::as_str)
         .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or_else(|| mcp::RunnerError::Malformed("recoverable Run is missing a valid task_id".into()))?;
+        .ok_or_else(|| {
+            mcp::RunnerError::Malformed("recoverable Run is missing a valid task_id".into())
+        })?;
     let previous_generation = entry
         .get("lease_generation")
         .and_then(Value::as_i64)
@@ -197,7 +203,9 @@ pub async fn recover_inflight_run(
         }
     }
     let reacquired = reacquired.ok_or_else(|| {
-        last_error.unwrap_or_else(|| mcp::RunnerError::Adapter("recovery lease reacquisition failed".into()))
+        last_error.unwrap_or_else(|| {
+            mcp::RunnerError::Adapter("recovery lease reacquisition failed".into())
+        })
     })?;
     let lease_token = required_nonempty_string(&reacquired, "lease_token")?;
     let lease_generation = required_positive_generation(&reacquired)?;
@@ -209,8 +217,9 @@ pub async fn recover_inflight_run(
     }
     let worker_id = required_nonempty_string(&reacquired, "worker_id")?;
     let run_dir = cfg.workspace_root.join(run_id.to_string());
-    std::fs::create_dir_all(&run_dir)
-        .map_err(|error| mcp::RunnerError::Adapter(format!("create recovered Run directory failed: {error}")))?;
+    std::fs::create_dir_all(&run_dir).map_err(|error| {
+        mcp::RunnerError::Adapter(format!("create recovered Run directory failed: {error}"))
+    })?;
     tracing::info!(
         run = %run_id,
         generation = lease_generation,
@@ -261,7 +270,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                 "terminated identity-matched Agent left by previous Runner instance"
             ),
             Err(error) => {
-                if let Err(evidence_error) = write_orphan_cleanup_escalation_evidence(&orphan, &error.to_string()) {
+                if let Err(evidence_error) =
+                    write_orphan_cleanup_escalation_evidence(&orphan, &error.to_string())
+                {
                     tracing::error!(run_dir = %orphan.run_dir.display(), error = %evidence_error, "failed to persist orphan cleanup escalation evidence");
                 }
                 return Err(mcp::RunnerError::Adapter(format!(
@@ -283,9 +294,14 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
         // Keep retrying termination (or lease reacquisition for a recovered Run)
         // until the old execution is safely stopped or supervision is restored.
         if lease_lost_cleanup_pending {
-            let has_local_child = active.as_ref().and_then(|run| run.process.as_ref()).is_some();
+            let has_local_child = active
+                .as_ref()
+                .and_then(|run| run.process.as_ref())
+                .is_some();
             let cleanup_result = match active.as_mut() {
-                Some(run) if has_local_child && lease_reacquired_after_loss => terminate_reacquired_agent(run).await,
+                Some(run) if has_local_child && lease_reacquired_after_loss => {
+                    terminate_reacquired_agent(run).await
+                }
                 Some(run) if has_local_child => match run.process.as_mut() {
                     Some(process) => adapter::terminate_spawned(process)
                         .await
@@ -305,7 +321,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
             match cleanup_result {
                 Ok(()) => {
                     if let Some(run) = active.as_mut() {
-                        let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
+                        let _ = std::fs::remove_file(
+                            run.run_dir.join(".aipm").join("cleanup-needs-human.json"),
+                        );
                         if has_local_child {
                             run.process = None;
                         }
@@ -321,7 +339,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                 }
                 Err(error) => {
                     if let Some(run) = active.as_ref() {
-                        if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &error.to_string()) {
+                        if let Err(evidence_error) =
+                            write_cleanup_escalation_evidence(run, &error.to_string())
+                        {
                             tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
                         }
                         tracing::error!(run = %run.run_id, error = %error, "lease-loss cleanup remains unresolved; retaining supervision slot and blocking new claims");
@@ -408,7 +428,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                                 "lease reacquire failed; terminating and reaping local Agent before releasing supervision"
                             );
                             lease_lost_cleanup_pending = true;
-                            if let Err(evidence_error) = write_cleanup_escalation_evidence(run, &reacquire_error.to_string()) {
+                            if let Err(evidence_error) =
+                                write_cleanup_escalation_evidence(run, &reacquire_error.to_string())
+                            {
                                 tracing::error!(run = %run.run_id, error = %evidence_error, "failed to persist Runner cleanup escalation evidence");
                             }
                             tracing::error!(run = %run.run_id, "lease reacquisition failed; entering fail-closed cleanup state and blocking new claims");
@@ -494,16 +516,25 @@ async fn terminate_reacquired_agent(run: &mut ActiveRun) -> Result<(), mcp::Runn
 }
 
 fn required_nonempty_string(value: &Value, field: &str) -> Result<String, mcp::RunnerError> {
-    value.get(field).and_then(Value::as_str).filter(|value| !value.is_empty())
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| mcp::RunnerError::Malformed(format!("lease response missing valid {field}")))
 }
 
 fn required_positive_generation(value: &Value) -> Result<i32, mcp::RunnerError> {
-    value.get("lease_generation").and_then(Value::as_i64)
+    value
+        .get("lease_generation")
+        .and_then(Value::as_i64)
         .filter(|generation| *generation > 0 && *generation <= i32::MAX as i64)
         .map(|generation| generation as i32)
-        .ok_or_else(|| mcp::RunnerError::Malformed("lease response missing valid positive lease_generation".into()))
+        .ok_or_else(|| {
+            mcp::RunnerError::Malformed(
+                "lease response missing valid positive lease_generation".into(),
+            )
+        })
 }
 
 /// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
@@ -1103,6 +1134,8 @@ mod tests {
     use crate::adapter;
     use std::time::Instant;
     use uuid::Uuid;
+    use wiremock::matchers::{body_partial_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn heartbeat_guard_rejects_bad_ratios() {
@@ -1160,7 +1193,6 @@ mod tests {
             backoff_cap_ms: 60_000,
         }
     }
-
 
     #[test]
     fn failed_child_termination_writes_cleanup_escalation_evidence_without_lease_token() {
@@ -1220,10 +1252,81 @@ mod tests {
             lease_failures: 0,
             last_lease_attempt: None,
         };
-        terminate_reacquired_agent(&mut run).await.expect("old generation Agent must be terminated and reaped");
+        terminate_reacquired_agent(&mut run)
+            .await
+            .expect("old generation Agent must be terminated and reaped");
         assert!(run.process.is_none());
         assert!(run.awaiting_continue);
-        assert!(!adapter::is_pid_alive(pid), "old Agent process must not survive generation fencing");
+        assert!(
+            !adapter::is_pid_alive(pid),
+            "old Agent process must not survive generation fencing"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[tokio::test]
+    async fn failed_lease_reacquisition_keeps_child_until_explicit_termination() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/mcp"))
+            .and(body_partial_json(json!({
+                "method": "tools/call",
+                "params": { "name": "pm_reacquire_lease" }
+            })))
+            .respond_with(ResponseTemplate::new(503).set_body_string("lease service unavailable"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let root = std::env::temp_dir().join(format!("aipm-lease-failure-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        #[cfg(unix)]
+        let command = "sleep 30";
+        #[cfg(windows)]
+        let command = "ping -n 30 127.0.0.1";
+        let process = adapter::spawn_agent(command, &root, &[], None).unwrap();
+        let pid = process.pid;
+        let mut run = ActiveRun {
+            project_id: Uuid::nil(),
+            task_id: Uuid::new_v4(),
+            run_id: Uuid::new_v4(),
+            lease_token: "must-not-be-written".into(),
+            lease_generation: 8,
+            worker_id: "runner:test".into(),
+            run_dir: root.clone(),
+            stage: "started".into(),
+            process: Some(process),
+            last_heartbeat: Instant::now(),
+            last_detect: Instant::now(),
+            last_command_poll: Instant::now(),
+            pending_interaction: None,
+            awaiting_continue: false,
+            lease_failures: 0,
+            last_lease_attempt: None,
+        };
+        let mut cfg = test_config();
+        cfg.platform_mcp_url = format!("{}/mcp", server.uri());
+        let client = mcp::McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+
+        let error = reacquire_active_run(&cfg, &client, &mut run)
+            .await
+            .expect_err("HTTP 503 must fail lease reacquisition");
+        assert!(run.process.is_some(), "failed reacquisition must retain the Child handle");
+        assert!(adapter::is_pid_alive(pid), "Agent must remain supervised until explicit cleanup");
+
+        write_cleanup_escalation_evidence(&run, &error.to_string()).unwrap();
+        let evidence_path = root.join(".aipm").join("cleanup-needs-human.json");
+        let evidence = std::fs::read_to_string(&evidence_path).unwrap();
+        assert!(evidence.contains("lease service unavailable"));
+        assert!(!evidence.contains("must-not-be-written"));
+
+        adapter::terminate_spawned(run.process.as_mut().unwrap())
+            .await
+            .expect("Runner must terminate and reap the child before releasing its slot");
+        run.process = None;
+        assert!(!adapter::is_pid_alive(pid), "Agent must be reaped before the handle is released");
+
+        std::fs::remove_file(&evidence_path).unwrap();
+        assert!(!evidence_path.exists(), "successful cleanup clears the escalation marker");
         let _ = std::fs::remove_dir_all(root);
     }
 

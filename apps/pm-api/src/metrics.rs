@@ -6,7 +6,10 @@
 use sqlx::PgPool;
 
 fn escape_label(value: &str) -> String {
-    value.replace('\\', r"\\").replace('\n', r"\n").replace('"', r#"\""#)
+    value
+        .replace('\\', r"\\")
+        .replace('\n', r"\n")
+        .replace('"', r#"\""#)
 }
 
 pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
@@ -82,7 +85,9 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
     append_reclaimed_bytes_metric(&mut out, &reclaimed);
 
     let comm = pm_application::comm_overview::load_comm_overview(pool).await?;
-    out.push_str("# HELP ai_pm_pending_worker_commands Number of issued or delivered Worker commands.\n");
+    out.push_str(
+        "# HELP ai_pm_pending_worker_commands Number of issued or delivered Worker commands.\n",
+    );
     out.push_str("# TYPE ai_pm_pending_worker_commands gauge\n");
     out.push_str(&format!(
         "ai_pm_pending_worker_commands {}\n",
@@ -94,7 +99,9 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
         "ai_pm_oldest_pending_worker_command_age_seconds {}\n",
         comm.worker_command_pending_age_seconds
     ));
-    out.push_str("# HELP ai_pm_interaction_shielded_runs Number of Runs with scheduling shields.\n");
+    out.push_str(
+        "# HELP ai_pm_interaction_shielded_runs Number of Runs with scheduling shields.\n",
+    );
     out.push_str("# TYPE ai_pm_interaction_shielded_runs gauge\n");
     out.push_str(&format!(
         "ai_pm_interaction_shielded_runs {}\n",
@@ -141,17 +148,36 @@ mod tests {
         let mut out = String::new();
         append_reclaimed_bytes_metric(
             &mut out,
-            &[("run_worktree".to_string(), 12), ("repository_mirror".to_string(), 34)],
+            &[
+                ("run_worktree".to_string(), 12),
+                ("repository_mirror".to_string(), 34),
+            ],
         );
-        assert!(out.contains("ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
-        assert!(out.contains("ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"));
+        assert!(out
+            .contains("ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
+        assert!(out.contains(
+            "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"
+        ));
         assert!(!out.contains("status="));
-        assert!(out.ends_with('\n'), "Prometheus exposition must end with a real newline");
+        assert!(
+            out.ends_with('\n'),
+            "Prometheus exposition must end with a real newline"
+        );
         assert!(out.lines().any(|line| line == "# HELP ai_pm_workspace_reclaimed_bytes_total Cumulative logical file bytes removed by workspace reclamation."));
-        assert!(out.lines().any(|line| line == "# TYPE ai_pm_workspace_reclaimed_bytes_total counter"));
-        assert!(out.lines().any(|line| line == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
-        assert!(out.lines().any(|line| line == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"));
-        assert!(!out.contains("\\\\n"), "must not emit literal backslash-n sequences");
-        assert!(!out.contains("\\\\\""), "labels must contain literal quotes, not escaped backslash-quote");
+        assert!(out
+            .lines()
+            .any(|line| line == "# TYPE ai_pm_workspace_reclaimed_bytes_total counter"));
+        assert!(out.lines().any(|line| line
+            == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"run_worktree\"} 12"));
+        assert!(out.lines().any(|line| line
+            == "ai_pm_workspace_reclaimed_bytes_total{resource_kind=\"repository_mirror\"} 34"));
+        assert!(
+            !out.contains("\\\\n"),
+            "must not emit literal backslash-n sequences"
+        );
+        assert!(
+            !out.contains("\\\\\""),
+            "labels must contain literal quotes, not escaped backslash-quote"
+        );
     }
 }

@@ -163,14 +163,20 @@ impl CodexExecutor {
                 return Ok(guard);
             }
             if std::time::Instant::now() >= deadline {
-                return Err(ExecutorError::Other(format!("mirror lock timeout: {}", path.display())));
+                return Err(ExecutorError::Other(format!(
+                    "mirror lock timeout: {}",
+                    path.display()
+                )));
             }
             std::thread::sleep(Duration::from_millis(50));
         }
     }
 
     #[cfg(test)]
-    fn try_lock_mirror(&self, repository_id: Uuid) -> Result<Option<MirrorLockGuard>, ExecutorError> {
+    fn try_lock_mirror(
+        &self,
+        repository_id: Uuid,
+    ) -> Result<Option<MirrorLockGuard>, ExecutorError> {
         let path = self.mirror_lock_path(repository_id)?;
         self.try_lock_mirror_path(&path)
     }
@@ -179,17 +185,22 @@ impl CodexExecutor {
         let mirror_dir = self.root.join("git-mirror");
         if let Ok(meta) = std::fs::symlink_metadata(&mirror_dir) {
             if meta.file_type().is_symlink() {
-                return Err(ExecutorError::Other("git-mirror root is a symlink; refusing mirror lock".into()));
+                return Err(ExecutorError::Other(
+                    "git-mirror root is a symlink; refusing mirror lock".into(),
+                ));
             }
         }
         std::fs::create_dir_all(&mirror_dir)
             .map_err(|e| ExecutorError::Other(format!("create mirror dir failed: {e}")))?;
-        let root_canonical = std::fs::canonicalize(&self.root)
-            .map_err(|e| ExecutorError::Other(format!("canonicalize workspace root failed: {e}")))?;
+        let root_canonical = std::fs::canonicalize(&self.root).map_err(|e| {
+            ExecutorError::Other(format!("canonicalize workspace root failed: {e}"))
+        })?;
         let mirror_dir_canonical = std::fs::canonicalize(&mirror_dir)
             .map_err(|e| ExecutorError::Other(format!("canonicalize mirror root failed: {e}")))?;
         if !mirror_dir_canonical.starts_with(&root_canonical) {
-            return Err(ExecutorError::Other("git-mirror root escapes configured workspace root".into()));
+            return Err(ExecutorError::Other(
+                "git-mirror root escapes configured workspace root".into(),
+            ));
         }
         Ok(mirror_dir.join(format!("{repository_id}.lock")))
     }
@@ -197,7 +208,9 @@ impl CodexExecutor {
     fn try_lock_mirror_path(&self, path: &Path) -> Result<Option<MirrorLockGuard>, ExecutorError> {
         if let Ok(meta) = std::fs::symlink_metadata(path) {
             if meta.file_type().is_symlink() {
-                return Err(ExecutorError::Other("mirror lock path is a symlink; refusing lock".into()));
+                return Err(ExecutorError::Other(
+                    "mirror lock path is a symlink; refusing lock".into(),
+                ));
             }
         }
         let file = std::fs::OpenOptions::new()
@@ -209,7 +222,9 @@ impl CodexExecutor {
         match file.try_lock() {
             Ok(()) => Ok(Some(MirrorLockGuard { _file: file })),
             Err(std::fs::TryLockError::WouldBlock) => Ok(None),
-            Err(std::fs::TryLockError::Error(error)) => Err(ExecutorError::Other(format!("acquire OS mirror lock failed: {error}"))),
+            Err(std::fs::TryLockError::Error(error)) => Err(ExecutorError::Other(format!(
+                "acquire OS mirror lock failed: {error}"
+            ))),
         }
     }
     /// Reclaim one per-Run Git worktree. Caller must have revalidated the
@@ -283,7 +298,6 @@ impl CodexExecutor {
         }
         Ok(reclaimed_bytes)
     }
-
 
     /// Reclaim a shared bare mirror only when Git confirms no linked worktrees
     /// remain. Repository/Commit database rows and remote history are untouched.
@@ -482,11 +496,12 @@ fn directory_size_bytes(root: &Path) -> Result<u64, ExecutorError> {
         if metadata.file_type().is_symlink() {
             total = total.saturating_add(metadata.len());
         } else if metadata.is_dir() {
-            for entry in std::fs::read_dir(&path)
-                .map_err(|e| ExecutorError::Other(format!("read reclamation directory failed: {e}")))?
-            {
-                let entry = entry
-                    .map_err(|e| ExecutorError::Other(format!("read reclamation entry failed: {e}")))?;
+            for entry in std::fs::read_dir(&path).map_err(|e| {
+                ExecutorError::Other(format!("read reclamation directory failed: {e}"))
+            })? {
+                let entry = entry.map_err(|e| {
+                    ExecutorError::Other(format!("read reclamation entry failed: {e}"))
+                })?;
                 pending.push(entry.path());
             }
         } else if metadata.is_file() {
@@ -522,26 +537,40 @@ fn resolve_run_worktree_target(
 ) -> Result<Option<PathBuf>, ExecutorError> {
     let relative = validate_workspace_path(workspace_path)?;
     if relative.is_empty() {
-        return Err(ExecutorError::Other("workspace_path must not be empty".into()));
+        return Err(ExecutorError::Other(
+            "workspace_path must not be empty".into(),
+        ));
     }
     let root_canonical = match std::fs::canonicalize(root) {
         Ok(path) => path,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(ExecutorError::Other(format!("canonicalize workspace root failed: {error}"))),
+        Err(error) => {
+            return Err(ExecutorError::Other(format!(
+                "canonicalize workspace root failed: {error}"
+            )))
+        }
     };
     let run_root = root.join(run_id.to_string());
     let run_meta = match std::fs::symlink_metadata(&run_root) {
         Ok(meta) => meta,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(ExecutorError::Other(format!("inspect Run root failed: {error}"))),
+        Err(error) => {
+            return Err(ExecutorError::Other(format!(
+                "inspect Run root failed: {error}"
+            )))
+        }
     };
     if run_meta.file_type().is_symlink() {
-        return Err(ExecutorError::Other("Run root is a symlink; refusing reclamation".into()));
+        return Err(ExecutorError::Other(
+            "Run root is a symlink; refusing reclamation".into(),
+        ));
     }
     let run_canonical = std::fs::canonicalize(&run_root)
         .map_err(|e| ExecutorError::Other(format!("canonicalize Run root failed: {e}")))?;
     if !run_canonical.starts_with(&root_canonical) {
-        return Err(ExecutorError::Other("Run root escapes configured workspace root".into()));
+        return Err(ExecutorError::Other(
+            "Run root escapes configured workspace root".into(),
+        ));
     }
 
     let mut current = run_root;
@@ -551,22 +580,34 @@ fn resolve_run_worktree_target(
         let meta = match std::fs::symlink_metadata(&current) {
             Ok(meta) => meta,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(ExecutorError::Other(format!("inspect worktree path failed: {error}"))),
+            Err(error) => {
+                return Err(ExecutorError::Other(format!(
+                    "inspect worktree path failed: {error}"
+                )))
+            }
         };
         if meta.file_type().is_symlink() {
-            return Err(ExecutorError::Other("worktree path contains a symlink; refusing reclamation".into()));
+            return Err(ExecutorError::Other(
+                "worktree path contains a symlink; refusing reclamation".into(),
+            ));
         }
         if index + 1 < components.len() && !meta.is_dir() {
-            return Err(ExecutorError::Other("worktree path parent is not a directory".into()));
+            return Err(ExecutorError::Other(
+                "worktree path parent is not a directory".into(),
+            ));
         }
     }
     let target = std::fs::canonicalize(&current)
         .map_err(|e| ExecutorError::Other(format!("canonicalize worktree failed: {e}")))?;
     if !target.starts_with(&run_canonical) || !target.starts_with(&root_canonical) {
-        return Err(ExecutorError::Other("worktree target escapes configured Run root".into()));
+        return Err(ExecutorError::Other(
+            "worktree target escapes configured Run root".into(),
+        ));
     }
     if !target.is_dir() {
-        return Err(ExecutorError::Other("worktree target is not a directory".into()));
+        return Err(ExecutorError::Other(
+            "worktree target is not a directory".into(),
+        ));
     }
     Ok(Some(target))
 }
@@ -583,32 +624,50 @@ fn resolve_repository_mirror_target(
     let root_meta = match std::fs::symlink_metadata(&mirror_root) {
         Ok(meta) => meta,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(ExecutorError::Other(format!("inspect mirror root failed: {error}"))),
+        Err(error) => {
+            return Err(ExecutorError::Other(format!(
+                "inspect mirror root failed: {error}"
+            )))
+        }
     };
     if root_meta.file_type().is_symlink() {
-        return Err(ExecutorError::Other("git-mirror root is a symlink; refusing reclamation".into()));
+        return Err(ExecutorError::Other(
+            "git-mirror root is a symlink; refusing reclamation".into(),
+        ));
     }
     let mirror_root_canonical = std::fs::canonicalize(&mirror_root)
         .map_err(|e| ExecutorError::Other(format!("canonicalize mirror root failed: {e}")))?;
     if !mirror_root_canonical.starts_with(&root_canonical) {
-        return Err(ExecutorError::Other("git-mirror root escapes workspace root".into()));
+        return Err(ExecutorError::Other(
+            "git-mirror root escapes workspace root".into(),
+        ));
     }
     let mirror = mirror_root.join(repository_id.to_string());
     let meta = match std::fs::symlink_metadata(&mirror) {
         Ok(meta) => meta,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(ExecutorError::Other(format!("inspect mirror failed: {error}"))),
+        Err(error) => {
+            return Err(ExecutorError::Other(format!(
+                "inspect mirror failed: {error}"
+            )))
+        }
     };
     if meta.file_type().is_symlink() {
-        return Err(ExecutorError::Other("repository mirror is a symlink; refusing reclamation".into()));
+        return Err(ExecutorError::Other(
+            "repository mirror is a symlink; refusing reclamation".into(),
+        ));
     }
     let canonical = std::fs::canonicalize(&mirror)
         .map_err(|e| ExecutorError::Other(format!("canonicalize repository mirror failed: {e}")))?;
     if !canonical.starts_with(&mirror_root_canonical) || !canonical.starts_with(&root_canonical) {
-        return Err(ExecutorError::Other("repository mirror escapes configured mirror root".into()));
+        return Err(ExecutorError::Other(
+            "repository mirror escapes configured mirror root".into(),
+        ));
     }
     if !canonical.is_dir() || !canonical.join("HEAD").is_file() {
-        return Err(ExecutorError::Other("repository mirror is not a bare Git repository".into()));
+        return Err(ExecutorError::Other(
+            "repository mirror is not a bare Git repository".into(),
+        ));
     }
     Ok(Some(canonical))
 }
@@ -748,10 +807,7 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for CodexExecutor
         CodexExecutor::reclaim_run_worktree(self, run_id, repository_id, workspace_path).await
     }
 
-    async fn reclaim_repository_mirror(
-        &self,
-        repository_id: Uuid,
-    ) -> Result<u64, ExecutorError> {
+    async fn reclaim_repository_mirror(&self, repository_id: Uuid) -> Result<u64, ExecutorError> {
         CodexExecutor::reclaim_repository_mirror(self, repository_id).await
     }
 }
@@ -1448,15 +1504,28 @@ mod imp008_tests {
             .unwrap();
         let executor = CodexExecutor::new(pool, "codex".into(), vec![], root.clone(), 1);
         let repository_id = Uuid::new_v4();
-        let first = executor.lock_mirror(repository_id).expect("first holder acquires lock");
-        let lock_path = root.join("git-mirror").join(format!("{repository_id}.lock"));
-        let file = std::fs::OpenOptions::new().write(true).open(&lock_path).unwrap();
-        file.set_times(std::fs::FileTimes::new().set_modified(std::time::UNIX_EPOCH)).unwrap();
-        assert!(executor.try_lock_mirror(repository_id).unwrap().is_none(),
-            "stale mtime must never allow a contender to steal a live kernel lock");
+        let first = executor
+            .lock_mirror(repository_id)
+            .expect("first holder acquires lock");
+        let lock_path = root
+            .join("git-mirror")
+            .join(format!("{repository_id}.lock"));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(std::time::UNIX_EPOCH))
+            .unwrap();
+        assert!(
+            executor.try_lock_mirror(repository_id).unwrap().is_none(),
+            "stale mtime must never allow a contender to steal a live kernel lock"
+        );
         drop(first);
         let second = executor.try_lock_mirror(repository_id).unwrap();
-        assert!(second.is_some(), "lock must become available after the holder drops");
+        assert!(
+            second.is_some(),
+            "lock must become available after the holder drops"
+        );
         drop(second);
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -1481,9 +1550,11 @@ mod imp008_tests {
     fn missing_worktree_is_an_idempotent_noop() {
         let root = temp_root("worktree-missing");
         std::fs::create_dir_all(&root).unwrap();
-        assert!(resolve_run_worktree_target(&root, Uuid::new_v4(), "repos/missing")
-            .unwrap()
-            .is_none());
+        assert!(
+            resolve_run_worktree_target(&root, Uuid::new_v4(), "repos/missing")
+                .unwrap()
+                .is_none()
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1576,7 +1647,13 @@ mod imp008_tests {
         let mirror_s = mirror.to_string_lossy().to_string();
         let worktree_s = worktree.to_string_lossy().to_string();
         git_ok(&["init", &source_s]);
-        git_ok(&["-C", &source_s, "config", "user.email", "pa08@example.invalid"]);
+        git_ok(&[
+            "-C",
+            &source_s,
+            "config",
+            "user.email",
+            "pa08@example.invalid",
+        ]);
         git_ok(&["-C", &source_s, "config", "user.name", "PA08 Test"]);
         std::fs::write(source.join("README.md"), "workspace reclamation fixture").unwrap();
         git_ok(&["-C", &source_s, "add", "README.md"]);
@@ -1598,7 +1675,10 @@ mod imp008_tests {
         let executor = CodexExecutor::new(pool, "codex".into(), vec![], root.clone(), 1);
 
         assert!(
-            executor.reclaim_repository_mirror(repository_id).await.is_err(),
+            executor
+                .reclaim_repository_mirror(repository_id)
+                .await
+                .is_err(),
             "mirror with a linked worktree must be retained"
         );
         assert!(worktree.exists());
@@ -1611,7 +1691,10 @@ mod imp008_tests {
         assert!(run_root.join("logs/stdout.log").exists());
         assert!(run_root.exists(), "Run root and logs must be preserved");
 
-        executor.reclaim_repository_mirror(repository_id).await.unwrap();
+        executor
+            .reclaim_repository_mirror(repository_id)
+            .await
+            .unwrap();
         assert!(!mirror.exists());
         assert!(run_root.join("logs/stdout.log").exists());
         std::fs::remove_dir_all(&root).unwrap();
@@ -1625,5 +1708,4 @@ mod imp008_tests {
         assert_eq!(directory_size_bytes(&root).unwrap(), 8);
         std::fs::remove_dir_all(root).unwrap();
     }
-
 }

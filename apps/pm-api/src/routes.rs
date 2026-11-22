@@ -867,7 +867,6 @@ fn internal_error() -> Response {
         .into_response()
 }
 
-
 /// Prometheus text exposition. This endpoint is covered by the normal bearer
 /// authentication layer; it never exposes entity identifiers or diagnostic text.
 async fn metrics_handler(State(state): State<AppState>) -> Response {

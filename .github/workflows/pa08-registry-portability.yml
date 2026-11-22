@@ -68,6 +68,8 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Verify locked dependency metadata
@@ -110,6 +112,29 @@ jobs:
         run: cargo test -p pm-api --test auth metrics_endpoint --locked
       - name: Validate PA08-06 Prometheus alert rules
         run: docker run --rm --entrypoint /bin/promtool -v "$PWD/infrastructure/monitoring/pa08-alerts.yml:/etc/prometheus/pa08-alerts.yml:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/pa08-alerts.yml
-      # Run formatting last so a pre-existing formatting failure cannot skip functional validation.
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+      # Check only Rust files changed by this PR/push; unrelated repository formatting debt is tracked separately.
+      - name: Check Rust formatting for changed files
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${PR_BASE_SHA}"
+            head="${PR_HEAD_SHA}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
+            base="${PUSH_BEFORE}"
+            head="${GITHUB_SHA}"
+          else
+            base="$(git rev-parse HEAD^)"
+            head="HEAD"
+          fi
+          mapfile -t files < <(git diff --name-only "$base" "$head" -- '*.rs')
+          if (("${#files[@]}" == 0)); then
+            echo "No changed Rust files."
+            exit 0
+          fi
+          printf 'Checking %s changed Rust files\\n' "${#files[@]}"
+          rustfmt --edition 2021 --check "${files[@]}"

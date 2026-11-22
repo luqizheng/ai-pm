@@ -62,9 +62,15 @@ async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool
     );
     let mut claims = first.unwrap();
     claims.extend(second.unwrap());
-    assert_eq!(claims.len(), 1, "concurrent workers must claim a row exactly once");
+    assert_eq!(
+        claims.len(),
+        1,
+        "concurrent workers must claim a row exactly once"
+    );
     let first_claim = claims.pop().unwrap();
-    let first_token = first_claim.claim_token.expect("claimed row has a fencing token");
+    let first_token = first_claim
+        .claim_token
+        .expect("claimed row has a fencing token");
 
     // A cleaning row must be protected by an unexpired claim lease.
     let second_claim = run_cleanup::claim_batch(&pool).await.unwrap();
@@ -85,32 +91,41 @@ async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool
 
     let reclaimed = run_cleanup::claim_batch(&pool).await.unwrap();
     assert_eq!(reclaimed.len(), 1, "expired cleanup lease is recoverable");
-    let new_token = reclaimed[0].claim_token.expect("reclaimed row has a new token");
-    assert_ne!(first_token, new_token, "reclaim must rotate the fencing token");
+    let new_token = reclaimed[0]
+        .claim_token
+        .expect("reclaimed row has a new token");
+    assert_ne!(
+        first_token, new_token,
+        "reclaim must rotate the fencing token"
+    );
 
     assert!(
-        !run_cleanup::mark_completed(&pool, _run_id, first_token).await.unwrap(),
+        !run_cleanup::mark_completed(&pool, _run_id, first_token)
+            .await
+            .unwrap(),
         "stale worker cannot complete a row reclaimed by another worker"
     );
     assert!(
-        !run_cleanup::mark_failed(&pool, _run_id, first_token, "stale failure", 1).await.unwrap(),
+        !run_cleanup::mark_failed(&pool, _run_id, first_token, "stale failure", 1)
+            .await
+            .unwrap(),
         "stale worker cannot overwrite the newer worker's retry state"
     );
     assert!(
-        run_cleanup::mark_completed(&pool, _run_id, new_token).await.unwrap(),
+        run_cleanup::mark_completed(&pool, _run_id, new_token)
+            .await
+            .unwrap(),
         "current worker can complete its own claim"
     );
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1",
-    )
-    .bind(_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1")
+            .bind(_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "completed");
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn current_claim_failure_releases_lease_and_schedules_retry(pool: PgPool) {
@@ -153,17 +168,14 @@ async fn current_claim_failure_releases_lease_and_schedules_retry(pool: PgPool) 
     assert_ne!(retry[0].claim_token, Some(token));
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn cleanup_failure_exhaustion_escalates_to_needs_human(pool: PgPool) {
     let run_id = enqueue_cleanup(&pool, "PA08-CLEANUP-ESCALATE").await;
-    sqlx::query(
-        "UPDATE delivery.task_run_cleanup SET max_attempts = 1 WHERE run_id = $1",
-    )
-    .bind(run_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE delivery.task_run_cleanup SET max_attempts = 1 WHERE run_id = $1")
+        .bind(run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let claimed = run_cleanup::claim_batch(&pool).await.unwrap();
     assert_eq!(claimed.len(), 1);
@@ -189,13 +201,12 @@ async fn cleanup_failure_exhaustion_escalates_to_needs_human(pool: PgPool) {
         "needs_human rows must not be automatically reclaimed"
     );
 
-    let (tenant_id, project_id): (Uuid, Uuid) = sqlx::query_as(
-        "SELECT tenant_id, project_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (tenant_id, project_id): (Uuid, Uuid) =
+        sqlx::query_as("SELECT tenant_id, project_id FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let escalations = run_cleanup::list_needs_human(&pool, tenant_id, project_id, 50)
         .await
         .unwrap();
@@ -203,5 +214,8 @@ async fn cleanup_failure_exhaustion_escalates_to_needs_human(pool: PgPool) {
     assert_eq!(escalations[0].run_id, run_id);
     assert_eq!(escalations[0].project_id, project_id);
     assert_eq!(escalations[0].run_status, "cancelled");
-    assert_eq!(escalations[0].last_error.as_deref(), Some("permanent terminate failure"));
+    assert_eq!(
+        escalations[0].last_error.as_deref(),
+        Some("permanent terminate failure")
+    );
 }

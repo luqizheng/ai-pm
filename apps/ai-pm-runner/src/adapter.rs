@@ -303,19 +303,27 @@ pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
         return Ok(());
     }
     let expected = report.record.identity_hint.as_deref().ok_or_else(|| {
-        AdapterError::Invalid("orphan process has no identity anchor; refusing unsafe termination".into())
+        AdapterError::Invalid(
+            "orphan process has no identity anchor; refusing unsafe termination".into(),
+        )
     })?;
     #[cfg(target_os = "linux")]
     if !expected.starts_with("proc-start-") {
-        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Unix host".into()));
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Unix host".into(),
+        ));
     }
     #[cfg(all(unix, not(target_os = "linux")))]
     if !expected.starts_with("ps-start-") {
-        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Unix host".into()));
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Unix host".into(),
+        ));
     }
     #[cfg(windows)]
     if !expected.starts_with("win-ft-") {
-        return Err(AdapterError::Invalid("orphan process identity anchor is not verifiable on this Windows host".into()));
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Windows host".into(),
+        ));
     }
     let Some(actual) = process_identity_hint(report.record.pid) else {
         return Ok(());
@@ -341,7 +349,9 @@ pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
         let output = std::process::Command::new("taskkill")
             .args(["/PID", &report.record.pid.to_string(), "/T", "/F"])
             .output()?;
-        if !output.status.success() && process_identity_hint(report.record.pid).as_deref() == Some(expected) {
+        if !output.status.success()
+            && process_identity_hint(report.record.pid).as_deref() == Some(expected)
+        {
             return Err(AdapterError::Invalid(format!(
                 "taskkill failed for orphan pid {}: {}",
                 report.record.pid,
@@ -597,9 +607,15 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
             .args(["-o", "lstart=", "-p", &pid.to_string()])
             .output()
             .ok()?;
-        if !output.status.success() { return None; }
+        if !output.status.success() {
+            return None;
+        }
         let started = String::from_utf8(output.stdout).ok()?.trim().to_string();
-        if started.is_empty() { None } else { Some(format!("ps-start-{started}")) }
+        if started.is_empty() {
+            None
+        } else {
+            Some(format!("ps-start-{started}"))
+        }
     }
 }
 
@@ -620,8 +636,13 @@ fn process_is_running(pid: u32) -> bool {
     {
         let Ok(output) = std::process::Command::new("ps")
             .args(["-o", "stat=", "-p", &pid.to_string()])
-            .output() else { return false; };
-        if !output.status.success() { return false; }
+            .output()
+        else {
+            return false;
+        };
+        if !output.status.success() {
+            return false;
+        }
         let state = String::from_utf8_lossy(&output.stdout);
         !state.trim().is_empty() && !state.trim().starts_with('Z')
     }

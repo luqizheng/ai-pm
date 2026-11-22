@@ -26,14 +26,19 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{paging, project_filter, require_project_visible, repos::run_repo, ApiError, ApiResult};
+use crate::support::{
+    paging, project_filter, repos::run_repo, require_project_visible, ApiError, ApiResult,
+};
 use pm_application::repo::runs::{Page, RunRepo, TaskRunDetail};
 use serde_json::json;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/task-runs", get(task_runs))
-        .route("/v1/pm/task-run-cleanups/needs-human", get(cleanup_needs_human))
+        .route(
+            "/v1/pm/task-run-cleanups/needs-human",
+            get(cleanup_needs_human),
+        )
         // S05 监控事件面（0013）：项目级汇总（静态段先于 {run_id} 匹配）。
         .route("/v1/pm/task-runs/summary", get(task_runs_summary))
         .route("/v1/pm/task-runs/{run_id}", get(task_run_detail))
@@ -45,8 +50,6 @@ pub(crate) fn router() -> Router<AppState> {
             axum::routing::post(grant_authorization_handler).delete(revoke_authorization_handler),
         )
 }
-
-
 
 /// Project-scoped process-cleanup escalation list. A visible project is
 /// required; tenant/project filtering is repeated in the application query.
@@ -63,7 +66,10 @@ async fn cleanup_needs_human(
         caller.principal_id,
     )
     .await?;
-    let limit = params.get("limit").and_then(|v| v.parse::<i64>().ok()).unwrap_or(50);
+    let limit = params
+        .get("limit")
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(50);
     let items = pm_application::run_cleanup::list_needs_human(
         &state.pool,
         caller.tenant_id,
@@ -236,7 +242,10 @@ async fn task_runs(
             project_id,
             task_id,
             run_kind.as_deref(),
-            Page { size: page.size, offset: page.offset },
+            Page {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -285,7 +294,10 @@ async fn task_run_events(
         .list_run_events(
             run_id,
             event_type.as_deref(),
-            Page { size: page.size, offset: page.offset },
+            Page {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))

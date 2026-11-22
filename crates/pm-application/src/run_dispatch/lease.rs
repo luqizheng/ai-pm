@@ -138,10 +138,14 @@ pub(crate) async fn requeue_for_redispatch(
     run_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     let from_status = crate::run_transition_guard::lock_and_validate_transition(
-        tx, project_id, run_id,
+        tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::Queued,
-    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL, \
@@ -167,10 +171,14 @@ pub(crate) async fn recover_lost_run(
     cfg: &RunDispatchConfig,
 ) -> Result<CreatedRun, sqlx::Error> {
     crate::run_transition_guard::lock_and_validate_transition(
-        tx, project_id, run_id,
+        tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::TimedOut,
-    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     isolate_started_run(tx, project_id, run_id, cfg).await?;
     let created = insert_task_run(tx, project_id, task_id, None).await?;
     sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
@@ -201,10 +209,14 @@ pub(crate) async fn cancel_run(
     reason: &str,
 ) -> Result<(), sqlx::Error> {
     let from_status = crate::run_transition_guard::lock_and_validate_transition(
-        tx, project_id, run_id,
+        tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::Cancelled,
-    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'cancelled', outcome = 'cancelled', finished_at = now(), \

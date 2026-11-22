@@ -846,10 +846,14 @@ async fn report_progress_impl(
     {
         first_started = true;
         crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id,
+            &mut tx,
+            project_id,
+            run_id,
             crate::run_transition_guard::RunKind::Delivery,
             crate::run_transition_guard::RunStatus::Running,
-        ).await.map_err(|e| LeaseError::Conflict(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| LeaseError::Conflict(e.to_string()))?;
         // 首报 started：任务状态经唯一受守卫通道推进。
         let ctx = system_context(&mut tx, project_id)
             .await
@@ -958,7 +962,6 @@ async fn report_progress_impl(
         task_status,
     })
 }
-
 
 /// 知识锚点装配元数据（章节合并时的锚点侧信息）。
 #[derive(Debug, Clone)]

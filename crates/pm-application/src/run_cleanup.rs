@@ -215,7 +215,6 @@ pub async fn run_cleanup_round(
     Ok((ok, failed))
 }
 
-
 /// Operator-facing process-cleanup rows that require human intervention.
 /// The project/tenant scope is enforced in SQL so callers cannot enumerate
 /// another tenant's cleanup records.

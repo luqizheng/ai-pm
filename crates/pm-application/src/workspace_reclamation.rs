@@ -4,8 +4,8 @@
 //! deletion is performed by the infrastructure adapter only after a claim has
 //! been revalidated immediately before the operation.
 
-use uuid::Uuid;
 use sqlx::{PgPool, Postgres, Transaction};
+use uuid::Uuid;
 
 pub const DEFAULT_RETENTION_DAYS: i32 = 30;
 const CLAIM_LEASE_SECS: f64 = 300.0;
@@ -62,10 +62,7 @@ pub struct ReclamationEntry {
 /// and no active Run or unfinished process cleanup references it.
 ///
 /// Staging a candidate is metadata-only and never removes filesystem content.
-pub async fn stage_candidates(
-    pool: &PgPool,
-    retention_days: i32,
-) -> Result<u64, sqlx::Error> {
+pub async fn stage_candidates(pool: &PgPool, retention_days: i32) -> Result<u64, sqlx::Error> {
     if retention_days < 0 {
         return Err(sqlx::Error::Protocol(
             "workspace reclamation retention_days cannot be negative".into(),
@@ -344,7 +341,6 @@ fn truncate_error(error: &str) -> String {
     out
 }
 
-
 /// Process one fenced batch of Run worktrees. Repository mirrors are staged in
 /// the same ledger but deliberately not claimed by this worker until their
 /// archive/unarchive concurrency guard is implemented. The caller must gate
@@ -421,7 +417,6 @@ pub async fn run_worktree_reclamation_round(
     Ok(report)
 }
 
-
 async fn revalidate_mirror_candidate_tx(
     tx: &mut Transaction<'_, Postgres>,
     entry: &ReclamationEntry,
@@ -435,7 +430,8 @@ async fn revalidate_mirror_candidate_tx(
     .bind(entry.id)
     .fetch_optional(&mut **tx)
     .await?;
-    let Some((status, current_token, kind, project_id, repository_id, relative_path)) = ledger else {
+    let Some((status, current_token, kind, project_id, repository_id, relative_path)) = ledger
+    else {
         return Ok(false);
     };
     if status != "cleaning"
@@ -509,7 +505,10 @@ async fn revalidate_mirror_candidate_tx(
         .bind(run_id)
         .fetch_optional(&mut **tx)
         .await?;
-        if cleanup_status.as_deref().is_some_and(|value| value != "completed") {
+        if cleanup_status
+            .as_deref()
+            .is_some_and(|value| value != "completed")
+        {
             return Ok(false);
         }
         if executor_session.is_some() && cleanup_status.as_deref() != Some("completed") {
@@ -611,7 +610,10 @@ pub async fn run_repository_mirror_reclamation_round(
             continue;
         }
 
-        match reclaimer.reclaim_repository_mirror(entry.repository_id).await {
+        match reclaimer
+            .reclaim_repository_mirror(entry.repository_id)
+            .await
+        {
             Ok(reclaimed_bytes) => {
                 if mark_completed_tx(&mut tx, entry.id, token, reclaimed_bytes).await? {
                     report.completed += 1;
@@ -658,10 +660,7 @@ pub async fn list_needs_human(
 }
 
 /// Explicitly requeue an operator-reviewed reclamation record.
-pub async fn requeue_needs_human(
-    pool: &PgPool,
-    id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn requeue_needs_human(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
         "UPDATE delivery.workspace_reclamation \
             SET status = 'pending', attempts = 0, next_retry_at = now(), \

@@ -2,10 +2,9 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_context::{get_run_context, hash_lease_token, LeaseError};
-use pm_application::run_dispatch::{claim_task_run, RunDispatchConfig, NoopExecutor};
+use pm_application::run_dispatch::{claim_task_run, NoopExecutor, RunDispatchConfig};
 use pm_application::run_transition_guard::{
-    lock_and_validate_transition, RunKind, RunStatus, RunTransitionError,
-    RunTransitionGuardError,
+    lock_and_validate_transition, RunKind, RunStatus, RunTransitionError, RunTransitionGuardError,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -150,13 +149,11 @@ async fn delivery_guard_locks_and_allows_only_the_expected_edge(pool: PgPool) {
     assert_eq!(from, RunStatus::Claimed);
     tx.rollback().await.unwrap();
 
-    let current: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(fx.delivery_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let current: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+        .bind(fx.delivery_run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(current, "claimed");
 }
 
@@ -232,14 +229,8 @@ async fn terminal_writer(
     target: RunStatus,
 ) -> Result<(), RunTransitionGuardError> {
     let mut tx = pool.begin().await.map_err(RunTransitionGuardError::Db)?;
-    let from = lock_and_validate_transition(
-        &mut tx,
-        project_id,
-        run_id,
-        RunKind::Delivery,
-        target,
-    )
-    .await?;
+    let from = lock_and_validate_transition(&mut tx, project_id, run_id, RunKind::Delivery, target)
+        .await?;
 
     // Hold the row lock briefly so the competing terminal writer must wait and
     // then observe the committed terminal status rather than overwrite it.
@@ -275,31 +266,32 @@ async fn concurrent_terminal_writers_cannot_overwrite_each_other(pool: PgPool) {
             fx.delivery_run_id,
             RunStatus::Succeeded,
         ),
-        terminal_writer(
-            &pool,
-            fx.project_id,
-            fx.delivery_run_id,
-            RunStatus::Failed,
-        )
+        terminal_writer(&pool, fx.project_id, fx.delivery_run_id, RunStatus::Failed,)
     );
 
-    assert_ne!(succeeded.is_ok(), failed.is_ok(), "exactly one terminal writer wins");
-    let losing = if succeeded.is_err() { succeeded.unwrap_err() } else { failed.unwrap_err() };
+    assert_ne!(
+        succeeded.is_ok(),
+        failed.is_ok(),
+        "exactly one terminal writer wins"
+    );
+    let losing = if succeeded.is_err() {
+        succeeded.unwrap_err()
+    } else {
+        failed.unwrap_err()
+    };
     assert!(matches!(
         losing,
         RunTransitionGuardError::Invalid(RunTransitionError::TerminalImmutable(_))
     ));
 
-    let final_status: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(fx.delivery_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let final_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+            .bind(fx.delivery_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(final_status == "succeeded" || final_status == "failed");
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn project_archive_cancels_active_reviewer_run(pool: PgPool) {
@@ -321,16 +313,13 @@ async fn project_archive_cancels_active_reviewer_run(pool: PgPool) {
     .await
     .unwrap();
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(fx.review_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+        .bind(fx.review_run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(status, "cancelled");
 }
-
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn stale_lease_token_and_generation_remain_fenced(pool: PgPool) {
@@ -348,18 +337,14 @@ async fn stale_lease_token_and_generation_remain_fenced(pool: PgPool) {
     .await
     .unwrap();
 
-    let old_token = get_run_context(
-        &pool, fx.project_id, fx.delivery_run_id, "stale-token", 8,
-    )
-    .await
-    .unwrap_err();
+    let old_token = get_run_context(&pool, fx.project_id, fx.delivery_run_id, "stale-token", 8)
+        .await
+        .unwrap_err();
     assert!(matches!(old_token, LeaseError::Forbidden));
 
-    let old_generation = get_run_context(
-        &pool, fx.project_id, fx.delivery_run_id, token, 7,
-    )
-    .await
-    .unwrap_err();
+    let old_generation = get_run_context(&pool, fx.project_id, fx.delivery_run_id, token, 7)
+        .await
+        .unwrap_err();
     assert!(matches!(old_generation, LeaseError::Forbidden));
 }
 
@@ -379,7 +364,12 @@ async fn claim_and_project_archive_race_leaves_no_active_run(pool: PgPool) {
     };
 
     let claim = claim_task_run(
-        &pool, fx.project_id, fx.task_id, "pa08-race-runner", None, &config,
+        &pool,
+        fx.project_id,
+        fx.task_id,
+        "pa08-race-runner",
+        None,
+        &config,
     );
     let actor = pm_application::actor::AuditActor::principal(fx.human_id);
     let archive = pm_application::archive::close_project(
@@ -394,18 +384,19 @@ async fn claim_and_project_archive_race_leaves_no_active_run(pool: PgPool) {
     archive_result.expect("Project archive must serialize with claim");
     if let Err(error) = claim_result {
         assert!(
-            matches!(error, pm_application::run_dispatch::RunDispatchError::NoRunnableRun
-                | pm_application::run_dispatch::RunDispatchError::TaskNotReady(_)),
+            matches!(
+                error,
+                pm_application::run_dispatch::RunDispatchError::NoRunnableRun
+                    | pm_application::run_dispatch::RunDispatchError::TaskNotReady(_)
+            ),
             "claim may lose to archive but must fail closed: {error:?}"
         );
     }
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(fx.delivery_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+        .bind(fx.delivery_run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(status, "cancelled", "archive must leave no active Run");
 }

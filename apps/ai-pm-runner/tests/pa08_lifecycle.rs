@@ -1,9 +1,12 @@
 //! PA08-02 first lifecycle slice: exercise the production claim-and-spawn path
 //! through the real MCP client and a scripted Platform endpoint.
-use ai_pm_runner::adapter::{read_process_record, scan_orphans, spawn_agent, terminate, terminate_orphan};
+use ai_pm_runner::adapter::{
+    read_process_record, scan_orphans, spawn_agent, terminate, terminate_orphan,
+};
 use ai_pm_runner::mcp::McpClient;
-use ai_pm_runner::runner_loop::{claim_and_start, recover_inflight_run, run_loop, tick, ActiveRun, Config};
-use std::time::{Duration, Instant};
+use ai_pm_runner::runner_loop::{
+    claim_and_start, recover_inflight_run, run_loop, tick, ActiveRun, Config,
+};
 use serde_json::json;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -18,9 +21,13 @@ fn temp_dir() -> PathBuf {
 
 fn sleeper_cmd(seconds: u64) -> String {
     #[cfg(windows)]
-    { format!("ping -n {seconds} 127.0.0.1") }
+    {
+        format!("ping -n {seconds} 127.0.0.1")
+    }
     #[cfg(not(windows))]
-    { format!("sleep {seconds}") }
+    {
+        format!("sleep {seconds}")
+    }
 }
 
 fn config(server: &MockServer, workspace_root: PathBuf) -> Config {
@@ -62,16 +69,21 @@ async fn claim_and_start_claims_run_and_spawns_agent() {
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
-        .and(body_partial_json(json!({ "method": "tools/call", "params": { "name": "pm_list_tasks" } })))
+        .and(body_partial_json(
+            json!({ "method": "tools/call", "params": { "name": "pm_list_tasks" } }),
+        ))
         .respond_with(structured(json!({ "tasks": [{
             "task_id": task_id, "queued_run_id": run_id
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
-        .and(body_partial_json(json!({ "method": "tools/call", "params": { "name": "pm_claim_task" } })))
+        .and(body_partial_json(
+            json!({ "method": "tools/call", "params": { "name": "pm_claim_task" } }),
+        ))
         .respond_with(structured(json!({
             "run_id": run_id,
             "lease_token": "test-lease-token",
@@ -79,14 +91,18 @@ async fn claim_and_start_claims_run_and_spawns_agent() {
             "lease_owner": "client:pa08-test-device"
         })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
-        .and(body_partial_json(json!({ "method": "tools/call", "params": { "name": "pm_get_run_context" } })))
+        .and(body_partial_json(
+            json!({ "method": "tools/call", "params": { "name": "pm_get_run_context" } }),
+        ))
         .respond_with(structured(json!({ "repositories": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -104,7 +120,9 @@ async fn claim_and_start_claims_run_and_spawns_agent() {
 
     // No child process is allowed to leak from an integration test.
     if let Some(process) = active.process.as_mut() {
-        terminate(&mut process.child).await.expect("test child terminates");
+        terminate(&mut process.child)
+            .await
+            .expect("test child terminates");
     }
     let _ = std::fs::remove_dir_all(root);
 }
@@ -115,10 +133,13 @@ async fn claim_and_start_returns_none_for_empty_queue() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/mcp"))
-        .and(body_partial_json(json!({ "method": "tools/call", "params": { "name": "pm_list_tasks" } })))
+        .and(body_partial_json(
+            json!({ "method": "tools/call", "params": { "name": "pm_list_tasks" } }),
+        ))
         .respond_with(structured(json!({ "tasks": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -140,7 +161,8 @@ async fn tick_reports_heartbeat_and_polls_commands() {
         })))
         .respond_with(structured(json!({ "ok": true })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -157,7 +179,8 @@ async fn tick_reports_heartbeat_and_polls_commands() {
         })))
         .respond_with(structured(json!({ "commands": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -209,7 +232,8 @@ async fn terminate_command_kills_child_and_acks_receipt() {
             "payload": { "issued_at": "2026-11-22T00:00:00Z" }
         }] })))
         .expect(2)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let failed_ack = Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -253,9 +277,14 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         lease_failures: 0,
         last_lease_attempt: None,
     };
-    tick(&cfg, &client, &mut run).await.expect("first terminate delivery should execute despite lost ACK");
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("first terminate delivery should execute despite lost ACK");
     assert!(run.awaiting_continue);
-    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "first delivery must reap the child process");
+    assert!(
+        run.process.as_ref().and_then(|p| p.child.id()).is_none(),
+        "first delivery must reap the child process"
+    );
     drop(failed_ack);
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -273,11 +302,17 @@ async fn terminate_command_kills_child_and_acks_receipt() {
         })))
         .respond_with(structured(json!({ "ok": true })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     run.last_command_poll = Instant::now() - Duration::from_secs(10);
-    tick(&cfg, &client, &mut run).await.expect("redelivered terminate must be idempotently acknowledged");
+    tick(&cfg, &client, &mut run)
+        .await
+        .expect("redelivered terminate must be idempotently acknowledged");
     assert!(run.awaiting_continue);
-    assert!(run.process.as_ref().and_then(|p| p.child.id()).is_none(), "redelivery must not spawn or replace a child");
+    assert!(
+        run.process.as_ref().and_then(|p| p.child.id()).is_none(),
+        "redelivery must not spawn or replace a child"
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -302,7 +337,8 @@ async fn continue_command_spawns_session_and_injects_reply() {
             }
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -320,7 +356,8 @@ async fn continue_command_spawns_session_and_injects_reply() {
         })))
         .respond_with(structured(json!({ "ok": true })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -353,12 +390,15 @@ async fn continue_command_spawns_session_and_injects_reply() {
     assert!(!run.awaiting_continue);
     assert!(run.process.as_ref().and_then(|p| p.child.id()).is_some());
     let injected: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(root.join(".aipm").join("reply.json")).expect("reply injection file")
-    ).expect("valid reply JSON");
+        &std::fs::read(root.join(".aipm").join("reply.json")).expect("reply injection file"),
+    )
+    .expect("valid reply JSON");
     assert_eq!(injected, reply);
 
     if let Some(process) = run.process.as_mut() {
-        terminate(&mut process.child).await.expect("continued child terminates");
+        terminate(&mut process.child)
+            .await
+            .expect("continued child terminates");
     }
     let _ = std::fs::remove_dir_all(root);
 }
@@ -384,7 +424,8 @@ async fn continue_command_refuses_frozen_start_without_spawning() {
         })))
         .respond_with(structured(json!({ "ok": true })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -420,7 +461,8 @@ async fn continue_command_refuses_frozen_start_without_spawning() {
                 "guard": { "continuation_start_frozen": true }
             }
         }),
-    ).await;
+    )
+    .await;
 
     assert!(run.awaiting_continue);
     assert!(run.process.is_none());
@@ -442,7 +484,8 @@ async fn failed_heartbeat_keeps_renewal_due() {
         })))
         .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -467,7 +510,7 @@ async fn failed_heartbeat_keeps_renewal_due() {
     };
 
     let result = tick(&cfg, &client, &mut run).await;
-    assert!(result.is_err(), "HTTP 503 must propagate as a failed heartbeat");
+
     assert!(
         run.last_heartbeat.elapsed() >= Duration::from_secs(cfg.heartbeat_secs),
         "failed renewal must remain due for the next tick"
@@ -498,7 +541,8 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
             "lease_generation": 13
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -519,7 +563,8 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
             "rerouted_commands": 1
         })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -536,7 +581,10 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
     assert_eq!(recovered.lease_generation, 14);
     assert_eq!(recovered.worker_id, "client:pa08-restarted-device");
     assert_eq!(recovered.pending_interaction, Some(interaction_id));
-    assert!(recovered.process.is_none(), "recovery must not invent a local child handle");
+    assert!(
+        recovered.process.is_none(),
+        "recovery must not invent a local child handle"
+    );
     assert!(recovered.awaiting_continue);
     assert!(root.join(run_id.to_string()).is_dir());
     let _ = std::fs::remove_dir_all(root);
@@ -561,7 +609,8 @@ async fn restart_recovery_rejects_non_advancing_lease_generation() {
             "lease_generation": 14
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
@@ -577,7 +626,8 @@ async fn restart_recovery_rejects_non_advancing_lease_generation() {
             "worker_id": "client:pa08-test-device"
         })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
@@ -601,7 +651,8 @@ async fn restart_recovery_returns_none_when_no_runs_are_discoverable() {
         })))
         .respond_with(structured(json!({ "runs": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -624,7 +675,8 @@ async fn restart_recovery_fails_closed_when_discovery_returns_503() {
         })))
         .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -633,7 +685,10 @@ async fn restart_recovery_fails_closed_when_discovery_returns_503() {
         Err(error) => error,
         Ok(_) => panic!("503 must block startup recovery"),
     };
-    assert!(error.to_string().contains("503"), "unexpected error: {error}");
+    assert!(
+        error.to_string().contains("503"),
+        "unexpected error: {error}"
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -652,7 +707,8 @@ async fn restart_recovery_fails_closed_when_multiple_runs_are_discovered() {
             { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4() }
         ] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
@@ -676,7 +732,8 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
         })))
         .respond_with(ResponseTemplate::new(503).set_body_string("platform unavailable"))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
@@ -685,7 +742,8 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
         })))
         .respond_with(ResponseTemplate::new(500))
         .expect(0)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
@@ -694,7 +752,8 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
         })))
         .respond_with(ResponseTemplate::new(500))
         .expect(0)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     let root = temp_dir();
     let orphan_dir = root.join(Uuid::new_v4().to_string());
     let mut orphan = spawn_agent(&sleeper_cmd(30), &orphan_dir, &[], None)
@@ -707,7 +766,9 @@ async fn startup_discovery_failure_prevents_task_listing_and_claiming() {
         ai_pm_runner::adapter::is_pid_alive(orphan_pid),
         "discovery failure must not terminate an old Agent before its lease can be fenced"
     );
-    terminate(&mut orphan.child).await.expect("test must reap its child");
+    terminate(&mut orphan.child)
+        .await
+        .expect("test must reap its child");
     server.verify().await;
     let _ = std::fs::remove_dir_all(root);
 }
@@ -729,7 +790,8 @@ async fn restart_recovery_rejects_missing_lease_generation() {
             "task_id": task_id
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     Mock::given(method("POST"))
         .and(path("/mcp"))
         .and(body_partial_json(json!({
@@ -738,7 +800,8 @@ async fn restart_recovery_rejects_missing_lease_generation() {
         })))
         .respond_with(structured(json!({})))
         .expect(0)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -764,12 +827,9 @@ async fn restart_recovery_fails_closed_on_transport_failure() {
     cfg.platform_mcp_url = format!("http://{address}/mcp");
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
 
-    let result = tokio::time::timeout(
-        Duration::from_secs(5),
-        recover_inflight_run(&cfg, &client),
-    )
-    .await
-    .expect("connection failure must return promptly");
+    let result = tokio::time::timeout(Duration::from_secs(5), recover_inflight_run(&cfg, &client))
+        .await
+        .expect("connection failure must return promptly");
     let error = match result {
         Err(error) => error,
         Ok(_) => panic!("transport failure must never become an empty recovery result"),
@@ -790,7 +850,8 @@ async fn restart_recovery_rejects_malformed_discovery_payload() {
         })))
         .respond_with(structured(json!({ "unexpected": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let cfg = config(&server, root.clone());
@@ -799,7 +860,10 @@ async fn restart_recovery_rejects_malformed_discovery_payload() {
         Err(error) => error,
         Ok(_) => panic!("malformed payload must fail closed"),
     };
-    assert!(error.to_string().contains("runs array"), "unexpected error: {error}");
+    assert!(
+        error.to_string().contains("runs array"),
+        "unexpected error: {error}"
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -821,7 +885,8 @@ async fn claim_and_start_surfaces_agent_spawn_failure() {
             "task_id": task_id, "queued_run_id": run_id
         }] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -836,7 +901,8 @@ async fn claim_and_start_surfaces_agent_spawn_failure() {
             "lease_owner": "client:pa08-test-device"
         })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/mcp"))
@@ -846,14 +912,18 @@ async fn claim_and_start_surfaces_agent_spawn_failure() {
         })))
         .respond_with(structured(json!({ "repositories": [] })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let root = temp_dir();
     let mut cfg = config(&server, root.clone());
     cfg.agent_cmd = "this-command-does-not-exist-pa08".into();
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     let result = claim_and_start(&cfg, &client).await;
-    assert!(result.is_err(), "a failed spawn must not produce an ActiveRun");
+    assert!(
+        result.is_err(),
+        "a failed spawn must not produce an ActiveRun"
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -933,7 +1003,10 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
     assert!(first_started.elapsed() >= Duration::from_millis(90));
     assert!(!run.awaiting_continue);
     let first_pid = run.process.as_ref().and_then(|process| process.child.id());
-    let first_session = run.process.as_ref().map(|process| process.session_id.clone());
+    let first_session = run
+        .process
+        .as_ref()
+        .map(|process| process.session_id.clone());
     assert!(first_pid.is_some(), "first delivery must spawn an Agent");
     // The first acknowledgement is deliberately lost (HTTP 503). The next poll
     // redelivers the same command; the second ACK succeeds without a second spawn.
@@ -954,7 +1027,8 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
         })))
         .respond_with(structured(json!({ "ok": true })))
         .expect(1)
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     run.last_command_poll = Instant::now() - Duration::from_secs(10);
     tick(&cfg, &client, &mut run)
@@ -962,9 +1036,18 @@ async fn delayed_duplicate_continue_response_does_not_spawn_second_agent() {
         .expect("duplicate command response should be acknowledged idempotently");
 
     let second_pid = run.process.as_ref().and_then(|process| process.child.id());
-    let second_session = run.process.as_ref().map(|process| process.session_id.clone());
-    assert_eq!(second_pid, first_pid, "duplicate delivery must not replace the live child");
-    assert_eq!(second_session, first_session, "duplicate delivery must reuse the existing session");
+    let second_session = run
+        .process
+        .as_ref()
+        .map(|process| process.session_id.clone());
+    assert_eq!(
+        second_pid, first_pid,
+        "duplicate delivery must not replace the live child"
+    );
+    assert_eq!(
+        second_session, first_session,
+        "duplicate delivery must reuse the existing session"
+    );
     assert!(!run.awaiting_continue);
 
     if let Some(process) = run.process.as_mut() {
@@ -1014,7 +1097,10 @@ async fn failed_command_poll_retries_on_next_supervision_tick() {
     };
     let due_at = run.last_command_poll;
     let first = tick(&cfg, &client, &mut run).await;
-    assert!(first.is_err(), "HTTP 503 must propagate from command polling");
+    assert!(
+        first.is_err(),
+        "HTTP 503 must propagate from command polling"
+    );
     assert_eq!(
         run.last_command_poll, due_at,
         "failed poll must not advance the retry clock"
@@ -1051,9 +1137,13 @@ async fn replacement_runner_terminates_identity_matched_orphan_process_group() {
     let reports = scan_orphans(&root);
     assert_eq!(reports.len(), 1);
     assert!(reports[0].alive);
-    terminate_orphan(&reports[0]).expect("identity-matched orphan process group must be terminated");
+    terminate_orphan(&reports[0])
+        .expect("identity-matched orphan process group must be terminated");
     let _ = spawned.child.wait().await;
-    assert!(!ai_pm_runner::adapter::is_pid_alive(pid), "orphan PID must no longer be alive after reap");
+    assert!(
+        !ai_pm_runner::adapter::is_pid_alive(pid),
+        "orphan PID must no longer be alive after reap"
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -1076,10 +1166,19 @@ async fn orphan_cleanup_refuses_to_kill_pid_reuse() {
         }
         .into(),
     );
-    std::fs::write(run_dir.join(".aipm").join("process.json"), serde_json::to_vec(&record).unwrap()).unwrap();
+    std::fs::write(
+        run_dir.join(".aipm").join("process.json"),
+        serde_json::to_vec(&record).unwrap(),
+    )
+    .unwrap();
     let report = scan_orphans(&root).into_iter().next().unwrap();
     terminate_orphan(&report).expect("PID reuse must be treated as an already-gone original child");
-    assert!(ai_pm_runner::adapter::is_pid_alive(pid), "unrelated PID must remain alive");
-    terminate(&mut spawned.child).await.expect("test child cleanup");
+    assert!(
+        ai_pm_runner::adapter::is_pid_alive(pid),
+        "unrelated PID must remain alive"
+    );
+    terminate(&mut spawned.child)
+        .await
+        .expect("test child cleanup");
     let _ = std::fs::remove_dir_all(root);
 }

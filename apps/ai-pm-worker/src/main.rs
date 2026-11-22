@@ -54,8 +54,8 @@ async fn main() {
 
 
     let metrics = Arc::new(metrics::WorkerMetrics::new());
-    let metrics_addr = std::env::var("AI_PM_WORKER_METRICS_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:9465".to_string());
+    let metrics_addr =
+        std::env::var("AI_PM_WORKER_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9465".to_string());
     {
         let metrics = metrics.clone();
         tokio::spawn(async move {
@@ -112,7 +112,7 @@ async fn main() {
                 Some(job) => {
                     repo_metrics.repo_import_jobs_claimed();
                     handle_repo_job(&repo_pool, &job).await
-                },
+                }
                 None => {
                     tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
                 }
@@ -174,10 +174,9 @@ async fn main() {
         let reclamation_shared_root = std::env::var("AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT")
             .map(|value| value.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        let reclamation_root_is_absolute = std::path::Path::new(
-            &pm_application::run_dispatch::workspace_root_from_env(),
-        )
-        .is_absolute();
+        let reclamation_root_is_absolute =
+            std::path::Path::new(&pm_application::run_dispatch::workspace_root_from_env())
+                .is_absolute();
         let reclamation_enabled =
             reclamation_requested && reclamation_shared_root && reclamation_root_is_absolute;
         if reclamation_requested && !reclamation_enabled {
@@ -185,11 +184,12 @@ async fn main() {
                 "workspace reclamation requested without shared-root acknowledgement and absolute workspace root; deletion remains disabled"
             );
         }
-        let reclamation_retention_days = std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
-            .ok()
-            .and_then(|value| value.parse::<i32>().ok())
-            .filter(|days| *days >= 0)
-            .unwrap_or(pm_application::workspace_reclamation::DEFAULT_RETENTION_DAYS);
+        let reclamation_retention_days =
+            std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
+                .ok()
+                .and_then(|value| value.parse::<i32>().ok())
+                .filter(|days| *days >= 0)
+                .unwrap_or(pm_application::workspace_reclamation::DEFAULT_RETENTION_DAYS);
         let workspace_reclaimer: Option<
             Arc<dyn pm_application::workspace_reclamation::WorkspaceReclaimer>,
         > = if codex_executor_enabled {
@@ -273,7 +273,7 @@ async fn main() {
                 Err(e) => {
                     dispatch_metrics.cleanup_error();
                     tracing::warn!(error = %e, "run cleanup round failed");
-                },
+                }
             }
             // T-032 D3 旧路径保留为兜底：撤凭据前已遗留的终态行（无账本行的
             // 历史窗口——终止顺序反转引入的窗口，reconcile_orphans 不覆盖终态行）。
@@ -454,7 +454,7 @@ async fn main() {
             Some(job) => {
                 metrics.ai_analysis_jobs_claimed();
                 handle_job(&orchestrator, &job).await
-            },
+            }
             None => tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await,
         }
     }

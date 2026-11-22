@@ -97,9 +97,14 @@ pub async fn close_project(
         let kind = crate::run_transition_guard::RunKind::parse(&kind_text)
             .map_err(|e| ArchiveError::Db(e.to_string()))?;
         crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id, kind,
+            &mut tx,
+            project_id,
+            run_id,
+            kind,
             crate::run_transition_guard::RunStatus::Cancelled,
-        ).await.map_err(|e| ArchiveError::Db(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| ArchiveError::Db(e.to_string()))?;
     }
     let cancelled_run_ids: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE delivery.task_run SET status = 'cancelled', termination_reason = $2, \

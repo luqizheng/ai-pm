@@ -51,26 +51,64 @@ impl RunnerMetrics {
     }
 
     fn record_operation(&self, operation: &str, success: bool) {
-        let index = OPERATIONS.iter().position(|candidate| *candidate == operation).unwrap_or(7);
+        let index = OPERATIONS
+            .iter()
+            .position(|candidate| *candidate == operation)
+            .unwrap_or(7);
         self.operations[index][usize::from(!success)].fetch_add(1, Ordering::Relaxed);
     }
 
     fn render(&self) -> String {
         use std::fmt::Write;
         let mut out = String::with_capacity(2048);
-        metric(&mut out, "ai_pm_runner_uptime_seconds", "gauge", "Runner process uptime in seconds.", unix_seconds().saturating_sub(self.started_at));
+        metric(
+            &mut out,
+            "ai_pm_runner_uptime_seconds",
+            "gauge",
+            "Runner process uptime in seconds.",
+            unix_seconds().saturating_sub(self.started_at),
+        );
         let _ = writeln!(out, "# HELP ai_pm_runner_mcp_operations_total Runner MCP tool calls by bounded operation and outcome.");
         let _ = writeln!(out, "# TYPE ai_pm_runner_mcp_operations_total counter");
         for (index, operation) in OPERATIONS.iter().enumerate() {
             for (outcome_index, outcome) in ["success", "error"].iter().enumerate() {
                 let value = self.operations[index][outcome_index].load(Ordering::Relaxed);
-                sample(&mut out, "ai_pm_runner_mcp_operations_total", &[ ("operation", operation), ("outcome", outcome) ], value);
+                sample(
+                    &mut out,
+                    "ai_pm_runner_mcp_operations_total",
+                    &[("operation", operation), ("outcome", outcome)],
+                    value,
+                );
             }
         }
-        metric(&mut out, "ai_pm_runner_supervision_errors_total", "counter", "Runner supervision errors observed by this process.", self.supervision_errors.load(Ordering::Relaxed));
-        metric(&mut out, "ai_pm_runner_cleanup_terminations_total", "counter", "Orphan and lease-loss Agent termination attempts completed successfully.", self.cleanup_successes.load(Ordering::Relaxed));
-        metric(&mut out, "ai_pm_runner_cleanup_errors_total", "counter", "Orphan and lease-loss Agent termination attempts that could not be confirmed.", self.cleanup_errors.load(Ordering::Relaxed));
-        metric(&mut out, "ai_pm_runner_metrics_scrapes_total", "counter", "Successful metrics responses served by this Runner process.", self.scrapes.load(Ordering::Relaxed));
+        metric(
+            &mut out,
+            "ai_pm_runner_supervision_errors_total",
+            "counter",
+            "Runner supervision errors observed by this process.",
+            self.supervision_errors.load(Ordering::Relaxed),
+        );
+        metric(
+            &mut out,
+            "ai_pm_runner_cleanup_terminations_total",
+            "counter",
+            "Orphan and lease-loss Agent termination attempts completed successfully.",
+            self.cleanup_successes.load(Ordering::Relaxed),
+        );
+        metric(
+            &mut out,
+            "ai_pm_runner_cleanup_errors_total",
+            "counter",
+            "Orphan and lease-loss Agent termination attempts that could not be confirmed.",
+            self.cleanup_errors.load(Ordering::Relaxed),
+        );
+        metric(
+            &mut out,
+            "ai_pm_runner_metrics_scrapes_total",
+            "counter",
+            "Successful metrics responses served by this Runner process.",
+            self.scrapes.load(Ordering::Relaxed),
+        );
         out
     }
 }
@@ -90,7 +128,11 @@ pub fn record_supervision_error() {
 }
 
 pub fn record_cleanup_attempt(success: bool) {
-    let counter = if success { &metrics().cleanup_successes } else { &metrics().cleanup_errors };
+    let counter = if success {
+        &metrics().cleanup_successes
+    } else {
+        &metrics().cleanup_errors
+    };
     counter.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -121,7 +163,9 @@ pub fn start_from_env() {
                     tracing::error!(%error, "Runner metrics exporter stopped");
                 }
             }
-            Err(error) => tracing::error!(%error, address = %parsed, "Runner metrics exporter failed to bind"),
+            Err(error) => {
+                tracing::error!(%error, address = %parsed, "Runner metrics exporter failed to bind")
+            }
         }
     });
 }
@@ -168,7 +212,9 @@ fn sample(out: &mut String, name: &str, labels: &[(&str, &str)], value: u64) {
     use std::fmt::Write;
     let _ = write!(out, "{name}{{");
     for (index, (key, label_value)) in labels.iter().enumerate() {
-        if index > 0 { let _ = write!(out, ","); }
+        if index > 0 {
+            let _ = write!(out, ",");
+        }
         let _ = write!(out, "{key}=\"{label_value}\"");
     }
     let _ = writeln!(out, "}} {value}");
@@ -196,7 +242,10 @@ mod tests {
         let server = tokio::spawn(serve_listener(listener));
 
         let mut stream = TcpStream::connect(address).await.unwrap();
-        stream.write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        stream
+            .write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
         let mut response = String::new();
         stream.read_to_string(&mut response).await.unwrap();
         assert!(response.starts_with("HTTP/1.1 200 OK"));
@@ -204,7 +253,10 @@ mod tests {
         assert!(response.contains("# TYPE ai_pm_runner_mcp_operations_total counter"));
 
         let mut missing = TcpStream::connect(address).await.unwrap();
-        missing.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        missing
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
         let mut missing_response = String::new();
         missing.read_to_string(&mut missing_response).await.unwrap();
         assert!(missing_response.starts_with("HTTP/1.1 404 Not Found"));
@@ -216,10 +268,16 @@ mod tests {
         let metrics = RunnerMetrics::new();
         metrics.record_operation("claim", true);
         metrics.record_operation("command_ack", false);
-        metrics.supervision_errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        metrics
+            .supervision_errors
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let output = metrics.render();
-        assert!(output.contains("ai_pm_runner_mcp_operations_total{operation=\"claim\",outcome=\"success\"} 1"));
-        assert!(output.contains("ai_pm_runner_mcp_operations_total{operation=\"command_ack\",outcome=\"error\"} 1"));
+        assert!(output.contains(
+            "ai_pm_runner_mcp_operations_total{operation=\"claim\",outcome=\"success\"} 1"
+        ));
+        assert!(output.contains(
+            "ai_pm_runner_mcp_operations_total{operation=\"command_ack\",outcome=\"error\"} 1"
+        ));
         assert!(output.contains("ai_pm_runner_supervision_errors_total 1"));
         assert!(output.ends_with('\n'));
         assert!(!output.contains("project_id"));

@@ -4,12 +4,15 @@
 //! still provide transaction/row-lock or compare-and-set protection around writes.
 //! Delivery and Reviewer Runs share a table but retain separate lifecycle edges.
 
-use thiserror::Error;
 use sqlx::{Postgres, Row, Transaction};
+use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RunKind { Delivery, Review }
+pub enum RunKind {
+    Delivery,
+    Review,
+}
 
 impl RunKind {
     pub fn parse(value: &str) -> Result<Self, RunTransitionError> {
@@ -23,7 +26,13 @@ impl RunKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunStatus {
-    Queued, Claimed, Running, Succeeded, Failed, TimedOut, Cancelled,
+    Queued,
+    Claimed,
+    Running,
+    Succeeded,
+    Failed,
+    TimedOut,
+    Cancelled,
 }
 
 impl RunStatus {
@@ -53,7 +62,10 @@ impl RunStatus {
     }
 
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Succeeded | Self::Failed | Self::TimedOut | Self::Cancelled)
+        matches!(
+            self,
+            Self::Succeeded | Self::Failed | Self::TimedOut | Self::Cancelled
+        )
     }
 }
 
@@ -66,7 +78,11 @@ pub enum RunTransitionError {
     #[error("terminal Run status {0} cannot transition")]
     TerminalImmutable(&'static str),
     #[error("illegal {kind:?} Run transition: {from:?} -> {to:?}")]
-    IllegalEdge { kind: RunKind, from: RunStatus, to: RunStatus },
+    IllegalEdge {
+        kind: RunKind,
+        from: RunStatus,
+        to: RunStatus,
+    },
 }
 
 /// Validate one actual status change. Same-state lease reacquisition is not a
@@ -122,7 +138,11 @@ pub fn validate_reacquire(kind: RunKind, current: RunStatus) -> Result<(), RunTr
     if kind == RunKind::Delivery && current == RunStatus::Claimed {
         return Ok(());
     }
-    Err(RunTransitionError::IllegalEdge { kind, from: current, to: current })
+    Err(RunTransitionError::IllegalEdge {
+        kind,
+        from: current,
+        to: current,
+    })
 }
 
 #[cfg(test)]
@@ -147,8 +167,10 @@ mod tests {
             (RunStatus::Running, RunStatus::TimedOut),
             (RunStatus::Running, RunStatus::Cancelled),
         ] {
-            assert!(validate_transition(RunKind::Delivery, from, to).is_ok(),
-                "expected Delivery edge {from:?} -> {to:?}");
+            assert!(
+                validate_transition(RunKind::Delivery, from, to).is_ok(),
+                "expected Delivery edge {from:?} -> {to:?}"
+            );
         }
     }
 
@@ -157,9 +179,15 @@ mod tests {
         for to in [RunStatus::Succeeded, RunStatus::Failed, RunStatus::TimedOut] {
             assert!(validate_transition(RunKind::Review, RunStatus::Running, to).is_ok());
         }
-        assert!(validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Running).is_ok());
-        assert!(validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Claimed).is_err());
-        assert!(validate_transition(RunKind::Review, RunStatus::Claimed, RunStatus::Running).is_err());
+        assert!(
+            validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Running).is_ok()
+        );
+        assert!(
+            validate_transition(RunKind::Review, RunStatus::Queued, RunStatus::Claimed).is_err()
+        );
+        assert!(
+            validate_transition(RunKind::Review, RunStatus::Claimed, RunStatus::Running).is_err()
+        );
         // Active Reviewer Runs may be cancelled by Project archival; the
         // application caller restricts this edge to reason=project_closed.
     }
@@ -167,16 +195,25 @@ mod tests {
     #[test]
     fn terminal_runs_are_immutable_for_both_kinds() {
         for kind in [RunKind::Delivery, RunKind::Review] {
-            for terminal in [RunStatus::Succeeded, RunStatus::Failed, RunStatus::TimedOut, RunStatus::Cancelled] {
-                assert!(matches!(validate_transition(kind, terminal, RunStatus::Running),
-                    Err(RunTransitionError::TerminalImmutable(_))));
+            for terminal in [
+                RunStatus::Succeeded,
+                RunStatus::Failed,
+                RunStatus::TimedOut,
+                RunStatus::Cancelled,
+            ] {
+                assert!(matches!(
+                    validate_transition(kind, terminal, RunStatus::Running),
+                    Err(RunTransitionError::TerminalImmutable(_))
+                ));
             }
         }
     }
 
     #[test]
     fn same_state_reclaim_is_not_a_status_transition() {
-        assert!(validate_transition(RunKind::Delivery, RunStatus::Claimed, RunStatus::Claimed).is_err());
+        assert!(
+            validate_transition(RunKind::Delivery, RunStatus::Claimed, RunStatus::Claimed).is_err()
+        );
         assert!(validate_reacquire(RunKind::Delivery, RunStatus::Claimed).is_ok());
         assert!(validate_reacquire(RunKind::Review, RunStatus::Running).is_err());
     }
@@ -187,7 +224,6 @@ mod tests {
         assert!(RunStatus::parse("waiting").is_err());
     }
 }
-
 
 #[derive(Debug, Error)]
 pub enum RunTransitionGuardError {

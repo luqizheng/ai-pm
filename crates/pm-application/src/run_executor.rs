@@ -166,10 +166,14 @@ pub async fn claim_and_start(
                 }
             }
             crate::run_transition_guard::lock_and_validate_transition(
-                &mut tx, project_id, run_id,
+                &mut tx,
+                project_id,
+                run_id,
                 crate::run_transition_guard::RunKind::Delivery,
                 crate::run_transition_guard::RunStatus::Running,
-            ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+            )
+            .await
+            .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
                     SET status = 'running', stage = 'started', started_at = now() \
@@ -732,21 +736,25 @@ async fn start_failed(
 ) -> Result<(), RunDispatchError> {
     let mut tx = pool.begin().await?;
     let from_status = match crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, run_id,
+        &mut tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         crate::run_transition_guard::RunStatus::Queued,
-    ).await {
+    )
+    .await
+    {
         Ok(status) => status,
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
         ))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::IllegalEdge {
                 kind: crate::run_transition_guard::RunKind::Delivery,
                 from: crate::run_transition_guard::RunStatus::Queued,
                 to: crate::run_transition_guard::RunStatus::Queued,
-            }
+            },
         )) => {
             tx.commit().await?;
             return Ok(());
@@ -818,10 +826,14 @@ async fn start_failed(
     .await?;
     if status == "queued" && retry_count >= cfg.max_infrastructure_attempts {
         crate::run_transition_guard::lock_and_validate_transition(
-            &mut tx, project_id, run_id,
+            &mut tx,
+            project_id,
+            run_id,
             crate::run_transition_guard::RunKind::Delivery,
             crate::run_transition_guard::RunStatus::Failed,
-        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
         let exhausted = sqlx::query(
             "UPDATE delivery.task_run \
                 SET status = 'failed', outcome = 'failed', finished_at = now(), \
@@ -920,21 +932,25 @@ async fn record_termination(
     let target_status = crate::run_transition_guard::RunStatus::parse(terminal)
         .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let from_status = match crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, run_id,
+        &mut tx,
+        project_id,
+        run_id,
         run_kind,
         target_status,
-    ).await {
+    )
+    .await
+    {
         Ok(status) => status,
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
         ))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::IllegalEdge {
                 kind: crate::run_transition_guard::RunKind::Delivery,
                 from: crate::run_transition_guard::RunStatus::Queued,
                 ..
-            }
+            },
         )) => {
             tx.commit().await?;
             return Ok(false);
@@ -1033,21 +1049,25 @@ async fn finish_run(
         crate::run_transition_guard::RunStatus::Failed
     };
     let from_status = match crate::run_transition_guard::lock_and_validate_transition(
-        &mut tx, project_id, run_id,
+        &mut tx,
+        project_id,
+        run_id,
         crate::run_transition_guard::RunKind::Delivery,
         target_status,
-    ).await {
+    )
+    .await
+    {
         Ok(status) => status,
         Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
-            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
         ))
         | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::IllegalEdge {
                 kind: crate::run_transition_guard::RunKind::Delivery,
                 from: crate::run_transition_guard::RunStatus::Queued,
                 ..
-            }
+            },
         )) => {
             tx.commit().await?;
             return Ok(());
