@@ -225,6 +225,13 @@ async fn worktree_candidate_requires_terminal_retention_and_completed_process_cl
 async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
     let fx = seed(&pool, "PA08-WR-MIRROR-STAGE").await;
     sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
         "UPDATE integration.project_repository \
             SET status = 'archived', updated_at = now() - interval '31 days' \
           WHERE id = $1",
@@ -262,14 +269,29 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
         pm_application::workspace_reclamation::stage_candidates(&pool, 30)
             .await
             .unwrap(),
-        1
+        1,
+        "worktree should be staged before mirror"
+    );
+    let worktree_adapter = FakeReclaimer::default();
+    let worktree_report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
+        &pool, &worktree_adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(worktree_report.completed, 1);
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1,
+        "mirror should be staged only after worktree completion"
     );
     assert!(
         pm_application::workspace_reclamation::claim_batch(&pool)
             .await
             .unwrap()
             .is_empty(),
-        "mirror candidates remain unclaimed until archive/unarchive concurrency is guarded"
+        "worktree worker must not claim mirror candidates"
     );
 
     let row: (String, Option<Uuid>, String) = sqlx::query_as(
@@ -388,6 +410,47 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for FakeReclaimer
     }
 }
 
+async fn stage_mirror_candidate(pool: &PgPool, fx: &Fx) {
+    sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(pool, 30)
+            .await
+            .unwrap(),
+        1,
+        "the old Run worktree must be staged before the mirror"
+    );
+    let adapter = FakeReclaimer::default();
+    let worktree_report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
+        pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(worktree_report.completed, 1);
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(pool, 30)
+            .await
+            .unwrap(),
+        1,
+        "the mirror becomes eligible only after the Run worktree is completed"
+    );
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn worktree_reclamation_round_marks_success_only_after_adapter_returns(pool: PgPool) {
     let fx = seed(&pool, "PA08-WR-ROUND-SUCCESS").await;
@@ -461,22 +524,8 @@ async fn worktree_reclamation_round_skips_candidate_that_fails_second_check(pool
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_round_rechecks_archive_state_under_repository_lock(pool: PgPool) {
-    let fx = seed(&pool, "PA08-WR-MIRROR-ROUND").await;
-    sqlx::query(
-        "UPDATE integration.project_repository \
-            SET status = 'archived', updated_at = now() - interval '31 days' \
-          WHERE id = $1",
-    )
-    .bind(fx.repository_id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
-            .await
-            .unwrap(),
-        1
-    );
+    let fx = seed(&pool, "mirror_reclamation_round_rechecks_archive_state_under_repository_lock").await;
+    stage_mirror_candidate(&pool, &fx).await;
 
     let adapter = FakeReclaimer::default();
     let report = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
@@ -541,22 +590,8 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLoc
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter(pool: PgPool) {
-    let fx = seed(&pool, "PA08-WR-MIRROR-LOCK").await;
-    sqlx::query(
-        "UPDATE integration.project_repository \
-            SET status = 'archived', updated_at = now() - interval '31 days' \
-          WHERE id = $1",
-    )
-    .bind(fx.repository_id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
-            .await
-            .unwrap(),
-        1
-    );
+    let fx = seed(&pool, "mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter").await;
+    stage_mirror_candidate(&pool, &fx).await;
 
     let adapter = RepositoryLockProbe {
         pool: pool.clone(),
@@ -651,22 +686,8 @@ async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgP
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mirror_reclamation_skips_repository_reactivated_after_candidate_staging(pool: PgPool) {
-    let fx = seed(&pool, "PA08-WR-MIRROR-REACTIVATE").await;
-    sqlx::query(
-        "UPDATE integration.project_repository \
-            SET status = 'archived', updated_at = now() - interval '31 days' \
-          WHERE id = $1",
-    )
-    .bind(fx.repository_id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
-            .await
-            .unwrap(),
-        1
-    );
+    let fx = seed(&pool, "mirror_reclamation_skips_repository_reactivated_after_candidate_staging").await;
+    stage_mirror_candidate(&pool, &fx).await;
     sqlx::query(
         "UPDATE integration.project_repository SET status = 'verified', updated_at = now() WHERE id = $1",
     )
