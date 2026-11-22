@@ -728,6 +728,13 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for CodexExecutor
     ) -> Result<(), ExecutorError> {
         CodexExecutor::reclaim_run_worktree(self, run_id, repository_id, workspace_path).await
     }
+
+    async fn reclaim_repository_mirror(
+        &self,
+        repository_id: Uuid,
+    ) -> Result<(), ExecutorError> {
+        CodexExecutor::reclaim_repository_mirror(self, repository_id).await
+    }
 }
 
 #[async_trait::async_trait]
