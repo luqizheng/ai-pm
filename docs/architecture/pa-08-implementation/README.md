@@ -16,7 +16,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 | PA08-01 | Registry portability | Foundation | VERIFIED |
 | PA08-02 | Runner lifecycle test harness | P1 | VERIFIED (implemented slice; follow-up failure cases remain) |
 | PA08-03 | Run transition guard | P1 | VERIFIED |
-| PA08-04 | Workspace / mirror reclamation | P1 | PROCESS CLAIM FIX + RECLAMATION LEDGER IMPLEMENTED; CI PENDING |
+| PA08-04 | Workspace / mirror reclamation | P1 | PROCESS CLAIM FIX + CANDIDATE STAGING IMPLEMENTED; CI PENDING |
 | PA08-05 | Product lifecycle integrity | P1 | PLANNED |
 | PA08-06 | Runtime observability | P2 | PLANNED |
 
