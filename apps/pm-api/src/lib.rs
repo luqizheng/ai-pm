@@ -28,6 +28,7 @@ pub mod human_consultations;
 pub mod issue_risk;
 pub mod knowledge_services;
 pub mod mcp_hosts;
+pub mod metrics;
 pub mod onboarding;
 pub mod outbox_ops;
 pub mod pm_acceptance;
