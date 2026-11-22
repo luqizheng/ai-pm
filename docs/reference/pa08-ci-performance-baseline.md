@@ -96,3 +96,31 @@ PA-07 Run [#45044216776](https://github.com/luqizheng/ai-pm/actions/runs/4504421
 - 本轮完整 PA-08 workflow 墙钟约 14 分钟；这与原始失败基线的 22 分 17 秒相比，方向上明显改善，但两者门禁编排和测试成功状态并非完全同类，不能把差值当作严格的性能提升百分比。
 - 3.50 GB archive 的构建、上传和 shard 下载已成为下一轮主要优化观察点。当前不应通过减少测试或降低覆盖来缩小 archive；可在后续独立评估 archive 组成、缓存/传输策略和 runner 资源成本。
 - PA-08 与 PA-07 结果均对应上述同一 SHA。PR #1 继续保持 Open / Draft；本次验收不代表合并或部署授权。
+
+
+## 7. Archive debuginfo 优化实验：完整 Hosted 验收
+
+优化提交：`31db253d1f3872bf191ccb6958212dd2181fd13b`（仅修改 PA-08 Linux archive job 环境变量 `CARGO_PROFILE_TEST_DEBUG=0`；不修改测试 profile 的 debug assertions / overflow checks，不改变测试选择、分片或线程数）。
+
+PA-08 Run [#45045963157](https://github.com/luqizheng/ai-pm/actions/runs/45045963157)（Run #296）于 2026-11-22 16:49:26–16:59:27 UTC 完成，**8/8 Jobs 成功**。四个 Linux Nextest shard、Linux doctests、public-registry build / Clippy / migration uniqueness / promtool / changed-file rustfmt、Windows mirror-lock 与 Runner/Worker Windows 编译均通过。
+
+### 7.1 Archive 体积对比
+
+| 指标 | 原方案（Run #292） | 去除 test debuginfo（Run #296） |
+|---|---:|---:|
+| 上传 artifact 大小 | 3,503,762,456 bytes | 1,606,573,561 bytes |
+| 十进制 GB | 3.504 GB | 1.607 GB |
+| 四个 shard 合计下载量（按每 shard 下载一次估算） | 约 14.015 GB | 约 6.426 GB |
+
+Archive artifact 减少 **1,897,188,895 bytes（约 54.2%）**；四 shard 的理论下载总量同步减少约 **7.589 GB（十进制）**。此项仅去除测试二进制 DWARF 调试信息，不降低断言、overflow checks、测试覆盖或运行分片。
+
+### 7.2 完整测试结果与结论
+
+- 四个 hash 分片的分配数仍为 528、507、476、489，合计 **2,000**；四个 shard Job 全部成功。
+- Linux workspace doctests 成功；Windows mirror-lock 与 Runner/Worker Windows 编译成功。
+- PA-08 Run #296 全部 8 个 Job 均为 success；没有依赖 skipped job 作为成功证据。
+- Archive debuginfo 优化通过完整 Hosted 验证，正式保留。后续若继续优化，仍须以同等完整覆盖作为门槛。
+
+### 7.3 相关 PA-07 回归
+
+PA-07 Run [#45045963156](https://github.com/luqizheng/ai-pm/actions/runs/45045963156)（Run #300）2/2 Jobs 成功；与本次 workflow 优化同批验证。
