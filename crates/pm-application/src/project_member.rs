@@ -129,6 +129,25 @@ pub async fn apply_member_change(
 ) -> Result<MemberChangeOutcome, ProjectMemberError> {
     let mut tx = pool.begin().await.map_err(db_err)?;
 
+    // 保持 Grant 的既有错误优先级：principal 不存在 / Agent 身份错误
+    // 必须先于租户成员资格检查返回。Agent 即使不是 Team 成员，也应得到
+    // AGENT_PRINCIPAL，而不是被 Team-first 锁定逻辑遮蔽为 NOT_TENANT_MEMBER。
+    if matches!(op, MemberOp::Grant { .. }) {
+        let kind: Option<String> =
+            sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+                .bind(op.target())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        let kind = kind.ok_or(ProjectMemberError::NotFound("principal not found"))?;
+        if kind != "human" {
+            return Err(ProjectMemberError::Conflict {
+                code: "AGENT_PRINCIPAL",
+                message: "only human principals can be granted project membership",
+            });
+        }
+    }
+
     // 1) 先锁目标所属 Team 行。Team 成员移除也以该行为第一把锁，
     //    随后才会级联删除 project_member 并写 tenant_audit_log。
     //    必须先于 tenant 锁，否则会形成：
