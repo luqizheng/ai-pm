@@ -265,6 +265,95 @@ pub struct DocumentContent {
     pub markdown: String,
 }
 
+/// Metadata and current Markdown context for an existing project document.
+/// The shared ai.document* container is accessed only inside this KB boundary.
+#[derive(Debug, Clone)]
+pub struct PublishedDocumentContext {
+    pub doc_key: String,
+    pub doc_type: String,
+    pub revision_id: Option<Uuid>,
+    pub markdown: Option<String>,
+}
+
+/// Lists document identities for application-level matching, including documents
+/// that do not yet have a published revision.
+pub async fn list_document_identities(
+    pool: &PgPool,
+    project_id: Uuid,
+    limit: i64,
+) -> Result<Vec<(String, String)>, KnowledgeError> {
+    let rows = sqlx::query_as(
+        "SELECT doc_key, doc_type FROM ai.project_document \\
+         WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2",
+    )
+    .bind(project_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Loads current published revision identities and Markdown context through the
+/// Knowledge domain, keeping direct shared-container access out of consumers.
+pub async fn list_published_document_context(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    project_id: Uuid,
+    limit: i64,
+    max_markdown_chars: usize,
+) -> Result<Vec<PublishedDocumentContext>, KnowledgeError> {
+    let rows: Vec<(String, String, String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT d.doc_key, d.doc_type, d.canonical_path, r.id \\
+           FROM ai.project_document d \\
+           LEFT JOIN LATERAL ( \\
+               SELECT id FROM ai.document_revision \\
+                WHERE document_id = d.id AND status = 'published' \\
+                ORDER BY revision_no DESC LIMIT 1 \\
+           ) r ON true \\
+          WHERE d.project_id = $1 \\
+          ORDER BY d.created_at DESC LIMIT $2",
+    )
+    .bind(project_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(doc_key, doc_type, canonical_path, revision_id)| {
+            let markdown = safe_join(root.path(), &canonical_path)
+                .ok()
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map(|text| text.chars().take(max_markdown_chars).collect());
+            PublishedDocumentContext {
+                doc_key,
+                doc_type,
+                revision_id,
+                markdown,
+            }
+        })
+        .collect())
+}
+
+/// Finds the latest published revision for one document key.
+pub async fn current_published_revision_id(
+    pool: &PgPool,
+    project_id: Uuid,
+    doc_key: &str,
+) -> Result<Option<Uuid>, KnowledgeError> {
+    let revision_id = sqlx::query_scalar(
+        "SELECT r.id FROM ai.document_revision r \\
+         JOIN ai.project_document d ON d.id = r.document_id \\
+         WHERE d.project_id = $1 AND d.doc_key = $2 AND r.status = 'published' \\
+         ORDER BY r.revision_no DESC LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(doc_key)
+    .fetch_optional(pool)
+    .await?;
+    Ok(revision_id)
+}
+
 /// `projects/<project-code>/<doc_type>/<doc_key>.md`. The key is restricted to
 /// `[A-Za-z0-9._-]` (excluding `.` / `..`), so no value escapes the root.
 pub fn canonical_path(
