@@ -209,11 +209,29 @@ impl CodexExecutor {
         workspace_path: &str,
     ) -> Result<(), ExecutorError> {
         let _lock = self.lock_mirror(repository_id)?;
-        let Some(target) = resolve_run_worktree_target(&self.root, run_id, workspace_path)? else {
+        let target = resolve_run_worktree_target(&self.root, run_id, workspace_path)?;
+        let mirror = resolve_repository_mirror_target(&self.root, repository_id)?;
+
+        let Some(target) = target else {
+            if let Some(mirror) = mirror {
+                let prune = tokio::process::Command::new("git")
+                    .arg("--git-dir")
+                    .arg(&mirror)
+                    .args(["worktree", "prune"])
+                    .output()
+                    .await
+                    .map_err(|e| ExecutorError::Other(format!("git worktree prune failed: {e}")))?;
+                if !prune.status.success() {
+                    return Err(ExecutorError::Other(format!(
+                        "git worktree prune failed: {}",
+                        String::from_utf8_lossy(&prune.stderr).trim()
+                    )));
+                }
+            }
             return Ok(());
         };
-        let mirror = self.root.join("git-mirror").join(repository_id.to_string());
-        if mirror.join("HEAD").is_file() {
+
+        if let Some(mirror) = mirror {
             let output = tokio::process::Command::new("git")
                 .arg("--git-dir")
                 .arg(&mirror)
@@ -248,6 +266,7 @@ impl CodexExecutor {
         }
         Ok(())
     }
+
 
     /// Reclaim a shared bare mirror only when Git confirms no linked worktrees
     /// remain. Repository/Commit database rows and remote history are untouched.
