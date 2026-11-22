@@ -2,6 +2,7 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -348,4 +349,93 @@ async fn reclamation_claims_are_fenced_and_revalidated_before_delete(pool: PgPoo
         .await
         .unwrap()
     );
+}
+
+
+#[derive(Default)]
+struct FakeReclaimer {
+    calls: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl pm_application::workspace_reclamation::WorkspaceReclaimer for FakeReclaimer {
+    async fn reclaim_run_worktree(
+        &self,
+        _run_id: Uuid,
+        _repository_id: Uuid,
+        _workspace_path: &str,
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn worktree_reclamation_round_marks_success_only_after_adapter_returns(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-ROUND-SUCCESS").await;
+    sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let adapter = FakeReclaimer::default();
+    let report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
+        &pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.claimed, 1);
+    assert_eq!(report.completed, 1);
+    assert_eq!(adapter.calls.load(Ordering::SeqCst), 1);
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM delivery.workspace_reclamation WHERE run_id = $1",
+    )
+    .bind(fx.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "completed");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn worktree_reclamation_round_skips_candidate_that_fails_second_check(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-ROUND-RECHECK").await;
+    sqlx::query(
+        "UPDATE delivery.task_run SET finished_at = now() - interval '31 days' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query("UPDATE delivery.task_run SET finished_at = now() WHERE id = $1")
+        .bind(fx.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let adapter = FakeReclaimer::default();
+    let report = pm_application::workspace_reclamation::run_worktree_reclamation_round(
+        &pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.claimed, 1);
+    assert_eq!(report.skipped, 1);
+    assert_eq!(adapter.calls.load(Ordering::SeqCst), 0);
 }
