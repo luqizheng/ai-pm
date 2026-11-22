@@ -673,7 +673,6 @@ async fn claim_core_in_project(
             }
             let created =
                 recover_lost_run(&mut tx, superseded_run_id, task_id, project_id, cfg).await?;
-            run_state = run_status::QUEUED.to_string();
             if opts.task_filter.is_none() {
                 tx.commit().await?;
                 return Ok(Some(ClaimOutcome {
