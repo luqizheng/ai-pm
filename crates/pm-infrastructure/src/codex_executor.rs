@@ -1361,4 +1361,68 @@ mod imp008_tests {
     fn https_url_never_writes_a_key_file() {
         assert!(ssh_command_with_key("https://host/org/repo.git", "PRIVATE").is_none());
     }
+
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("pa08-{label}-{}", Uuid::new_v4()))
+    }
+
+    #[test]
+    fn worktree_path_resolves_only_inside_its_run_root() {
+        let root = temp_root("worktree-valid");
+        let run_id = Uuid::new_v4();
+        let target = root.join(run_id.to_string()).join("repos/repo");
+        std::fs::create_dir_all(&target).unwrap();
+
+        let resolved = resolve_run_worktree_target(&root, run_id, "repos/repo")
+            .unwrap()
+            .expect("existing worktree resolves");
+        assert_eq!(resolved, std::fs::canonicalize(&target).unwrap());
+
+        assert!(resolve_run_worktree_target(&root, run_id, "../../outside").is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn missing_worktree_is_an_idempotent_noop() {
+        let root = temp_root("worktree-missing");
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(resolve_run_worktree_target(&root, Uuid::new_v4(), "repos/missing")
+            .unwrap()
+            .is_none());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn worktree_symlink_escape_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root("worktree-symlink");
+        let outside = temp_root("worktree-outside");
+        let run_id = Uuid::new_v4();
+        std::fs::create_dir_all(root.join(run_id.to_string()).join("repos")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join(run_id.to_string()).join("repos/escape")).unwrap();
+
+        assert!(resolve_run_worktree_target(&root, run_id, "repos/escape").is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_dir_all(&outside).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mirror_symlink_escape_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root("mirror-symlink");
+        let outside = temp_root("mirror-outside");
+        let repository_id = Uuid::new_v4();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("git-mirror")).unwrap();
+
+        assert!(resolve_repository_mirror_target(&root, repository_id).is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_dir_all(&outside).unwrap();
+    }
 }
