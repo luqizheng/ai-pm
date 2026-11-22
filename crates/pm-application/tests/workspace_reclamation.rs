@@ -758,7 +758,6 @@ async fn completed_mirror_candidate_is_restaged_after_repository_reactivation(po
 
 
 #[sqlx::test(migrations = "../../migrations")]
-#[sqlx::test(migrations = "../../migrations")]
 async fn reclaimed_byte_totals_remain_monotonic_across_reclamation_cycles(pool: PgPool) {
     let fx = seed(&pool, "PA08-WR-BYTES-TOTAL").await;
     let id: Uuid = sqlx::query_scalar(
