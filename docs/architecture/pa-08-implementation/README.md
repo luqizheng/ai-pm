@@ -31,7 +31,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 - Covers the empty-queue path without claiming or spawning.
 - CI now runs `cargo test -p ai-pm-runner --tests --locked` after the workspace build.
 - Initial CI run [#7](https://github.com/luqizheng/ai-pm/actions/runs/44968483995) passed the workspace build and Runner integration tests for the claim/spawn and empty-queue cases.
-- Expanded heartbeat/command-tick coverage is in the latest CI run [#10](https://github.com/luqizheng/ai-pm/actions/runs/44968579673), currently pending.
-- This is an initial lifecycle slice, not completion: terminate/continue command outcomes, restart recovery, and broader transport/lease/spawn failure-injection coverage remain open.
+- Expanded heartbeat/command-tick coverage passed in [Run #10](https://github.com/luqizheng/ai-pm/actions/runs/44968579673).
+- Added real child-process terminate + ack, continue + human-reply injection, and frozen-guard refusal tests. Hosted CI validation is running in [Run #14](https://github.com/luqizheng/ai-pm/actions/runs/44968788640). Restart recovery and broader transport/lease/spawn failure-injection coverage remain open; PA08-02 is not complete.
 
 Status changes require code/test evidence. A plan or merged documentation is not implementation completion.
