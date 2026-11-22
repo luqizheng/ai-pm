@@ -1157,16 +1157,18 @@ async fn orphan_cleanup_refuses_to_kill_pid_reuse() {
     let mut spawned = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
     let pid = spawned.pid;
     let mut record = read_process_record(&run_dir).expect("spawn writes process record");
-    record.identity_hint = Some(
-        if cfg!(windows) {
-            "win-ft-0-0"
-        } else if cfg!(target_os = "linux") {
-            "proc-start-0"
-        } else {
-            "ps-start-not-real"
-        }
-        .into(),
-    );
+    let actual_identity = ai_pm_runner::adapter::process_identity_hint(pid)
+        .expect("spawned child must expose a process identity anchor");
+    let mismatched_identity = if actual_identity.starts_with("win-ft-") {
+        "win-ft-0-0"
+    } else if actual_identity.starts_with("proc-start-") {
+        "proc-start-0"
+    } else if actual_identity.starts_with("ps-start-") {
+        "ps-start-not-real"
+    } else {
+        panic!("unexpected process identity anchor format: {actual_identity}");
+    };
+    record.identity_hint = Some(mismatched_identity.into());
     std::fs::write(
         run_dir.join(".aipm").join("process.json"),
         serde_json::to_vec(&record).unwrap(),
