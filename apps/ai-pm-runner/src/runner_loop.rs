@@ -308,9 +308,9 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
                         let _ = std::fs::remove_file(run.run_dir.join(".aipm").join("cleanup-needs-human.json"));
                         if has_local_child {
                             run.process = None;
-                            if lease_reacquired_after_loss {
-                                run.awaiting_continue = true;
-                            }
+                        }
+                        if lease_reacquired_after_loss {
+                            run.awaiting_continue = true;
                         }
                     }
                     if has_local_child && !lease_reacquired_after_loss {
