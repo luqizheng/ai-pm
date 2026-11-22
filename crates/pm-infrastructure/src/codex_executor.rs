@@ -246,7 +246,7 @@ impl CodexExecutor {
                 ensure_bare_mirror(&mirror).await?;
                 let prune = tokio::process::Command::new("git")
                     .arg("--git-dir")
-                    .arg(&mirror)
+                    .arg(git_process_path(&mirror))
                     .args(["worktree", "prune"])
                     .output()
                     .await
@@ -266,9 +266,9 @@ impl CodexExecutor {
             ensure_bare_mirror(&mirror).await?;
             let output = tokio::process::Command::new("git")
                 .arg("--git-dir")
-                .arg(&mirror)
+                .arg(git_process_path(&mirror))
                 .args(["worktree", "remove", "--force"])
-                .arg(&target)
+                .arg(git_process_path(&target))
                 .output()
                 .await
                 .map_err(|e| ExecutorError::Other(format!("git worktree remove failed: {e}")))?;
@@ -280,7 +280,7 @@ impl CodexExecutor {
             }
             let prune = tokio::process::Command::new("git")
                 .arg("--git-dir")
-                .arg(&mirror)
+                .arg(git_process_path(&mirror))
                 .args(["worktree", "prune"])
                 .output()
                 .await
@@ -314,7 +314,7 @@ impl CodexExecutor {
         ensure_bare_mirror(&mirror).await?;
         let prune = tokio::process::Command::new("git")
             .arg("--git-dir")
-            .arg(&mirror)
+            .arg(git_process_path(&mirror))
             .args(["worktree", "prune"])
             .output()
             .await
@@ -328,7 +328,7 @@ impl CodexExecutor {
 
         let listing = tokio::process::Command::new("git")
             .arg("--git-dir")
-            .arg(&mirror)
+            .arg(git_process_path(&mirror))
             .args(["worktree", "list", "--porcelain"])
             .output()
             .await
@@ -511,10 +511,29 @@ fn directory_size_bytes(root: &Path) -> Result<u64, ExecutorError> {
     Ok(total)
 }
 
+/// `std::fs::canonicalize` 在 Windows 上返回带 `\\?\` verbatim 前缀的路径；
+/// git for Windows 拒绝把它当作仓库参数（`fatal: not a git repository`），
+/// 也会与 `worktree list` 登记的普通路径不匹配。传给 git 子进程的
+/// 路径一律先经此函数剥掉 verbatim 前缀；非 Windows 平台原样返回。
+fn git_process_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        const VERBATIM: &str = r"\\?\";
+        const VERBATIM_UNC: &str = r"\\?\UNC\";
+        if let Some(rest) = path.as_os_str().to_str().and_then(|s| s.strip_prefix(VERBATIM_UNC)) {
+            return PathBuf::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = path.as_os_str().to_str().and_then(|s| s.strip_prefix(VERBATIM)) {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 async fn ensure_bare_mirror(mirror: &Path) -> Result<(), ExecutorError> {
     let output = tokio::process::Command::new("git")
         .arg("--git-dir")
-        .arg(mirror)
+        .arg(git_process_path(mirror))
         .args(["rev-parse", "--is-bare-repository"])
         .output()
         .await
