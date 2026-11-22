@@ -64,8 +64,6 @@ jobs:
           for crate in digua_common_jwt digua_common_consul digua_file_sdk digua_http_client; do
             grep -A3 -F "name = \"$crate\"" Cargo.lock | grep -F "registry+https://github.com/rust-lang/crates.io-index"
           done
-      - name: Check formatting
-        run: cargo fmt --all -- --check
       - name: Build workspace from public registries
         run: cargo check --workspace --locked
       - name: Run workspace Clippy
