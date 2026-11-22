@@ -714,6 +714,25 @@ async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
         json!("product_lifecycle_transition_invalid")
     );
 
+    // Legacy restart remains a compatibility alias only after Portfolio Review
+    // has placed the Product in Resuming; it cannot skip the intermediate state.
+    for (action, expected_status) in [
+        ("suspend", "suspended"),
+        ("resume", "resuming"),
+        ("restart", "normal"),
+    ] {
+        let (status, body) = call(
+            &w.app,
+            "POST",
+            &endpoint,
+            &owner_token,
+            Some(json!({ "action": action })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{action}: {body}");
+        assert_eq!(body["status"], json!(expected_status));
+    }
+
     // Archived is terminal for ordinary lifecycle actions.
     let (status, body) = call(
         &w.app,
@@ -756,5 +775,5 @@ async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits, 4, "invalid transitions must not write audit rows");
+    assert_eq!(audits, 7, "invalid transitions must not write audit rows");
 }
