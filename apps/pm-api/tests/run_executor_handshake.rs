@@ -162,7 +162,7 @@ async fn seed_claimed_run(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid)
 /// 推进 running）且立即终止子进程（阶段 C 登记失败 → kill，§8.3）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
-    let (_project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
+    let (project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
 
     // 归档先落定（P2 cancel_run 撤凭据 + 终态化——stage='dispatch' 意图保留）。
