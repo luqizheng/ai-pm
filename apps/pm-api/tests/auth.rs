@@ -211,6 +211,17 @@ async fn metrics_endpoint_returns_authenticated_prometheus_exposition(pool: PgPo
     assert!(exposition.contains("# TYPE ai_pm_run_count gauge"));
     assert!(exposition.lines().any(|line| line.starts_with("# HELP ")));
     assert!(exposition.lines().any(|line| line.starts_with("# TYPE ")));
+    assert!(
+        exposition.lines().any(|line| {
+            let Some((metric, value)) = line.split_once(' ') else {
+                return false;
+            };
+            metric == "ai_pm_pending_worker_commands" && value.parse::<i64>().is_ok()
+        }),
+        "Prometheus sample lines must contain a metric name and numeric value"
+    );
+    assert!(exposition.contains('\n'), "exposition must use real newline characters");
+    assert!(!exposition.contains("\\n"), "exposition must not contain literal backslash-n sequences");
     assert!(!exposition.contains(&boot.project_id.to_string()));
     assert!(!exposition.contains(&boot.human_id.to_string()));
     assert!(!exposition.contains("metrics-test"));

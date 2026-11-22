@@ -752,6 +752,32 @@ async fn restart_recovery_rejects_missing_lease_generation() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// Transport failure must propagate; it is never interpreted as an empty discovery result.
+#[tokio::test]
+async fn restart_recovery_fails_closed_on_transport_failure() {
+    let server = MockServer::start().await;
+    let root = temp_dir();
+    let mut cfg = config(&server, root.clone());
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    cfg.platform_mcp_url = format!("http://{address}/mcp");
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        recover_inflight_run(&cfg, &client),
+    )
+    .await
+    .expect("connection failure must return promptly");
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("transport failure must never become an empty recovery result"),
+    };
+    assert!(!error.to_string().is_empty());
+    let _ = std::fs::remove_dir_all(root);
+}
+
 /// A successful RPC with a missing or malformed runs field is not proof of emptiness.
 #[tokio::test]
 async fn restart_recovery_rejects_malformed_discovery_payload() {

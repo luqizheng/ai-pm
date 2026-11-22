@@ -49,7 +49,7 @@ jobs:
 
   public-registry-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16
@@ -72,6 +72,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify locked dependency metadata
         run: cargo metadata --locked --format-version 1 --no-deps
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
       - name: Verify all Digua crates resolve from crates.io
         shell: bash
         run: |
@@ -82,6 +84,8 @@ jobs:
         run: cargo check --workspace --locked
       - name: Run workspace Clippy
         run: cargo clippy --workspace --all-targets --locked
+      - name: Run full workspace test suite
+        run: cargo test --workspace --locked
       - name: Run Runner integration tests
         run: cargo test -p ai-pm-runner --tests --locked
       - name: Run Runner metrics exporter unit tests
