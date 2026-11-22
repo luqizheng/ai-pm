@@ -55,8 +55,8 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
         ));
     }
 
-    let reclamation: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT resource_kind, status, count(*)::bigint \
+    let reclamation: Vec<(String, String, i64, i64)> = sqlx::query_as(
+        "SELECT resource_kind, status, count(*)::bigint, COALESCE(sum(reclaimed_bytes), 0)::bigint \
            FROM delivery.workspace_reclamation \
           GROUP BY resource_kind, status ORDER BY resource_kind, status",
     )
@@ -64,11 +64,16 @@ pub async fn render(pool: &PgPool) -> Result<String, sqlx::Error> {
     .await?;
     out.push_str("# HELP ai_pm_workspace_reclamation_backlog Number of reclamation records by resource kind and status.\n");
     out.push_str("# TYPE ai_pm_workspace_reclamation_backlog gauge\n");
-    for (kind, status, count) in reclamation {
+    out.push_str("# HELP ai_pm_workspace_reclaimed_bytes_total Logical file bytes removed by completed workspace reclamation.\n");
+    out.push_str("# TYPE ai_pm_workspace_reclaimed_bytes_total counter\n");
+    for (kind, status, count, reclaimed_bytes) in reclamation {
         let kind = escape_label(&kind);
         let status = escape_label(&status);
         out.push_str(&format!(
             "ai_pm_workspace_reclamation_backlog{{resource_kind=\"{kind}\",status=\"{status}\"}} {count}\n"
+        ));
+        out.push_str(&format!(
+            "ai_pm_workspace_reclaimed_bytes_total{{resource_kind=\"{kind}\"}} {reclaimed_bytes}\n"
         ));
     }
 
