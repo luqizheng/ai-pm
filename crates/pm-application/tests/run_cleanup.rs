@@ -152,3 +152,40 @@ async fn current_claim_failure_releases_lease_and_schedules_retry(pool: PgPool) 
     assert_eq!(retry.len(), 1);
     assert_ne!(retry[0].claim_token, Some(token));
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn cleanup_failure_exhaustion_escalates_to_needs_human(pool: PgPool) {
+    let run_id = enqueue_cleanup(&pool, "PA08-CLEANUP-ESCALATE").await;
+    sqlx::query(
+        "UPDATE delivery.task_run_cleanup SET max_attempts = 1 WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let claimed = run_cleanup::claim_batch(&pool).await.unwrap();
+    assert_eq!(claimed.len(), 1);
+    let token = claimed[0].claim_token.expect("claim token");
+    assert!(
+        run_cleanup::mark_failed(&pool, run_id, token, "permanent terminate failure", 60)
+            .await
+            .unwrap()
+    );
+
+    let row: (String, i32, Option<Uuid>) = sqlx::query_as(
+        "SELECT status, attempts, claim_token FROM delivery.task_run_cleanup WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "needs_human");
+    assert_eq!(row.1, 1);
+    assert!(row.2.is_none());
+    assert!(
+        run_cleanup::claim_batch(&pool).await.unwrap().is_empty(),
+        "needs_human rows must not be automatically reclaimed"
+    );
+}
