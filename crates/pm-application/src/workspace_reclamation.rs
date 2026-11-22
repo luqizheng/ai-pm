@@ -5,7 +5,7 @@
 //! been revalidated immediately before the operation.
 
 use uuid::Uuid;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 pub const DEFAULT_RETENTION_DAYS: i32 = 30;
 const CLAIM_LEASE_SECS: f64 = 300.0;
@@ -136,21 +136,33 @@ pub async fn stage_candidates(
 /// The same timestamp column is the retry due time while pending and the lease
 /// expiry while cleaning.
 pub async fn claim_batch(pool: &PgPool) -> Result<Vec<ReclamationEntry>, sqlx::Error> {
+    claim_batch_for(pool, "run_worktree").await
+}
+
+async fn claim_mirror_batch(pool: &PgPool) -> Result<Vec<ReclamationEntry>, sqlx::Error> {
+    claim_batch_for(pool, "repository_mirror").await
+}
+
+async fn claim_batch_for(
+    pool: &PgPool,
+    resource_kind: &str,
+) -> Result<Vec<ReclamationEntry>, sqlx::Error> {
     sqlx::query_as::<_, ReclamationEntry>(
         "WITH candidates AS ( \
              SELECT id FROM delivery.workspace_reclamation \
-              WHERE resource_kind = 'run_worktree' AND status IN ('pending', 'cleaning') AND next_retry_at <= now() \
+              WHERE resource_kind = $1 AND status IN ('pending', 'cleaning') AND next_retry_at <= now() \
               ORDER BY next_retry_at, created_at \
-              LIMIT $1 FOR UPDATE SKIP LOCKED \
+              LIMIT $2 FOR UPDATE SKIP LOCKED \
          ) \
          UPDATE delivery.workspace_reclamation AS item \
             SET status = 'cleaning', claim_token = gen_random_uuid(), \
-                next_retry_at = now() + make_interval(secs => $2::float8), updated_at = now() \
+                next_retry_at = now() + make_interval(secs => $3::float8), updated_at = now() \
            FROM candidates WHERE item.id = candidates.id \
          RETURNING item.id, item.tenant_id, item.project_id, item.resource_kind, \
                    item.run_id, item.repository_id, item.relative_path, item.status, \
                    item.attempts, item.max_attempts, item.next_retry_at, item.last_error, item.claim_token",
     )
+    .bind(resource_kind)
     .bind(CLAIM_BATCH_LIMIT)
     .bind(CLAIM_LEASE_SECS)
     .fetch_all(pool)
@@ -380,4 +392,239 @@ pub async fn run_worktree_reclamation_round(
         }
     }
     Ok(report)
+}
+
+
+async fn revalidate_mirror_candidate_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    entry: &ReclamationEntry,
+    token: Uuid,
+    retention_days: i32,
+) -> Result<bool, sqlx::Error> {
+    let ledger = sqlx::query_as::<_, (String, Option<Uuid>, String, Uuid, Uuid, String)>(
+        "SELECT status, claim_token, resource_kind, project_id, repository_id, relative_path \
+           FROM delivery.workspace_reclamation WHERE id = $1 FOR UPDATE",
+    )
+    .bind(entry.id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((status, current_token, kind, project_id, repository_id, relative_path)) = ledger else {
+        return Ok(false);
+    };
+    if status != "cleaning"
+        || current_token != Some(token)
+        || kind != "repository_mirror"
+        || project_id != entry.project_id
+        || repository_id != entry.repository_id
+        || relative_path != format!("git-mirror/{}", entry.repository_id)
+    {
+        return Ok(false);
+    }
+
+    // Lock the Repository row before checking active Run references. New
+    // task_run_repository FK inserts and archive/unarchive updates serialize
+    // behind this lock until filesystem reclamation commits.
+    let repository = sqlx::query_as::<_, (String, bool)>(
+        "SELECT status, updated_at <= now() - make_interval(days => $3) \
+           FROM integration.project_repository \
+          WHERE id = $1 AND project_id = $2 AND tenant_id = $4 \
+          FOR UPDATE",
+    )
+    .bind(entry.repository_id)
+    .bind(entry.project_id)
+    .bind(retention_days)
+    .bind(entry.tenant_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((repository_status, retention_elapsed)) = repository else {
+        return Ok(false);
+    };
+    if repository_status != "archived" || !retention_elapsed {
+        return Ok(false);
+    }
+
+    let runs = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
+        "SELECT r.id, r.status, r.executor_session \
+           FROM delivery.task_run_repository rr \
+           JOIN delivery.task_run r ON r.id = rr.run_id \
+          WHERE rr.repository_id = $1 \
+          FOR UPDATE OF r",
+    )
+    .bind(entry.repository_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    for (run_id, run_status, executor_session) in runs {
+        if !matches!(
+            run_status.as_str(),
+            "succeeded" | "failed" | "timed_out" | "cancelled"
+        ) {
+            return Ok(false);
+        }
+        let cleanup_status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1 FOR UPDATE",
+        )
+        .bind(run_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if cleanup_status.as_deref().is_some_and(|value| value != "completed") {
+            return Ok(false);
+        }
+        if executor_session.is_some() && cleanup_status.as_deref() != Some("completed") {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+async fn mark_completed_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    claim_token: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE delivery.workspace_reclamation \
+            SET status = 'completed', completed_at = now(), claim_token = NULL, \
+                last_error = NULL, updated_at = now() \
+          WHERE id = $1 AND status = 'cleaning' AND claim_token = $2",
+    )
+    .bind(id)
+    .bind(claim_token)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    Ok(rows == 1)
+}
+
+async fn mark_failed_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    claim_token: Uuid,
+    error: &str,
+    backoff_secs: i64,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE delivery.workspace_reclamation \
+            SET attempts = attempts + 1, \
+                status = CASE WHEN attempts + 1 >= max_attempts THEN 'needs_human' ELSE 'pending' END, \
+                next_retry_at = now() + make_interval(secs => $3::float8), \
+                claim_token = NULL, last_error = $4, updated_at = now() \
+          WHERE id = $1 AND status = 'cleaning' AND claim_token = $2",
+    )
+    .bind(id)
+    .bind(claim_token)
+    .bind(backoff_secs as f64)
+    .bind(truncate_error(error))
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    Ok(rows == 1)
+}
+
+/// Mirror reclamation holds the ledger and Repository row locks across the
+/// filesystem operation. This serializes archive/unarchive and new repository
+/// snapshot references with deletion, while the adapter's mirror lock
+/// serializes Git fetch/checkout/worktree operations.
+pub async fn run_repository_mirror_reclamation_round(
+    pool: &PgPool,
+    reclaimer: &dyn WorkspaceReclaimer,
+    retention_days: i32,
+) -> Result<ReclamationRoundReport, sqlx::Error> {
+    if retention_days < 0 {
+        return Err(sqlx::Error::Protocol(
+            "workspace reclamation retention_days cannot be negative".into(),
+        ));
+    }
+    let batch = claim_mirror_batch(pool).await?;
+    let mut report = ReclamationRoundReport {
+        claimed: batch.len(),
+        ..ReclamationRoundReport::default()
+    };
+
+    for entry in batch {
+        let Some(token) = entry.claim_token else {
+            report.failed += 1;
+            continue;
+        };
+        let mut tx = pool.begin().await?;
+        let eligible =
+            revalidate_mirror_candidate_tx(&mut tx, &entry, token, retention_days).await?;
+        if !eligible {
+            if mark_failed_tx(
+                &mut tx,
+                entry.id,
+                token,
+                "mirror candidate failed locked second eligibility check",
+                FAILURE_BACKOFF_SECS,
+            )
+            .await?
+            {
+                report.skipped += 1;
+            } else {
+                report.failed += 1;
+            }
+            tx.commit().await?;
+            continue;
+        }
+
+        match reclaimer.reclaim_repository_mirror(entry.repository_id).await {
+            Ok(()) => {
+                if mark_completed_tx(&mut tx, entry.id, token).await? {
+                    report.completed += 1;
+                } else {
+                    report.failed += 1;
+                }
+            }
+            Err(error) => {
+                if mark_failed_tx(
+                    &mut tx,
+                    entry.id,
+                    token,
+                    &error.to_string(),
+                    FAILURE_BACKOFF_SECS,
+                )
+                .await?
+                {
+                    report.failed += 1;
+                } else {
+                    report.skipped += 1;
+                }
+            }
+        }
+        tx.commit().await?;
+    }
+    Ok(report)
+}
+
+/// List reclamation records requiring operator attention.
+pub async fn list_needs_human(
+    pool: &PgPool,
+    limit: i64,
+) -> Result<Vec<ReclamationEntry>, sqlx::Error> {
+    sqlx::query_as::<_, ReclamationEntry>(
+        "SELECT id, tenant_id, project_id, resource_kind, run_id, repository_id, \
+                relative_path, status, attempts, max_attempts, next_retry_at, last_error, claim_token \
+           FROM delivery.workspace_reclamation \
+          WHERE status = 'needs_human' ORDER BY updated_at DESC LIMIT $1",
+    )
+    .bind(limit.clamp(1, 100))
+    .fetch_all(pool)
+    .await
+}
+
+/// Explicitly requeue an operator-reviewed reclamation record.
+pub async fn requeue_needs_human(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE delivery.workspace_reclamation \
+            SET status = 'pending', attempts = 0, next_retry_at = now(), \
+                claim_token = NULL, last_error = NULL, completed_at = NULL, updated_at = now() \
+          WHERE id = $1 AND status = 'needs_human'",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(rows == 1)
 }
