@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle slice VERIFIED; PA08-03 guard IMPLEMENTED, final hardening CI pending)
+- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle slice VERIFIED; PA08-03 VERIFIED)
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -57,7 +57,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - Additional command-path tests exercise real child-process termination + ack through production polling, continue spawning + human-reply injection through production polling, and frozen-guard refusal. The command-path suite passed in [Run #19](https://github.com/luqizheng/ai-pm/actions/runs/44968871944). Heartbeat retry hardening (clock advances only after Platform confirms renewal) and its HTTP 503 regression test passed in [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44969004043). Restart recovery/reacquire, empty discovery, and spawn failure are now covered by production-path tests and passed in [Run #28](https://github.com/luqizheng/ai-pm/actions/runs/44969367934), including `cargo check --workspace --locked` and `cargo test -p ai-pm-runner --tests --locked`. This verifies the Runner lifecycle slice implemented so far; delayed/duplicate command responses and broader lease/transport failure injection remain follow-up coverage.
 - Next refactor target: isolate time/scheduling decisions and process lifecycle operations behind narrow seams only where needed by the remaining tests. Do not introduce production sleeps or a parallel test-only state machine.
 
-### PA08-03 — Run transition guard — IMPLEMENTED (initial acceptance slice)
+### PA08-03 — Run transition guard — VERIFIED
 - Static source inventory and implementation evidence: `PA08-03-RUN-TRANSITION-INVENTORY.md`.
 - Added `run_transition_guard.rs`: typed RunKind/RunStatus parsing, separate Delivery/Reviewer matrices, terminal immutability, and transaction-scoped `SELECT ... FOR UPDATE` validation.
 - Integrated into delivery claim/start/requeue/isolation/cancel/finish/termination, MCP first-start, Project archive, and Reviewer claim/success/failure/timeout paths. Existing Task transitions remain routed through `apply_task_transition`.
@@ -115,4 +115,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 的转换守卫已实施，并在 Run #52 / #57 的真实 PostgreSQL 与单元测试中通过；最后一项 Project 范围 compare-and-set 收紧正在 Run #58 验证。PA08-04 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
