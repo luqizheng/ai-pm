@@ -283,7 +283,7 @@ pub async fn list_document_identities(
     limit: i64,
 ) -> Result<Vec<(String, String)>, KnowledgeError> {
     let rows = sqlx::query_as(
-        "SELECT doc_key, doc_type FROM ai.project_document \\
+        "SELECT doc_key, doc_type FROM ai.project_document \
          WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2",
     )
     .bind(project_id)
@@ -303,14 +303,14 @@ pub async fn list_published_document_context(
     max_markdown_chars: usize,
 ) -> Result<Vec<PublishedDocumentContext>, KnowledgeError> {
     let rows: Vec<(String, String, String, Option<Uuid>)> = sqlx::query_as(
-        "SELECT d.doc_key, d.doc_type, d.canonical_path, r.id \\
-           FROM ai.project_document d \\
-           LEFT JOIN LATERAL ( \\
-               SELECT id FROM ai.document_revision \\
-                WHERE document_id = d.id AND status = 'published' \\
-                ORDER BY revision_no DESC LIMIT 1 \\
-           ) r ON true \\
-          WHERE d.project_id = $1 \\
+        "SELECT d.doc_key, d.doc_type, d.canonical_path, r.id \
+           FROM ai.project_document d \
+           LEFT JOIN LATERAL ( \
+               SELECT id FROM ai.document_revision \
+                WHERE document_id = d.id AND status = 'published' \
+                ORDER BY revision_no DESC LIMIT 1 \
+           ) r ON true \
+          WHERE d.project_id = $1 \
           ORDER BY d.created_at DESC LIMIT $2",
     )
     .bind(project_id)
@@ -342,9 +342,9 @@ pub async fn current_published_revision_id(
     doc_key: &str,
 ) -> Result<Option<Uuid>, KnowledgeError> {
     let revision_id = sqlx::query_scalar(
-        "SELECT r.id FROM ai.document_revision r \\
-         JOIN ai.project_document d ON d.id = r.document_id \\
-         WHERE d.project_id = $1 AND d.doc_key = $2 AND r.status = 'published' \\
+        "SELECT r.id FROM ai.document_revision r \
+         JOIN ai.project_document d ON d.id = r.document_id \
+         WHERE d.project_id = $1 AND d.doc_key = $2 AND r.status = 'published' \
          ORDER BY r.revision_no DESC LIMIT 1",
     )
     .bind(project_id)
