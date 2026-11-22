@@ -191,27 +191,52 @@ function buildHealth(
  * **不伪造完成**：`completion = not_determinable` 时原样透出，由页面显示
  * 「无法判定」——不得因为事项都过了就宣称完成（后端契约 §4.5）。
  */
+/**
+ * 冷启动各步深链（复用已有页面，不重复造页）：
+ *   基本信息 → Settings General；目标 → 知识（project-goal 文档）；
+ *   仓库接入 / 代码分析 → Settings Repositories；项目认知 → Discovery；
+ *   项目基线 → Baseline；开发环境 → Settings Runners；人工处理 → 决策中心。
+ */
+const INIT_LINKS: Record<string, string> = {
+  project_basics: "/project/settings/general",
+  project_goal: "/project/knowledge",
+  repository_access: "/project/settings/repositories",
+  code_analysis: "/project/settings/repositories",
+  project_cognition: "/project/discovery",
+  baseline: "/project/baseline",
+  dev_environment: "/project/settings/runners",
+  human_actions: "/project/collaboration/decisions"
+};
+
 function buildInitialization(
   block: InitializationProgress | undefined,
-  t: Translate
+  t: Translate,
+  projectId: string
 ): CommandCenterInitData | null {
   if (!block) return null;
-  const items = (block.items ?? []).map(item => ({
-    key: item.key,
-    title: item.title,
-    statusLabel: t(`s01.command-center.init.status.${item.status}`, {
-      status: item.status
-    }),
-    tone: initStatusTone(item.status),
-    required: item.required,
-    detail: item.detail ?? ""
-  }));
+  const items = (block.items ?? []).map(item => {
+    const path = INIT_LINKS[item.key];
+    return {
+      key: item.key,
+      title: item.title,
+      statusLabel: t(`s01.command-center.init.status.${item.status}`, {
+        status: item.status
+      }),
+      tone: initStatusTone(item.status),
+      required: item.required,
+      detail: item.detail ?? "",
+      link: path
+        ? { path, query: { project_id: projectId } }
+        : undefined
+    };
+  });
   const required = (block.items ?? []).filter(item => item.required);
   return {
     items,
     completion: block.completion,
     requiredDone: required.filter(item => item.status === "completed").length,
-    requiredTotal: required.length
+    requiredTotal: required.length,
+    expanded: block.expanded ?? true
   };
 }
 
@@ -404,7 +429,8 @@ export async function loadCommandCenterData(
     members: [],
     initialization: buildInitialization(
       blockData<InitializationProgress>(center.blocks.initialization_progress),
-      t
+      t,
+      projectId
     ),
     memberHumanCount: summary?.member_count ?? 0,
     memberAgentCount: 0

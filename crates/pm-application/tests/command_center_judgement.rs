@@ -151,3 +151,19 @@ fn action_backlog_is_human_waiting_not_progress() {
     assert_eq!(j::human_actions_status(0), st::COMPLETED);
     assert_eq!(j::human_actions_status(3), st::WAITING_FOR_HUMAN);
 }
+
+// ── P1 冷启动：项目基线判定 ────────────────────────────────────────────────
+
+#[test]
+fn baseline_confirmed_version_beats_everything() {
+    assert_eq!(j::baseline_status(true, true), st::COMPLETED);
+    assert_eq!(j::baseline_status(true, false), st::COMPLETED);
+}
+
+#[test]
+fn baseline_pending_proposal_awaits_human() {
+    // 提案确认门是人类专属（ai.project_baseline.confirmed_by NOT NULL）：
+    // 有提案未确认 = 球在人手里。
+    assert_eq!(j::baseline_status(false, true), st::WAITING_FOR_HUMAN);
+    assert_eq!(j::baseline_status(false, false), st::NOT_STARTED);
+}

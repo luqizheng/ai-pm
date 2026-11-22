@@ -230,6 +230,23 @@ pub(super) async fn load_initialization_progress(
     .fetch_one(pool)
     .await?;
 
+    // 基线：已确认版本（ai.project_baseline 行存在即有人类确认记录）+
+    // 待确认提案（ai.baseline_proposal.pending，人工确认门）。
+    let baseline_confirmed: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.project_baseline          WHERE project_id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+    let baseline_pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.baseline_proposal          WHERE project_id = $1 AND tenant_id = $2 AND status = 'pending'",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+
     let mut items: Vec<InitItem> = Vec::new();
     items.push(InitItem {
         key: "project_basics".to_string(),
@@ -286,6 +303,19 @@ pub(super) async fn load_initialization_progress(
         required: false,
         source_state: None,
         detail: Some(format!("共 {session_total} 个发现会话")),
+    });
+    items.push(InitItem {
+        key: "baseline".to_string(),
+        title: "项目基线".to_string(),
+        status: init_judgement::baseline_status(baseline_confirmed > 0, baseline_pending > 0)
+            .to_string(),
+        required: false,
+        source_state: None,
+        detail: if baseline_confirmed > 0 {
+            Some(format!("已确认 {baseline_confirmed} 个基线版本"))
+        } else {
+            Some(format!("{baseline_pending} 个提案待人工确认"))
+        },
     });
     items.push(InitItem {
         key: "dev_environment".to_string(),

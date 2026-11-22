@@ -177,6 +177,7 @@ execution:
   review:
     triStateTitle: 三态分离
     triStateHint: Agent 声称完成（Run 成功）≠ AI-PM 检查通过（verdict）≠ 人工验收（任务完成）。
+    reviewCenterAction: 验收裁决 → 审核台
     awaitingTitle: 待审查交付（{count}）
     awaitingEmpty: 暂无待审查交付。
     reviewedTitle: 已审查交付（{count}）

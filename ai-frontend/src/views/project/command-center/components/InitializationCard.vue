@@ -88,6 +88,18 @@ const completionTone = computed<"success" | "warning" | "neutral">(() => {
 
 const items = computed<InitItemView[]>(() => props.data?.items ?? []);
 
+/** 收起/展开：初始跟随后端判定（§4.6 收缩规则=初始化完成后自动折叠），
+ *  用户手动切换后以用户为准；收起不得隐藏待人工事项（waiting_for_human
+ *  会让后端 expanded=true，天然不进收起态）。 */
+const userExpanded = ref<boolean | null>(null);
+const isExpanded = computed(() => {
+  if (userExpanded.value !== null) return userExpanded.value;
+  return props.data?.expanded ?? true;
+});
+const waitingHumanCount = computed(
+  () => items.value.filter(item => item.tone === "warning").length
+);
+
 /* ── S3 代码分析动作（单源判定见 lib/import-analysis） ── */
 const importItems = ref<ImportListItem[]>([]);
 const analysisError = ref("");
@@ -194,6 +206,44 @@ watch(
       </div>
     </template>
 
+    <!-- 收起态：只显示必需进度摘要 + 展开入口（初始化完成后自动折叠） -->
+    <div
+      v-if="!isExpanded"
+      class="init-collapsed"
+      data-testid="cc-init-collapsed"
+    >
+      <span class="init-collapsed__summary">{{
+        t("s01.command-center.init.collapsedSummary", {
+          done: data?.requiredDone ?? 0,
+          total: data?.requiredTotal ?? 0
+        })
+      }}</span>
+      <Badge v-if="waitingHumanCount > 0" variant="warning" size="sm">
+        {{
+          t("s01.command-center.init.waitingBadge", {
+            count: waitingHumanCount
+          })
+        }}
+      </Badge>
+      <Button
+        variant="ghost"
+        size="sm"
+        data-testid="cc-init-expand"
+        @click="userExpanded = true"
+      >
+        {{ t("s01.command-center.init.expand") }}
+      </Button>
+    </div>
+    <template v-else>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="init-collapse-toggle"
+        data-testid="cc-init-collapse"
+        @click="userExpanded = false"
+      >
+        {{ t("s01.command-center.init.collapse") }}
+      </Button>
     <ul class="init-list">
       <li
         v-for="item in items"
@@ -214,10 +264,10 @@ watch(
           size="sm"
         />
         <RouterLink
-          v-if="item.key === 'code_analysis'"
+          v-if="item.link"
           class="init-row__title init-row__link"
-          :to="analysisPath"
-          :aria-label="t('s01.command-center.init.analysis.link')"
+          :to="item.link"
+          :aria-label="t('s01.command-center.init.openStep')"
         >
           {{ item.title }}
         </RouterLink>
@@ -248,10 +298,27 @@ watch(
         </span>
       </li>
     </ul>
+    </template>
   </Card>
 </template>
 
 <style scoped>
+.init-collapsed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.init-collapsed__summary {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+}
+
+.init-collapse-toggle {
+  align-self: flex-end;
+}
+
 .init-card {
   display: flex;
   flex-direction: column;

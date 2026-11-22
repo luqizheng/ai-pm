@@ -278,6 +278,8 @@ delivery:
   ctxHistory: 交付历史
   ctxHistoryText: 验收不齐不产生最终交付记录；历史可追溯。
   ctxNote: 证据挂在任务与交付记录上；对话不是事实源。
+  reviewCenterLink: 验收裁决 → 审核台（人类正式接受 / 拒绝 / 要求修改）
+  executionReviewLink: 查看 Run 执行审查（S05）
 
 recovery:
   loadingEyebrow: 加载异常与恢复 · 保留上下文

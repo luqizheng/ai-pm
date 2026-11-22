@@ -177,6 +177,7 @@ execution:
   review:
     triStateTitle: Three-state separation
     triStateHint: Agent claims done (run succeeded) ≠ AI-PM check passed (verdict) ≠ human acceptance (task completed).
+    reviewCenterAction: Acceptance decision → Review center
     awaitingTitle: Deliveries awaiting review ({count})
     awaitingEmpty: No delivery awaiting review.
     reviewedTitle: Reviewed deliveries ({count})

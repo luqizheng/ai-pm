@@ -46,6 +46,8 @@ export interface InitItemView {
   tone: TaskStatTone;
   required: boolean;
   detail: string;
+  /** 该步对应已有页面的深链（冷启动引导：每步可单独进入）；无则不可点 */
+  link?: { path: string; query?: Record<string, string> };
 }
 
 /**
@@ -64,6 +66,9 @@ export interface CommandCenterInitData {
   /** 必需事项已完成数 / 必需事项总数。 */
   requiredDone: number;
   requiredTotal: number;
+  /** 后端收缩判定（§4.6：无进行中/未开始的必需事项且无阻塞 → false=收起）。
+   *  初始化完成后自动折叠进度区域；用户可手动展开（不隐藏人工待办）。 */
+  expanded: boolean;
 }
 
 export interface CommandCenterData {

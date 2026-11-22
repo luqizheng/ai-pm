@@ -164,6 +164,17 @@ beforeEach(() => {
 });
 
 describe("DeliveryView", () => {
+  it("P1 Delivery Review 整合：提供审核台与 S05 执行审查的交叉导航", async () => {
+    const wrapper = await mountAt();
+    const link = wrapper.find('[data-testid="dl-review-center-link"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("href")).toContain("/project/review-center");
+    expect(link.attributes("href")).toContain("kind=delivery");
+    const execLink = wrapper.find('[data-testid="dl-execution-review-link"]');
+    expect(execLink.exists()).toBe(true);
+    expect(execLink.attributes("href")).toContain("/project/execution/review");
+  });
+
   it("renders the criteria verdict table with honest not-covered rows", async () => {
     const wrapper = await mountAt();
     expect(wrapper.find('[data-testid="dl-verdict-1"]').text()).toContain(

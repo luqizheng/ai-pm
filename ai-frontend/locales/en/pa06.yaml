@@ -375,3 +375,5 @@ commits:
   ctxKnowledge: Knowledge update boundary
   ctxKnowledgeText: Suggestions carry the full draft for your review; after approval they still pass quality gates and red-line confirmation.
   ctxNote: Scans are idempotent — one commit per repository is recorded once; the first scan only establishes the anchor.
+  reviewCenterLink: Acceptance decision → Review center (human accept / reject / request changes)
+  executionReviewLink: View Run execution review (S05)

@@ -213,6 +213,19 @@ pub mod init_judgement {
         }
         init_status::WAITING_FOR_HUMAN
     }
+
+    /// 项目基线：已确认版本 → 完成；存在待确认提案（pending，人工确认门）
+    /// → 等人；无提案且未确认 → 未开始。基线确认只能由人类执行
+    /// （ai.project_baseline.confirmed_by NOT NULL，结构强制）。
+    pub fn baseline_status(confirmed_version: bool, pending_proposal: bool) -> &'static str {
+        if confirmed_version {
+            return init_status::COMPLETED;
+        }
+        if pending_proposal {
+            return init_status::WAITING_FOR_HUMAN;
+        }
+        init_status::NOT_STARTED
+    }
 }
 
 /// 数据块状态位（契约 §2）。

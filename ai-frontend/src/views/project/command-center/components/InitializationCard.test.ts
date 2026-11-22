@@ -47,7 +47,9 @@ function analysisItem(): InitItemView {
     statusLabel: "待开始",
     tone: "neutral",
     required: true,
-    detail: ""
+    detail: "",
+    // 深链由 real-data 映射层注入（P1 冷启动：每步可单独进入已有页面）。
+    link: { path: "/project/settings/repositories", query: { project_id: "prj-1" } }
   };
 }
 
@@ -76,6 +78,7 @@ function data(
     completion: "incomplete",
     requiredDone: 1,
     requiredTotal: 2,
+    expanded: true,
     ...overrides
   };
 }
@@ -234,5 +237,33 @@ describe("InitializationCard", () => {
     expect(
       noProject.find('[data-testid="cc-init-analysis-action"]').exists()
     ).toBe(false);
+  });
+
+
+  it("P1 冷启动：无待办且无进行中时自动收起，仅显示摘要与展开入口", async () => {
+    const wrapper = mountCard(
+      data({ completion: "incomplete", requiredDone: 2, requiredTotal: 2, expanded: false }),
+      "prj-1"
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid='cc-init-collapsed']").exists()).toBe(
+      true
+    );
+    expect(
+      wrapper.find("[data-testid='cc-init-expand']").exists()
+    ).toBe(true);
+    // 收起不得隐藏人工待办（本夹具含 warning 行 → 后端会判 expanded，此处
+    // 直接验证收起态徽标计数呈现）。
+    expect(wrapper.text()).toContain(
+      i18n.global.t("s01.command-center.init.waitingBadge", { count: 1 })
+    );
+    await wrapper.find("[data-testid='cc-init-expand']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='cc-init-collapsed']").exists()).toBe(
+      false
+    );
+    expect(wrapper.find("[data-testid='cc-init-collapse']").exists()).toBe(
+      true
+    );
   });
 });

@@ -94,6 +94,20 @@ function openRun(runId: string) {
     :description="t('s05.execution.page.reviewDesc')"
   >
     <template #actions>
+      <!-- 统一入口：正式验收裁决在审核台（人类接受 / 拒绝 / 要求修改） -->
+      <Button
+        variant="secondary"
+        size="sm"
+        data-testid="dr-review-center"
+        @click="
+          router.push({
+            path: '/project/review-center',
+            query: { kind: 'delivery', project_id: projectId }
+          })
+        "
+      >
+        {{ t("s05.execution.review.reviewCenterAction") }}
+      </Button>
       <Button
         variant="secondary"
         size="sm"

@@ -39,6 +39,11 @@ command-center:
       running: 分析中
       link: 前往仓库设置
       noVerified: 当前项目没有已验证的仓库，请先在仓库设置中接入并核验。
+    openStep: 进入该引导步骤对应页面
+    collapsedSummary: "引导进度：必需 {done}/{total} 完成"
+    waitingBadge: "{count} 项待人工处理"
+    expand: 展开
+    collapse: 收起
   healthMeta: 更新于 {time}
   healthAction: 查看指标定义
   attentionTitle: 需关注事项

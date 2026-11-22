@@ -39,6 +39,11 @@ command-center:
       running: Analyzing
       link: Go to Repository Settings
       noVerified: This project has no verified repositories. Connect and verify one in repository settings first.
+    openStep: Open the page for this onboarding step
+    collapsedSummary: "Onboarding: {done}/{total} required complete"
+    waitingBadge: "{count} awaiting human action"
+    expand: Expand
+    collapse: Collapse
   healthMeta: Updated {time}
   healthAction: Metric Definitions
   attentionTitle: Needs Attention

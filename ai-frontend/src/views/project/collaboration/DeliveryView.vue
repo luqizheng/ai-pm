@@ -222,6 +222,30 @@ watch([projectId, () => route.query.task_id], load);
               }}
             </Badge>
           </div>
+          <!-- 三态分离导航：本页=证据呈现（只读）；正式验收裁决在审核台 -->
+          <div class="dl-head__nav">
+            <RouterLink
+              class="dl-review-link"
+              :to="{
+                path: '/project/review-center',
+                query: { kind: 'delivery', project_id: projectId }
+              }"
+              data-testid="dl-review-center-link"
+            >
+              {{ $t("pa06.delivery.reviewCenterLink") }}
+            </RouterLink>
+            <RouterLink
+              v-if="selectedTaskId"
+              class="dl-review-link"
+              :to="{
+                path: '/project/execution/review',
+                query: { project_id: projectId }
+              }"
+              data-testid="dl-execution-review-link"
+            >
+              {{ $t("pa06.delivery.executionReviewLink") }}
+            </RouterLink>
+          </div>
           <h2 class="dl-head__title">{{ $t("pa06.delivery.headline") }}</h2>
           <p class="dl-head__meta">
             {{ $t("pa06.delivery.headlineMeta") }}
@@ -366,6 +390,22 @@ watch([projectId, () => route.query.task_id], load);
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
+}
+
+.dl-head__nav {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.dl-review-link {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-micro);
+  color: var(--ws-accent);
+  text-decoration: none;
+}
+
+.dl-review-link:hover {
+  text-decoration: underline;
 }
 
 .dl-head__eyebrow-row {
