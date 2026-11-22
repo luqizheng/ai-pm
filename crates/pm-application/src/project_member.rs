@@ -128,8 +128,31 @@ pub async fn apply_member_change(
 ) -> Result<MemberChangeOutcome, ProjectMemberError> {
     let mut tx = pool.begin().await.map_err(db_err)?;
 
-    // 1) 锁租户行：把同一租户内跨项目的成员变更串行化——授权前提校验
-    //    （目标必须是租户成员）与租户撤权级联必须在同一把锁下互斥。
+    // 1) 先锁目标所属 Team 行。Team 成员移除也以该行为第一把锁，
+    //    随后才会级联删除 project_member 并写 tenant_audit_log。
+    //    必须先于 tenant 锁，否则会形成：
+    //      Grant: tenant → project → team
+    //      Remove: team → project_member → tenant(FK/audit)
+    //    的锁环（PostgreSQL deadlock）。Team 行锁保证授权资格检查与移除互斥。
+    let team_locked: Option<Uuid> = sqlx::query_scalar(
+        "SELECT t.id FROM core.team t \
+          JOIN core.team_member tm ON tm.team_id = t.id \
+         WHERE t.tenant_id = $1 AND tm.principal_id = $2 \
+         FOR UPDATE OF t",
+    )
+    .bind(tenant_id)
+    .bind(op.target())
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    if team_locked.is_none() {
+        return Err(ProjectMemberError::Conflict {
+            code: "NOT_TENANT_MEMBER",
+            message: "principal is not a member of this tenant",
+        });
+    }
+
+    // 2) 锁租户行：Team 锁已先取得，因此不会与 Team 移除路径形成反向等待。
     let tenant_locked: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM core.tenant WHERE id = $1 FOR UPDATE")
             .bind(tenant_id)
@@ -140,7 +163,7 @@ pub async fn apply_member_change(
         return Err(ProjectMemberError::NotFound("tenant not found"));
     }
 
-    // 2) 锁项目行：把同一项目内的成员变更串行化（owner 唯一性、并发授予/撤销）。
+    // 3) 锁项目行：把同一项目内的成员变更串行化（owner 唯一性、并发授予/撤销）。
     let project_locked: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
     )
