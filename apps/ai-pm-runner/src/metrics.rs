@@ -182,6 +182,32 @@ fn unix_seconds() -> u64 {
 mod tests {
     use super::{RunnerMetrics, OPERATIONS};
 
+    #[tokio::test]
+    async fn optional_exporter_serves_prometheus_http_and_rejects_other_paths() {
+        use super::serve_listener;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::{TcpListener, TcpStream};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(serve_listener(listener));
+
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        stream.write_all(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("Content-Type: text/plain; version=0.0.4"));
+        assert!(response.contains("# TYPE ai_pm_runner_mcp_operations_total counter"));
+
+        let mut missing = TcpStream::connect(address).await.unwrap();
+        missing.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut missing_response = String::new();
+        missing.read_to_string(&mut missing_response).await.unwrap();
+        assert!(missing_response.starts_with("HTTP/1.1 404 Not Found"));
+        server.abort();
+    }
+
     #[test]
     fn exposition_has_bounded_operation_labels_and_no_entity_ids() {
         let metrics = RunnerMetrics::new();
