@@ -177,11 +177,11 @@ watch(projectId, () => {
         :description="t('s01.cognition.state.noProject.description')"
       />
       <EmptyState
-        v-else-if="rows.length === 0"
+        v-else-if="!error && rows.length === 0"
         :title="t('s01.knowledge.hint.emptyPc')"
       />
 
-      <ul v-else class="product-cognition__list">
+      <ul v-else-if="rows.length > 0" class="product-cognition__list">
         <li
           v-for="row in rows"
           :key="row.object_id"
