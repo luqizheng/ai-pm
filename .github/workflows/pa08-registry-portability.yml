@@ -82,3 +82,5 @@ jobs:
         run: cargo test -p pm-application --lib run_transition_guard --locked
       - name: Run Codex reclamation path safety unit tests
         run: cargo test -p pm-infrastructure codex_executor::imp008_tests --locked
+      - name: Run PA08-06 metrics exposition unit tests
+        run: cargo test -p pm-api --lib metrics::tests --locked
