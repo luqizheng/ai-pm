@@ -1446,6 +1446,30 @@ mod imp008_tests {
 
     #[cfg(unix)]
     #[test]
+    fn mirror_lock_refuses_symlink_root() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root("mirror-lock-symlink");
+        let outside = temp_root("mirror-lock-outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("git-mirror")).unwrap();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .unwrap();
+        let executor = CodexExecutor::new(pool, "codex".into(), vec![], root.clone(), 1);
+
+        assert!(executor.lock_mirror(Uuid::new_v4()).is_err());
+        assert!(
+            std::fs::read_dir(&outside).unwrap().next().is_none(),
+            "lock acquisition must not write through a symlink"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_dir_all(&outside).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn mirror_symlink_escape_is_rejected() {
         use std::os::unix::fs::symlink;
 
