@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 dependency source migration committed; build verification pending)
+- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 VERIFIED; PA08-02 lifecycle harness in progress)
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -39,22 +39,21 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - 固定代码基线、迁移基线、测试命令和现存运行状态语义。
 - 对照 PA-07 架构文档、IMP-003 和当前代码；所有结论标记为代码事实、目标要求或待决事项。
 - 不因清理或重构改变 PA-07 已验收行为及 PA-06 授权边界。
+- 当前结果：静态盘点报告已提交；不是测试结果，也不声称验证了并发缺陷。
 
-### PA08-01 — Registry portability (foundation) — IMPLEMENTED_UNVERIFIED
+### PA08-01 — Registry portability (foundation) — VERIFIED
+- Workspace direct dependencies for `digua_common_jwt`, `digua_common_consul`, and `digua_file_sdk` use crates.io 1.7.0 with `default-features = false` and `tls-native`.
+- `.cargo/config.toml` no longer defines the Kellnr registry or rsproxy source replacement.
+- Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, point to canonical crates.io; checksums match the published index.
+- Hosted verification: [GitHub Actions Run #4](https://github.com/luqizheng/ai-pm/actions/runs/44967203110) completed successfully. Locked metadata, all four registry-source checks, and `cargo check --workspace --locked` passed.
 
-Implementation changes committed on this branch:
-- Workspace direct dependencies for `digua_common_jwt`, `digua_common_consul`, and `digua_file_sdk` now use crates.io (version 1.7.0, `default-features = false`, `tls-native`).
-- `.cargo/config.toml` no longer defines the Kellnr registry or rsproxy source replacement; crates resolve directly from crates.io.
-- Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, now point to the canonical crates.io registry and retain their existing checksums.
-- **Checksum reconciliation:** the first Hosted Runner attempt correctly rejected the private-registry checksums. The crates.io index confirms the 1.7.0 checksums differ; Cargo.lock has been corrected to the published checksums. A fresh hosted build is required.
-- **Not yet verified:** this editing session cannot run Cargo locally; the hosted workflow must prove artifact availability and a locked workspace build before status becomes VERIFIED.
-
-
-### PA08-02 — Runner lifecycle test harness
-- 为 Runner 主循环抽取可注入的时钟、Runner API/claim、executor/process、heartbeat 与 command channel 边界；避免为了测试重写运行模型。
-- 确定性覆盖完整成功路径、claim 空队列、spawn 失败、heartbeat 失败、命令失败、submit 失败、进程异常退出、Runner 重启、重复/迟到回报。
-- 断言凭据撤销与 Run 终态写入优先于进程清理；清理失败只进入清理账本，不恢复执行凭据。
-- 使用 fake clock / scripted fakes，不依赖 sleep 或真实外部 Provider。
+### PA08-02 — Runner lifecycle test harness — IN PROGRESS
+- Keep the production Runner state machine and MCP contract authoritative; add the smallest test seams needed rather than rewriting the execution model.
+- Initial integration slice added at `apps/ai-pm-runner/tests/pa08_lifecycle.rs`: production `claim_and_start` is exercised against scripted Wiremock MCP responses for ready-task discovery, claim, run-context retrieval, lease-owner routing identity, and real child-process spawn/cleanup. Empty-queue behavior is also covered.
+- CI now runs `cargo test -p ai-pm-runner --tests --locked` after the workspace build.
+- Runner does not call `pm_submit_result`: Agent submits delivery through MCP directly. Tests must not invent a Runner-side submit step; cover Agent submission separately at its protocol/contract boundary.
+- Remaining coverage: heartbeat and command progression, terminate/continue behavior under scripted responses, restart recovery/reacquire, transport and lease failures, spawn failure, and delayed/duplicate responses.
+- Next refactor target: isolate time/scheduling decisions and process lifecycle operations behind narrow seams only where needed by the remaining tests. Do not introduce production sleeps or a parallel test-only state machine.
 
 ### PA08-03 — Run transition guard
 - 盘点所有 Run 状态写入点，建立唯一应用层转换守卫；状态值必须映射现有 Run 状态机，不另造简化状态枚举。
@@ -112,4 +111,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-本文件建立 PA-08 实施范围与顺序，不代表任何 PA08 工作流已经实现或验收。逐项状态、证据、变更提交和 OPEN 项记录在同目录 README 与后续报告中。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 仍在实施中；新增测试已进入 Runner CI，但在该测试运行成功前不视为通过。其余工作流尚未开始。本文件状态以代码、测试和 CI 证据为准。
