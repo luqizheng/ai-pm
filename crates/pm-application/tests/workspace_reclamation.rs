@@ -171,3 +171,106 @@ async fn ledger_rejects_duplicate_mirror_and_invalid_worktree_shape(pool: PgPool
     .unwrap_err();
     assert!(matches!(invalid_shape, sqlx::Error::Database(_)));
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn worktree_candidate_requires_terminal_retention_and_completed_process_cleanup(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-WORKTREE-STAGE").await;
+    sqlx::query(
+        "UPDATE delivery.task_run \
+            SET finished_at = now() - interval '31 days', executor_session = 'codex:pa08-cleanup' \
+          WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        0,
+        "a Run with an executor session but no completed process cleanup must not be staged"
+    );
+
+    sqlx::query(
+        "INSERT INTO delivery.task_run_cleanup (run_id, session, executor_kind, status, completed_at) \
+         VALUES ($1, 'codex:pa08-cleanup', 'codex', 'completed', now())",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        0,
+        "candidate staging must be idempotent"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-MIRROR-STAGE").await;
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.task_run_cleanup (run_id, session, executor_kind, status) \
+         VALUES ($1, 'legacy-cleanup', 'codex', 'pending')",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        0,
+        "unfinished process cleanup must block mirror staging"
+    );
+
+    sqlx::query(
+        "UPDATE delivery.task_run_cleanup \
+            SET status = 'completed', completed_at = now() WHERE run_id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let row: (String, Option<Uuid>, String) = sqlx::query_as(
+        "SELECT resource_kind, run_id, relative_path \
+           FROM delivery.workspace_reclamation WHERE repository_id = $1",
+    )
+    .bind(fx.repository_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "repository_mirror");
+    assert!(row.1.is_none());
+    assert_eq!(row.2, format!("git-mirror/{}", fx.repository_id));
+}
