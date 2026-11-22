@@ -637,6 +637,33 @@ async fn restart_recovery_fails_closed_when_discovery_returns_503() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// A single-active-run Runner must not silently recover one Run and ignore another.
+#[tokio::test]
+async fn restart_recovery_fails_closed_when_multiple_runs_are_discovered() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "runs": [
+            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4() },
+            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4() }
+        ] })))
+        .expect(1)
+        .mount(&server).await;
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let error = match recover_inflight_run(&cfg, &client).await {
+        Err(error) => error,
+        Ok(_) => panic!("multiple discovered Runs must fail closed"),
+    };
+    assert!(error.to_string().contains("multiple in-flight Runs"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
 /// A successful RPC with a missing or malformed runs field is not proof of emptiness.
 #[tokio::test]
 async fn restart_recovery_rejects_malformed_discovery_payload() {
