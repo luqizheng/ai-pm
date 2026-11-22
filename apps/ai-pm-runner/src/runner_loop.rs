@@ -1104,6 +1104,9 @@ async fn ack(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapter;
+    use std::time::Instant;
+    use uuid::Uuid;
 
     #[test]
     fn heartbeat_guard_rejects_bad_ratios() {
@@ -1162,10 +1165,8 @@ mod tests {
         }
     }
 
-    use crate::adapter;
-    use std::time::Instant;
-    use uuid::Uuid;
-#[test]
+
+    #[test]
     fn failed_child_termination_writes_cleanup_escalation_evidence_without_lease_token() {
         let root = std::env::temp_dir().join(format!("aipm-cleanup-evidence-{}", Uuid::new_v4()));
         let run = ActiveRun {
