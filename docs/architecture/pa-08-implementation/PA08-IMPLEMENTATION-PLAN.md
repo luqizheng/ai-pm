@@ -1,6 +1,6 @@
 # PA-08 — Execution Reliability & Runtime Operations
 
-- **状态：** IMPLEMENTATION BASELINE (scope and sequence established; implementation evidence pending)
+- **状态：** IMPLEMENTATION IN PROGRESS (PA08-01 dependency source migration committed; build verification pending)
 - **日期：** 2026-11-22
 - **基线分支：** `master` at `a7a522ccf818c7eac4d4ab096ae8e447c8f2bef2`
 - **前置验收：** PA-07 `APPROVED_WITH_LIMITATIONS`
@@ -39,6 +39,14 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - 固定代码基线、迁移基线、测试命令和现存运行状态语义。
 - 对照 PA-07 架构文档、IMP-003 和当前代码；所有结论标记为代码事实、目标要求或待决事项。
 - 不因清理或重构改变 PA-07 已验收行为及 PA-06 授权边界。
+
+### PA08-01 — Registry portability (foundation) — IMPLEMENTED_UNVERIFIED
+
+Implementation changes committed on this branch:
+- Workspace direct dependencies for `digua_common_jwt`, `digua_common_consul`, and `digua_file_sdk` now use crates.io (version 1.7.0, `default-features = false`, `tls-native`).
+- `.cargo/config.toml` no longer defines the Kellnr registry or rsproxy source replacement; crates resolve directly from crates.io.
+- Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, now point to the canonical crates.io registry and retain their existing checksums.
+- **Not yet verified:** this editing session cannot run Cargo locally; the hosted workflow must prove index/artifact availability and a locked workspace build before status becomes VERIFIED.
 
 ### PA08-01 — Registry portability (foundation)
 - 将直接依赖 `digua_common_jwt`、`digua_common_consul`、`digua_file_sdk` 指向 crates.io。
