@@ -208,7 +208,7 @@ pub async fn recover_inflight_run(
     tracing::info!(
         run = %run_id,
         generation = lease_generation,
-        rerouted = %reacquired.get("rerouted_commands").and_then(Value::as_i64).unwrap_or(0),
+        rerouted = %reacquired.get("rerouted_commands").and_then(|value| value.as_i64()).unwrap_or(0),
         "recovered in-flight run after offline window with a fenced lease generation"
     );
     Ok(Some(ActiveRun {
