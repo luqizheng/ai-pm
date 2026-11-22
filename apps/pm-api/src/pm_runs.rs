@@ -71,7 +71,8 @@ async fn cleanup_needs_human(
         limit,
     )
     .await?;
-    Ok(Json(json!({ "items": items, "count": items.len() })))
+    let count = items.len();
+    Ok(Json(json!({ "items": items, "count": count })))
 }
 
 /// ACP-07 守卫：run 存在于调用者租户 + 授权者为其租户 admin 或项目 owner。
