@@ -7,6 +7,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 - [PA08-03 Run Transition Inventory](PA08-03-RUN-TRANSITION-INVENTORY.md)：状态写路径、转换矩阵、守卫实施与 PostgreSQL 证据。
 - [PA08-04 Resource Reclamation Inventory](PA08-04-RESOURCE-RECLAMATION-INVENTORY.md)：Run worktree / shared Git mirror 所有权、删除红线、进程清理账本风险与安全实施顺序。
 - [PA08-05 Product Lifecycle Inventory](PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md)：PA-07 Product 状态转换矩阵、权限/事务边界与回归测试。
+- [PA08-06 Runtime Observability Inventory](PA08-06-RUNTIME-OBSERVABILITY-INVENTORY.md)：指标范围、标签安全约束与实施进度。
 - 前置证据：[PA-07 最终验收](../pa-07-implementation/PA07-FINAL-IMPLEMENTATION-ACCEPTANCE.md)、[PA-07 当前差异核验](../pa-07-implementation/PA07-IMP-003-current-state-verification.md)。
 
 ## Workstream status
@@ -17,9 +18,9 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 | PA08-01 | Registry portability | Foundation | VERIFIED |
 | PA08-02 | Runner lifecycle test harness | P1 | VERIFIED (implemented slice; follow-up failure cases remain) |
 | PA08-03 | Run transition guard | P1 | VERIFIED |
-| PA08-04 | Workspace / mirror reclamation | P1 | RUN + MIRROR WORKERS IMPLEMENTED (DEFAULT-OFF); HOSTED VERIFYING |
-| PA08-05 | Product lifecycle integrity | P1 | IMPLEMENTED; HOSTED VERIFYING |
-| PA08-06 | Runtime observability | P2 | PLANNED |
+| PA08-04 | Workspace / mirror reclamation | P1 | VERIFIED (DEFAULT-OFF) |
+| PA08-05 | Product lifecycle integrity | P1 | VERIFIED |
+| PA08-06 | Runtime observability | P2 | PARTIAL (API aggregate metrics; remaining Worker/Runner/disk/accounting work open) |
 
 ### PA08-01 verification evidence
 
