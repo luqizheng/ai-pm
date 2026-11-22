@@ -1,0 +1,59 @@
+# PA08-06 operational alert rules.
+# Scrape pm-api /metrics with the same authenticated access policy as the API.
+# Scrape the Worker loopback exporter locally on each Worker host.
+groups:
+  - name: ai-pm-pa08-runtime
+    rules:
+      - alert: AiPmWorkerCommandPendingTooLong
+        expr: ai_pm_oldest_pending_worker_command_age_seconds > 600
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM Worker command acknowledgement is delayed"
+          description: "The oldest unacknowledged Worker command has been pending for more than 10 minutes."
+
+      - alert: AiPmRunCleanupNeedsHuman
+        expr: ai_pm_run_cleanup_backlog{status="needs_human"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM process cleanup requires human attention"
+          description: "One or more process-cleanup records are in needs_human state."
+
+      - alert: AiPmWorkspaceReclamationNeedsHuman
+        expr: ai_pm_workspace_reclamation_backlog{status="needs_human"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM workspace reclamation requires human attention"
+          description: "One or more workspace reclamation records are in needs_human state."
+
+      - alert: AiPmWorkerWorkspaceFilesystemLow
+        expr: (ai_pm_worker_workspace_filesystem_available_bytes / ai_pm_worker_workspace_filesystem_total_bytes) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM Worker workspace filesystem is low on space"
+          description: "Less than 10% of the configured Worker workspace filesystem is available."
+
+      - alert: AiPmRunnerSupervisionErrors
+        expr: increase(ai_pm_runner_supervision_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM Runner observed a supervision error"
+          description: "The Runner reported a heartbeat, command, or lease supervision error in the last five minutes."
+
+      - alert: AiPmRunnerCleanupErrors
+        expr: increase(ai_pm_runner_cleanup_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-PM Runner could not confirm Agent cleanup"
+          description: "The Runner has an orphan or lease-loss Agent termination attempt that needs investigation."

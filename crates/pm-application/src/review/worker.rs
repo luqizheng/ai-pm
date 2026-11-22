@@ -110,16 +110,38 @@ async fn recover_stuck_reviews(
     }
     let mut reclaimed = 0usize;
     for (run_id, project_id, task_id, attempt_no) in stuck {
+        let mut tx = pool.begin().await?;
+        let guard = crate::run_transition_guard::lock_and_validate_transition(
+            &mut tx,
+            project_id,
+            run_id,
+            crate::run_transition_guard::RunKind::Review,
+            crate::run_transition_guard::RunStatus::TimedOut,
+        )
+        .await;
+        match guard {
+            Ok(_) => {}
+            Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+            | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
+                crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
+            )) => {
+                tx.commit().await?;
+                continue;
+            }
+            Err(error) => return Err(ReviewError::Transition(error.to_string())),
+        }
         let updated = sqlx::query(
             "UPDATE delivery.task_run \
                 SET status = 'timed_out', outcome = 'timed_out', finished_at = now(), \
                     termination_reason = 'review_budget_exceeded' \
-              WHERE id = $1 AND status = 'running'",
+              WHERE id = $1 AND project_id = $2 AND run_kind = 'review' AND status = 'running'",
         )
         .bind(run_id)
-        .execute(pool)
+        .bind(project_id)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
+        tx.commit().await?;
         if updated != 1 {
             continue;
         }
@@ -133,17 +155,39 @@ async fn recover_stuck_reviews(
 
 /// 领取一条 queued review run → `running`（条件 UPDATE 先到先得）。
 async fn claim_review_run(pool: &PgPool) -> Result<Option<Uuid>, ReviewError> {
-    let rows = sqlx::query(
+    let mut tx = pool.begin().await?;
+    let candidate = sqlx::query_as::<_, (Uuid, Uuid)>(
+        "SELECT id, project_id FROM delivery.task_run \
+          WHERE run_kind = 'review' AND status = 'queued' \
+          ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((run_id, project_id)) = candidate else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+    crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx,
+        project_id,
+        run_id,
+        crate::run_transition_guard::RunKind::Review,
+        crate::run_transition_guard::RunStatus::Running,
+    )
+    .await
+    .map_err(|e| ReviewError::Transition(e.to_string()))?;
+    let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'running', started_at = now(), stage = NULL \
-          WHERE id = (SELECT id FROM delivery.task_run \
-                       WHERE run_kind = 'review' AND status = 'queued' \
-                       ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) \
-          RETURNING id",
+          WHERE id = $1 AND project_id = $2 AND run_kind = 'review' AND status = 'queued'",
     )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows.first().map(|row| row.get::<Uuid, _>("id")))
+    .bind(run_id)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tx.commit().await?;
+    Ok((updated == 1).then_some(run_id))
 }
 
 /// 执行一条已领取的 review run：采集 → 漂移复核 → 管线 → 落库 → 推进。
@@ -182,29 +226,45 @@ async fn run_review(
     let outcome = evaluate(&collected.input);
 
     let mut tx = pool.begin().await?;
-    // 终态条件校验：run 仍是本 worker 领取的 `running`（防重复执行覆盖）。
-    let still_running: bool =
-        sqlx::query_scalar("SELECT (status = 'running') FROM delivery.task_run WHERE id = $1")
-            .bind(review_run_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .unwrap_or(false);
-    if !still_running {
-        tx.rollback().await.ok();
-        return Ok(ReviewStep::Idle);
+    // Lock + validate before findings are persisted: timeout/failure may have won
+    // the race while the deterministic review pipeline was running.
+    let guard = crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx,
+        collected.project_id,
+        review_run_id,
+        crate::run_transition_guard::RunKind::Review,
+        crate::run_transition_guard::RunStatus::Succeeded,
+    )
+    .await;
+    match guard {
+        Ok(_) => {}
+        Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
+        )) => {
+            tx.rollback().await.ok();
+            return Ok(ReviewStep::Idle);
+        }
+        Err(error) => return Err(ReviewError::Transition(error.to_string())),
     }
 
     persist_findings(&mut tx, &collected, review_run_id, &outcome).await?;
-    sqlx::query(
+    let finalized = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'succeeded', outcome = 'succeeded', finished_at = now(), \
                 review_verdict = $2 \
-          WHERE id = $1 AND status = 'running'",
+          WHERE id = $1 AND project_id = $3 AND run_kind = 'review' AND status = 'running'",
     )
     .bind(review_run_id)
     .bind(outcome.verdict.as_str())
+    .bind(collected.project_id)
     .execute(&mut *tx)
-    .await?;
+    .await?
+    .rows_affected();
+    if finalized != 1 {
+        tx.rollback().await.ok();
+        return Ok(ReviewStep::Idle);
+    }
 
     let advance = advance_after_review(
         &mut tx,
@@ -290,14 +350,34 @@ async fn fail_review(
     let attempt_no: i32 = row.get("attempt_no");
 
     let mut tx = pool.begin().await?;
+    let guard = crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx,
+        project_id,
+        review_run_id,
+        crate::run_transition_guard::RunKind::Review,
+        crate::run_transition_guard::RunStatus::Failed,
+    )
+    .await;
+    match guard {
+        Ok(_) => {}
+        Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
+            crate::run_transition_guard::RunTransitionError::TerminalImmutable(_),
+        )) => {
+            tx.rollback().await.ok();
+            return Ok(ReviewStep::Idle);
+        }
+        Err(error) => return Err(ReviewError::Transition(error.to_string())),
+    }
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'failed', outcome = 'failed', finished_at = now(), \
                 release_reason = $2 \
-          WHERE id = $1 AND status = 'running'",
+          WHERE id = $1 AND project_id = $3 AND run_kind = 'review' AND status = 'running'",
     )
     .bind(review_run_id)
     .bind(reason.chars().take(200).collect::<String>())
+    .bind(project_id)
     .execute(&mut *tx)
     .await?
     .rows_affected();

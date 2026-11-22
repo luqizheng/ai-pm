@@ -9,7 +9,8 @@
 //!
 //! 1. **授权主体永远是真人**——`core.principal.kind='human'`；Agent 职能行
 //!    （`ai_pm` / `architect` / `developer` / `tester`）由 bootstrap 独占维护。
-//! 2. **锁序固定** `core.tenant → core.project → core.project_member`，
+//! 2. **锁序固定** `core.team → core.tenant → core.project → core.project_member`，
+//!    Team 成员移除同样先锁 `core.team`，避免级联撤权与项目授权形成死锁；
 //!    不碰 run/task 行（与 I1 的 `project → run → task` 无环）。
 //! 3. **审计与写入同事务**——审计写失败即整体回滚。
 
@@ -118,7 +119,7 @@ pub async fn list_members(
         .collect())
 }
 
-/// 执行一次成员变更（单事务：锁 → 校验 → 写 → 审计）。
+/// 执行一次成员变更（单事务：Team → tenant → project → project_member 锁 → 校验 → 写 → 审计）。
 pub async fn apply_member_change(
     pool: &PgPool,
     actor: &AuditActor,
@@ -128,8 +129,69 @@ pub async fn apply_member_change(
 ) -> Result<MemberChangeOutcome, ProjectMemberError> {
     let mut tx = pool.begin().await.map_err(db_err)?;
 
-    // 1) 锁租户行：把同一租户内跨项目的成员变更串行化——授权前提校验
-    //    （目标必须是租户成员）与租户撤权级联必须在同一把锁下互斥。
+    // 保持 Grant 的既有错误优先级：principal 不存在 / Agent 身份错误
+    // 必须先于租户成员资格检查返回。Agent 即使不是 Team 成员，也应得到
+    // AGENT_PRINCIPAL，而不是被 Team-first 锁定逻辑遮蔽为 NOT_TENANT_MEMBER。
+    if matches!(op, MemberOp::Grant { .. }) {
+        let kind: Option<String> =
+            sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+                .bind(op.target())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        let kind = kind.ok_or(ProjectMemberError::NotFound("principal not found"))?;
+        if kind != "human" {
+            return Err(ProjectMemberError::Conflict {
+                code: "AGENT_PRINCIPAL",
+                message: "only human principals can be granted project membership",
+            });
+        }
+    }
+
+    // 1) 先锁目标所属 Team 行。Team 成员移除也以该行为第一把锁，
+    //    随后才会级联删除 project_member 并写 tenant_audit_log。
+    //    必须先于 tenant 锁，否则会形成：
+    //      Grant: tenant → project → team
+    //      Remove: team → project_member → tenant(FK/audit)
+    //    的锁环（PostgreSQL deadlock）。Team 行锁保证授权资格检查与移除互斥。
+    let team_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT t.id FROM core.team t \
+         WHERE t.tenant_id = $1 \
+           AND EXISTS (SELECT 1 FROM core.team_member tm \
+                        WHERE tm.team_id = t.id AND tm.principal_id = $2) \
+         ORDER BY t.id FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(op.target())
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    if team_ids.is_empty() {
+        return Err(ProjectMemberError::Conflict {
+            code: "NOT_TENANT_MEMBER",
+            message: "principal is not a member of this tenant",
+        });
+    }
+    // FOR UPDATE 等待期间，移除事务可能已经删除 team_member 行；
+    // 在拿到 Team 锁后用新语句重新检查，避免依赖等待前的旧快照。
+    let still_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
+           JOIN core.team t ON t.id = tm.team_id \
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2)",
+    )
+    .bind(tenant_id)
+    .bind(op.target())
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    if !still_member {
+        return Err(ProjectMemberError::Conflict {
+            code: "NOT_TENANT_MEMBER",
+            message: "principal is not a member of this tenant",
+        });
+    }
+
+    // 2) 锁租户行：Team 锁已先取得，因此不会与 Team 移除路径形成反向等待。
     let tenant_locked: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM core.tenant WHERE id = $1 FOR UPDATE")
             .bind(tenant_id)
@@ -140,7 +202,7 @@ pub async fn apply_member_change(
         return Err(ProjectMemberError::NotFound("tenant not found"));
     }
 
-    // 2) 锁项目行：把同一项目内的成员变更串行化（owner 唯一性、并发授予/撤销）。
+    // 3) 锁项目行：把同一项目内的成员变更串行化（owner 唯一性、并发授予/撤销）。
     let project_locked: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
     )
@@ -153,7 +215,7 @@ pub async fn apply_member_change(
         return Err(ProjectMemberError::NotFound("project not found"));
     }
 
-    // 3) 判定调用人权限（实时查库，不读 token）。
+    // 4) 判定调用人权限（实时查库，不读 token）。
     if !is_manager(&mut tx, tenant_id, project_id, actor.principal_id).await? {
         return Err(ProjectMemberError::Forbidden("project owner required"));
     }
@@ -274,13 +336,13 @@ async fn grant(
     }
 
     // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
-    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
-    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
-    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。Team 行已由
+    // apply_member_change 在 tenant/project 锁之前锁定；此处只重读成员资格，
+    // 避免在锁序中途再次获取 Team 锁。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
            JOIN core.team t ON t.id = tm.team_id \
-          WHERE t.tenant_id = $1 AND tm.principal_id = $2 FOR UPDATE OF t)",
+          WHERE t.tenant_id = $1 AND tm.principal_id = $2)",
     )
     .bind(tenant_id)
     .bind(principal_id)
@@ -419,9 +481,9 @@ async fn transfer_owner(
     }
 
     // 成员资格前置与移除的事实源一致（P4-ORG Phase 2：core.team_member；
-    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。FOR UPDATE OF t
-    // 锁 Team 行——与成员移除管线（apply_change 先锁 core.team 行）串行化，
-    // 杜绝「移除已提交、授予晚到插入」的悬空竞态。
+    // tenant_member 只剩 provision 预登记行，不能作为授权锚）。Team 行已由
+    // apply_member_change 在 tenant/project 锁之前锁定；此处只重读成员资格，
+    // 避免在锁序中途再次获取 Team 锁。
     let is_tenant_member: Option<bool> = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM core.team_member tm \
            JOIN core.team t ON t.id = tm.team_id \

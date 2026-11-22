@@ -158,3 +158,100 @@ async fn off_mode_keeps_legacy_open_behaviour(pool: PgPool) {
         "off mode must not reject unauthenticated requests"
     );
 }
+
+fn metrics_request(token: Option<&str>) -> Request<Body> {
+    let mut builder = Request::builder().method("GET").uri("/metrics");
+    if let Some(token) = token {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    builder.body(Body::empty()).unwrap()
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn metrics_endpoint_rejects_unauthenticated_requests(pool: PgPool) {
+    let app = router_with_auth(pool, test_jwks());
+    let response = app.oneshot(metrics_request(None)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn metrics_endpoint_returns_authenticated_prometheus_exposition(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "METRICS-1".to_string(),
+            project_name: "metrics endpoint".to_string(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE core.tenant SET provider = 'lmms', external_key = '1' WHERE id = $1")
+        .bind(SYSTEM_TENANT)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal_identity (provider, tenant_id, subject, principal_id) \
+         VALUES ('lmms', $1, $2, $3)",
+    )
+    .bind(SYSTEM_TENANT)
+    .bind(boot.human_id.to_string())
+    .bind(boot.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = router_with_auth(pool, test_jwks());
+    let token = sign(
+        json!({ "sub": boot.human_id, "tid": 1, "username": "metrics-test", "roles": ["tenant_admin"], "permissions": [] }),
+        Duration::from_secs(300),
+    );
+    let response = app.oneshot(metrics_request(Some(&token))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("text/plain; version=0.0.4; charset=utf-8"),
+    );
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let exposition = String::from_utf8(body.to_vec()).unwrap();
+    assert!(exposition.contains("# HELP ai_pm_run_count"));
+    assert!(exposition.contains("# TYPE ai_pm_run_count gauge"));
+    assert!(exposition.lines().any(|line| line.starts_with("# HELP ")));
+    assert!(exposition.lines().any(|line| line.starts_with("# TYPE ")));
+    assert!(
+        exposition.lines().any(|line| {
+            let Some((metric, value)) = line.split_once(' ') else {
+                return false;
+            };
+            metric == "ai_pm_pending_worker_commands" && value.parse::<i64>().is_ok()
+        }),
+        "Prometheus sample lines must contain a metric name and numeric value"
+    );
+    assert!(
+        exposition.contains('\n'),
+        "exposition must use real newline characters"
+    );
+    assert!(
+        !exposition.contains("\\n"),
+        "exposition must not contain literal backslash-n sequences"
+    );
+    assert!(!exposition.contains(&boot.project_id.to_string()));
+    assert!(!exposition.contains(&boot.human_id.to_string()));
+    assert!(!exposition.contains("metrics-test"));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn metrics_endpoint_returns_503_when_database_scrape_fails(pool: PgPool) {
+    let app = router(pool.clone());
+    pool.close().await;
+    let response = app.oneshot(metrics_request(None)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert_eq!(text, "metrics temporarily unavailable");
+    assert!(!text.contains("database"));
+    assert!(!text.contains("password"));
+}

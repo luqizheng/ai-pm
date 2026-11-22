@@ -9,6 +9,7 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::{claim_once, DispatchMode, RunDispatchConfig};
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
+use std::time::Duration;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
@@ -226,4 +227,108 @@ async fn claim_drains_multiple_projects_without_deadlock(pool: PgPool) {
         .await
         .unwrap();
     assert!(drained.is_none());
+}
+
+/// PA08-05: Product lifecycle writes and Run claim serialize on the same Product row.
+/// If the pause commits while claim is waiting for the Product gate, the Run must
+/// remain queued rather than being dispatched under a stale Normal snapshot.
+#[sqlx::test(migrations = "../../migrations")]
+async fn product_pause_wins_against_waiting_run_claim(pool: PgPool) {
+    let (project_id, _owner) = seed_project(&pool, "PA08-PRODUCT-CLAIM-RACE").await;
+    let task_id = seed_ready_task_and_run(&pool, project_id, "product-gate-race").await;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let team_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.team (tenant_id, name) VALUES ($1, 'PA08 Claim Race Team') RETURNING id",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let product_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.product (team_id, tenant_id, key, name, status) \
+         VALUES ($1, $2, 'PA08-CLAIM-RACE', 'PA08 Claim Race', 'normal') RETURNING id",
+    )
+    .bind(team_id)
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.task_product \
+         (tenant_id, project_id, task_id, product_id, scope, created_by) \
+         VALUES ($1, $2, $3, $4, 'implementation', $5)",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(task_id)
+    .bind(product_id)
+    .bind(_owner)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Hold the Product row as a lifecycle transaction would. The claim reaches
+    // product_gate_denied only after Project/Run/Task locks and must wait here.
+    let mut lifecycle_tx = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM core.product WHERE id = $1 FOR UPDATE")
+        .bind(product_id)
+        .fetch_one(&mut *lifecycle_tx)
+        .await
+        .unwrap();
+
+    let claim_pool = pool.clone();
+    let mut claim = tokio::spawn(async move {
+        let cfg = RunDispatchConfig::from_env();
+        claim_once(
+            &claim_pool,
+            "pa08-product-gate-race",
+            &cfg,
+            DispatchMode::On,
+        )
+        .await
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), &mut claim)
+            .await
+            .is_err(),
+        "claim should wait for the Product lifecycle row lock"
+    );
+
+    sqlx::query("UPDATE core.product SET status = 'suspended', updated_at = now() WHERE id = $1")
+        .bind(product_id)
+        .execute(&mut *lifecycle_tx)
+        .await
+        .unwrap();
+    lifecycle_tx.commit().await.unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(10), claim)
+        .await
+        .expect("claim should finish after Product lock release")
+        .expect("claim task should not panic")
+        .unwrap()
+        .expect("blocked Run should be explicitly skipped");
+    assert_eq!(
+        result.kind,
+        pm_application::run_dispatch::ClaimKind::Skipped
+    );
+    assert!(
+        result.lease_token.is_none(),
+        "a Run linked to a suspended Product must not receive a lease"
+    );
+
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE task_id = $1")
+            .bind(task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        run_status, "queued",
+        "gate denial must not mutate Run state"
+    );
 }

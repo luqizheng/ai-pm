@@ -527,7 +527,7 @@ async fn claim_core_in_project(
     .await?;
 
     let Some(task) = task else {
-        cancel_run(&mut tx, run_id, "task_missing").await?;
+        cancel_run(&mut tx, project_id, run_id, "task_missing").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
             return Err(RunDispatchError::TaskNotFound);
@@ -550,7 +550,7 @@ async fn claim_core_in_project(
         .map(|s| s.is_terminal())
         .unwrap_or(true);
     if terminal_or_gone {
-        cancel_run(&mut tx, run_id, "task_terminal").await?;
+        cancel_run(&mut tx, project_id, run_id, "task_terminal").await?;
         tx.commit().await?;
         if opts.task_filter.is_some() {
             return Err(RunDispatchError::TaskNotReady(task_state));
@@ -626,7 +626,7 @@ async fn claim_core_in_project(
                 .await?;
                 task_state = "ready".to_string();
             }
-            requeue_for_redispatch(&mut tx, run_id).await?;
+            requeue_for_redispatch(&mut tx, project_id, run_id).await?;
             audit_run(
                 &mut tx,
                 project_id,
@@ -916,6 +916,15 @@ async fn claim_core_in_project(
         LeaseOwner::Client { .. } => "spawn",
     };
 
+    crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx,
+        project_id,
+        run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::Claimed,
+    )
+    .await
+    .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let lease_generation: i32 = sqlx::query_scalar(
         "UPDATE delivery.task_run \
             SET status = 'claimed', stage = 'dispatch', claimed_at = now(), \
@@ -929,7 +938,7 @@ async fn claim_core_in_project(
                 executor_id = COALESCE($9, executor_id), \
                 execution_mode = $10,\
                 lease_client_id = $11 \
-          WHERE id = $1 \
+          WHERE id = $1 AND project_id = $12 AND status = 'queued' \
          RETURNING lease_generation",
     )
     .bind(run_id)
@@ -949,6 +958,7 @@ async fn claim_core_in_project(
         LeaseOwner::Client { device_id } => Some(device_id),
         _ => None,
     })
+    .bind(project_id)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -1009,7 +1019,7 @@ async fn claim_core_in_project(
 
     // Probe 模式：立即释放回 queued（不启动执行器）。
     if opts.mode == DispatchMode::Probe {
-        requeue_for_redispatch(&mut tx, run_id).await?;
+        requeue_for_redispatch(&mut tx, project_id, run_id).await?;
         sqlx::query("UPDATE delivery.task_run SET release_reason = 'probe_release' WHERE id = $1")
             .bind(run_id)
             .execute(&mut *tx)

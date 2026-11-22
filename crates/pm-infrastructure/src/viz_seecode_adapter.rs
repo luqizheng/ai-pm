@@ -51,7 +51,10 @@ impl SeeCodeAdapter {
             args,
             timeout: self.timeout,
             max_output_bytes: self.max_output_bytes,
-            extra_env: vec![],
+            extra_env: vec![(
+                "SEECODE_FONT_CACHE".to_string(),
+                font_cache_dir().to_string_lossy().into_owned(),
+            )],
             workdir: Some(workdir),
             payload_file: None,
         }
@@ -81,6 +84,16 @@ fn node_program() -> String {
     "node".to_string()
 }
 
+/// SeeCode CLI 的字体字节缓存目录（宿主视角的稳定路径）。
+///
+/// Google Fonts 对同一 css2 URL 每次请求返回字节不同的子集，会把「同输入
+/// 必须同输出」的渲染契约打破（回归基线的前提）。CLI 端按 URL 缓存字体
+/// 字节；而沙箱把子进程的 TMPDIR/TMP/TEMP/HOME 全部映射进每次渲染即焚的
+/// workdir，所以必须用 extra_env 把缓存目录显式钉在宿主临时目录上。
+fn font_cache_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("seecode-font-cache")
+}
+
 /// 从 CLI 的 JSON 单行输出里取 `out` 字段（相对/绝对路径都接受）。
 fn parse_out_path(stdout: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(stdout);
@@ -89,7 +102,10 @@ fn parse_out_path(stdout: &[u8]) -> Option<String> {
     if value.get("ok").and_then(|v| v.as_bool()) == Some(false) {
         return None;
     }
-    value.get("out").and_then(|v| v.as_str()).map(str::to_string)
+    value
+        .get("out")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }
 
 #[async_trait]
@@ -117,8 +133,8 @@ impl RenderAdapter for SeeCodeAdapter {
         }
         // 契约 trait 是同步的（八项断言在单测里同步跑），而子进程必须异步——
         // 用独立线程跑当前 runtime 的 block_on，避免与调用方 runtime 冲突。
-        let compiled = seecode_compiler::compile(spec)
-            .map_err(|e| RenderError::Rejected(e.to_string()))?;
+        let compiled =
+            seecode_compiler::compile(spec).map_err(|e| RenderError::Rejected(e.to_string()))?;
         let adapter = SeeCodeAdapter {
             cli: self.cli.clone(),
             timeout: self.timeout,
@@ -173,13 +189,12 @@ impl SeeCodeAdapter {
             .await
             .map_err(map_sandbox_error)?;
 
-        let html_path = parse_out_path(&render_stdout)
-            .ok_or_else(|| {
-                RenderError::Failed(format!(
-                    "render 未返回 out 路径：{}",
-                    String::from_utf8_lossy(&render_stdout)
-                ))
-            })?;
+        let html_path = parse_out_path(&render_stdout).ok_or_else(|| {
+            RenderError::Failed(format!(
+                "render 未返回 out 路径：{}",
+                String::from_utf8_lossy(&render_stdout)
+            ))
+        })?;
         let html_name = std::path::Path::new(&html_path)
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
@@ -209,9 +224,8 @@ impl SeeCodeAdapter {
                 .unwrap_or_else(|| "diagram".to_string())
                 + ".svg",
         );
-        let content = std::fs::read_to_string(&svg_path).map_err(|e| {
-            RenderError::Failed(format!("read {} failed: {e}", svg_path.display()))
-        })?;
+        let content = std::fs::read_to_string(&svg_path)
+            .map_err(|e| RenderError::Failed(format!("read {} failed: {e}", svg_path.display())))?;
 
         Ok(RenderOutput {
             format: OutputFormat::Svg,

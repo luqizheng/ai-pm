@@ -4,6 +4,8 @@
 
 use std::sync::Arc;
 
+mod metrics;
+
 use pm_ai::model::AnalysisModel;
 use pm_ai::orchestrator::{HandleOutcome, Orchestrator};
 use pm_application::project_import::{import_id_for_event, run_import_job};
@@ -50,6 +52,18 @@ async fn main() {
         .await
         .expect("database pool");
 
+    let metrics = Arc::new(metrics::WorkerMetrics::new());
+    let metrics_addr =
+        std::env::var("AI_PM_WORKER_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9465".to_string());
+    {
+        let metrics = metrics.clone();
+        tokio::spawn(async move {
+            if let Err(error) = metrics::serve(&metrics_addr, metrics).await {
+                tracing::error!(%error, "worker metrics listener stopped");
+            }
+        });
+    }
+
     let policy_path =
         std::env::var("AI_PM_POLICY_FILE").unwrap_or_else(|_| DEFAULT_POLICY_FILE.to_string());
     let policy_yaml = std::fs::read_to_string(&policy_path).unwrap_or_else(|e| {
@@ -90,10 +104,14 @@ async fn main() {
     // 第二条循环：冷启动 `repo_import` job，与 `ai_analysis` 互不阻塞。
     let repo_pool = pool.clone();
     let repo_worker_id = worker_id.clone();
+    let repo_metrics = metrics.clone();
     tokio::spawn(async move {
         loop {
             match job_queue::claim(&repo_pool, "repo_import", &repo_worker_id, LEASE_SECS).await {
-                Some(job) => handle_repo_job(&repo_pool, &job).await,
+                Some(job) => {
+                    repo_metrics.repo_import_jobs_claimed();
+                    handle_repo_job(&repo_pool, &job).await
+                }
                 None => {
                     tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
                 }
@@ -128,19 +146,63 @@ async fn main() {
     // 领取即 start 失败退避，不伪造执行成功）。
     let dispatch_pool = pool.clone();
     let dispatch_worker_id = worker_id.clone();
+    let dispatch_metrics = metrics.clone();
     tokio::spawn(async move {
         let mut stats_ticks = 0u32;
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
         let mode = pm_application::run_dispatch::DispatchMode::from_env();
+        let executor_mode = std::env::var("AI_PM_RUN_EXECUTOR");
+        let codex_executor_enabled = matches!(executor_mode.as_deref(), Ok("codex") | Ok("mock"));
         let run_executor: Arc<dyn pm_application::run_dispatch::RunExecutor> =
-            match std::env::var("AI_PM_RUN_EXECUTOR").as_deref() {
-                Ok("codex") | Ok("mock") => {
-                    Arc::new(pm_infrastructure::codex_executor::CodexExecutor::from_env(
-                        dispatch_pool.clone(),
-                    ))
-                }
-                _ => Arc::new(pm_application::run_dispatch::NoopExecutor),
+            if codex_executor_enabled {
+                Arc::new(pm_infrastructure::codex_executor::CodexExecutor::from_env(
+                    dispatch_pool.clone(),
+                ))
+            } else {
+                Arc::new(pm_application::run_dispatch::NoopExecutor)
             };
+        // PA08-04: discovery is metadata-only and always safe to run. Actual
+        // filesystem deletion requires the explicit opt-in below and a Codex
+        // executor; the default is non-destructive discovery (stage ledger candidates, delete no files).
+        let reclamation_requested = std::env::var("AI_PM_WORKSPACE_RECLAMATION_ENABLED")
+            .map(|value| value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        // Local worktrees are host-owned. Deletion is enabled only when the
+        // operator explicitly confirms a shared workspace root (or a single
+        // worker owns the entire workspace volume).
+        let reclamation_shared_root = std::env::var("AI_PM_WORKSPACE_RECLAMATION_SHARED_ROOT")
+            .map(|value| value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let reclamation_root_is_absolute =
+            std::path::Path::new(&pm_application::run_dispatch::workspace_root_from_env())
+                .is_absolute();
+        let reclamation_enabled =
+            reclamation_requested && reclamation_shared_root && reclamation_root_is_absolute;
+        if reclamation_requested && !reclamation_enabled {
+            tracing::warn!(
+                "workspace reclamation requested without shared-root acknowledgement and absolute workspace root; deletion remains disabled"
+            );
+        }
+        let reclamation_retention_days =
+            std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
+                .ok()
+                .and_then(|value| value.parse::<i32>().ok())
+                .filter(|days| *days >= 0)
+                .unwrap_or(pm_application::workspace_reclamation::DEFAULT_RETENTION_DAYS);
+        let workspace_reclaimer: Option<
+            Arc<dyn pm_application::workspace_reclamation::WorkspaceReclaimer>,
+        > = if codex_executor_enabled {
+            Some(Arc::new(
+                pm_infrastructure::codex_executor::CodexExecutor::from_env(dispatch_pool.clone()),
+            ))
+        } else {
+            None
+        };
+        tracing::info!(
+            enabled = reclamation_enabled,
+            retention_days = reclamation_retention_days,
+            "workspace reclamation policy loaded (deletion defaults off)"
+        );
         // 启动时一次孤儿 reconcile（T-030 §3 异常路径②）；失败只告警。
         match pm_application::run_executor::reconcile_orphans(
             &dispatch_pool,
@@ -157,6 +219,7 @@ async fn main() {
         }
         tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, executor = run_executor.kind(), "run dispatch loop started");
         loop {
+            dispatch_metrics.run_dispatch_claim_attempt();
             match pm_application::run_executor::claim_and_start(
                 &dispatch_pool,
                 run_executor.as_ref(),
@@ -168,6 +231,7 @@ async fn main() {
             {
                 Ok(_) => {}
                 Err(e) => {
+                    dispatch_metrics.run_dispatch_error();
                     tracing::warn!(error = %e, "claim_and_start failed; backing off");
                 }
             }
@@ -181,6 +245,7 @@ async fn main() {
             {
                 Ok(_) => {}
                 Err(e) => {
+                    dispatch_metrics.run_poll_error();
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
@@ -204,7 +269,10 @@ async fn main() {
                         tracing::info!(cleared = ok, failed, "run cleanup round");
                     }
                 }
-                Err(e) => tracing::warn!(error = %e, "run cleanup round failed"),
+                Err(e) => {
+                    dispatch_metrics.cleanup_error();
+                    tracing::warn!(error = %e, "run cleanup round failed");
+                }
             }
             // T-032 D3 旧路径保留为兜底：撤凭据前已遗留的终态行（无账本行的
             // 历史窗口——终止顺序反转引入的窗口，reconcile_orphans 不覆盖终态行）。
@@ -214,6 +282,7 @@ async fn main() {
             )
             .await
             {
+                dispatch_metrics.cleanup_error();
                 tracing::warn!(error = %e, "finished-run cleanup failed");
             }
             // F-5（审计 2026-11-07）：通信面可观测——每 ~30s 一次聚合日志
@@ -241,6 +310,74 @@ async fn main() {
                         }
                     }
                     Err(e) => tracing::warn!(error = %e, "comm_overview failed"),
+                }
+
+                match pm_application::workspace_reclamation::stage_candidates(
+                    &dispatch_pool,
+                    reclamation_retention_days,
+                )
+                .await
+                {
+                    Ok(staged) if staged > 0 => {
+                        tracing::info!(staged, "workspace reclamation candidates staged");
+                    }
+                    Ok(_) => {}
+                    Err(error) => tracing::warn!(
+                        error = %error,
+                        "workspace reclamation candidate discovery failed"
+                    ),
+                }
+
+                if reclamation_enabled {
+                    if let Some(reclaimer) = workspace_reclaimer.as_deref() {
+                        match pm_application::workspace_reclamation::run_worktree_reclamation_round(
+                            &dispatch_pool,
+                            reclaimer,
+                            reclamation_retention_days,
+                        )
+                        .await
+                        {
+                            Ok(report) if report.claimed > 0 => tracing::info!(
+                                claimed = report.claimed,
+                                completed = report.completed,
+                                failed = report.failed,
+                                skipped = report.skipped,
+                                reclaimed_bytes = report.reclaimed_bytes,
+                                "Run worktree reclamation round"
+                            ),
+                            Ok(_) => {}
+                            Err(error) => tracing::warn!(
+                                error = %error,
+                                "Run worktree reclamation round failed"
+                            ),
+                        }
+
+                        match pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+                            &dispatch_pool,
+                            reclaimer,
+                            reclamation_retention_days,
+                        )
+                        .await
+                        {
+                            Ok(report) if report.claimed > 0 => tracing::info!(
+                                claimed = report.claimed,
+                                completed = report.completed,
+                                failed = report.failed,
+                                skipped = report.skipped,
+                                reclaimed_bytes = report.reclaimed_bytes,
+                                "Repository mirror reclamation round"
+                            ),
+                            Ok(_) => {}
+                            Err(error) => tracing::warn!(
+                                error = %error,
+                                "Repository mirror reclamation round failed"
+                            ),
+                        }
+                    } else {
+                        tracing::warn!(
+                            "workspace reclamation enabled but Codex executor is not configured"
+                        );
+                    }
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
@@ -313,7 +450,10 @@ async fn main() {
 
     loop {
         match job_queue::claim(&pool, "ai_analysis", &worker_id, LEASE_SECS).await {
-            Some(job) => handle_job(&orchestrator, &job).await,
+            Some(job) => {
+                metrics.ai_analysis_jobs_claimed();
+                handle_job(&orchestrator, &job).await
+            }
             None => tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await,
         }
     }

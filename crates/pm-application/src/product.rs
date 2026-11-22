@@ -9,9 +9,11 @@
 //!   先指定继任者（appoint）再变更；Owner 离开 Team 不自动撤销；无 Owner 态由
 //!   Team Owner 恢复性任命（唯一显式 Owner 授予通道，第一轮；Member 任命/降级
 //!   Owner 归 PA §8-3 OPEN，不实现）。
-//! - **生命周期** {active, abandoned}：Owner 决定 abandon/restart；abandoned 后
-//!   [`assert_product_active`] 拦截业务写入（fail-closed），历史读取不拦；对关联
-//!   Project 与在飞 Agent Run 零触碰。
+//! - **生命周期** {normal, suspended, resuming, archived}：Owner 可 abandon、
+//!   suspend、resume、complete_resume；restart 仅是 resuming → normal 的兼容别名；
+//!   恢复必须经过 suspended → resuming → normal，
+//!   archived 不提供常规恢复；[`assert_product_active`] 对非 normal 状态 fail-closed，
+//!   历史读取不拦；状态变化不批量改写关联 Project / Task / Run。
 //! - 审计：`product_member.added/removed/role_changed` + `product.lifecycle_changed`
 //!   （governance.tenant_audit_log 管线）。
 //!
@@ -220,12 +222,11 @@ pub async fn create_product(
     let mut tx = pool.begin().await?;
 
     // Team 锚与调用者身份（Team Owner 独占）。
-    let team: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT tenant_id FROM core.team WHERE id = $1 FOR UPDATE",
-    )
-    .bind(team_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let team: Option<(Uuid,)> =
+        sqlx::query_as("SELECT tenant_id FROM core.team WHERE id = $1 FOR UPDATE")
+            .bind(team_id)
+            .fetch_optional(&mut *tx)
+            .await?;
     let Some((tenant_id,)) = team else {
         return Err(ProductError::NotFound);
     };
@@ -325,7 +326,10 @@ pub async fn create_product(
         team_id,
         key: product_key,
         name: name.to_string(),
-        description: description.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
+        description: description
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
         status: "normal".to_string(),
         updated_at,
     })
@@ -431,8 +435,13 @@ pub async fn list_product_members(
 
 /// 成员变更 DML（锁内裁决产出）。
 enum ProductWrite {
-    Add { role: &'static str, granted_by: Uuid },
-    SetRole { role: &'static str },
+    Add {
+        role: &'static str,
+        granted_by: Uuid,
+    },
+    SetRole {
+        role: &'static str,
+    },
     Remove,
 }
 
@@ -463,10 +472,9 @@ fn rule(code: &str, message: &str) -> (String, String) {
 }
 
 /// 锁内裁决回调：快照 → (DML, 审计行)；Err = (错误码, 稳定消息) 整体回滚。
-type PlanFn<'a> = &'a (dyn Fn(&ChangeSnapshot)
-    -> Result<(Vec<ProductWrite>, Vec<ProductAuditLine>), (String, String)>
-    + Send
-    + Sync);
+type PlanFn<'a> = &'a (dyn Fn(&ChangeSnapshot) -> Result<(Vec<ProductWrite>, Vec<ProductAuditLine>), (String, String)>
+         + Send
+         + Sync);
 
 /// 变更事务管线（对齐 Team 面锁序）：锁 product 行（同 Product 变更串行化）
 /// → 锁调用者/目标 product_member 行 + owner 计数 + Team Owner 标志 → `plan`
@@ -533,8 +541,7 @@ async fn apply_member_change(
         tenant_id,
     };
 
-    let (writes, audits) =
-        plan(&snapshot).map_err(|(c, m)| rule_rejected(c, m))?;
+    let (writes, audits) = plan(&snapshot).map_err(|(c, m)| rule_rejected(c, m))?;
 
     // 3) DML。
     for w in writes {
@@ -612,42 +619,55 @@ pub async fn add_product_member(
     product_id: Uuid,
     principal_id: Uuid,
 ) -> Result<(), ProductError> {
-    apply_member_change(pool, actor, actor_principal_id, product_id, principal_id, &|s| {
-        if s.actor_role.is_none() && !s.actor_is_team_owner {
-            return Err(rule("not_a_product_member", "not a product member"));
-        }
-        if s.target_role.is_some() {
-            return Err(rule(
-                "already_product_member",
-                "principal is already a product member",
-            ));
-        }
-        // 恢复性任命（PA §4）：无 Owner 态 + Team Owner → 直接落 Owner 行。
-        if s.owner_count == 0 && s.actor_is_team_owner {
-            return Ok((
+    apply_member_change(
+        pool,
+        actor,
+        actor_principal_id,
+        product_id,
+        principal_id,
+        &|s| {
+            if s.actor_role.is_none() && !s.actor_is_team_owner {
+                return Err(rule("not_a_product_member", "not a product member"));
+            }
+            if s.target_role.is_some() {
+                return Err(rule(
+                    "already_product_member",
+                    "principal is already a product member",
+                ));
+            }
+            // 恢复性任命（PA §4）：无 Owner 态 + Team Owner → 直接落 Owner 行。
+            if s.owner_count == 0 && s.actor_is_team_owner {
+                return Ok((
+                    vec![ProductWrite::Add {
+                        role: "owner",
+                        granted_by: actor_principal_id,
+                    }],
+                    vec![ProductAuditLine {
+                        action: "product_member.role_changed",
+                        before_role: None,
+                        after: Some(AfterRole {
+                            role: "owner",
+                            via: "team_owner_restore",
+                        }),
+                    }],
+                ));
+            }
+            Ok((
                 vec![ProductWrite::Add {
-                    role: "owner",
+                    role: "member",
                     granted_by: actor_principal_id,
                 }],
                 vec![ProductAuditLine {
-                    action: "product_member.role_changed",
+                    action: "product_member.added",
                     before_role: None,
-                    after: Some(AfterRole { role: "owner", via: "team_owner_restore" }),
+                    after: Some(AfterRole {
+                        role: "member",
+                        via: "member_added",
+                    }),
                 }],
-            ));
-        }
-        Ok((
-            vec![ProductWrite::Add {
-                role: "member",
-                granted_by: actor_principal_id,
-            }],
-            vec![ProductAuditLine {
-                action: "product_member.added",
-                before_role: None,
-                after: Some(AfterRole { role: "member", via: "member_added" }),
-            }],
-        ))
-    })
+            ))
+        },
+    )
     .await
 }
 
@@ -660,31 +680,38 @@ pub async fn remove_product_member(
     product_id: Uuid,
     target_id: Uuid,
 ) -> Result<(), ProductError> {
-    apply_member_change(pool, actor, actor_principal_id, product_id, target_id, &|s| {
-        let Some(target) = s.target_role else {
-            return Err(rule("product_member_not_found", "product member not found"));
-        };
-        if target == "owner" {
-            // OPEN-3：Owner 移除第一轮仅 Team Owner。
-            if !s.actor_is_team_owner {
-                return Err(rule(
-                    "team_owner_required",
-                    "removing a product owner requires the team owner",
-                ));
+    apply_member_change(
+        pool,
+        actor,
+        actor_principal_id,
+        product_id,
+        target_id,
+        &|s| {
+            let Some(target) = s.target_role else {
+                return Err(rule("product_member_not_found", "product member not found"));
+            };
+            if target == "owner" {
+                // OPEN-3：Owner 移除第一轮仅 Team Owner。
+                if !s.actor_is_team_owner {
+                    return Err(rule(
+                        "team_owner_required",
+                        "removing a product owner requires the team owner",
+                    ));
+                }
+                if s.owner_count <= 1 {
+                    return Err(rule("last_owner", "the last owner cannot be removed"));
+                }
             }
-            if s.owner_count <= 1 {
-                return Err(rule("last_owner", "the last owner cannot be removed"));
-            }
-        }
-        Ok((
-            vec![ProductWrite::Remove],
-            vec![ProductAuditLine {
-                action: "product_member.removed",
-                before_role: Some(target),
-                after: None,
-            }],
-        ))
-    })
+            Ok((
+                vec![ProductWrite::Remove],
+                vec![ProductAuditLine {
+                    action: "product_member.removed",
+                    before_role: Some(target),
+                    after: None,
+                }],
+            ))
+        },
+    )
     .await
 }
 
@@ -698,33 +725,43 @@ pub async fn appoint_product_owner(
     product_id: Uuid,
     target_id: Uuid,
 ) -> Result<(), ProductError> {
-    apply_member_change(pool, actor, actor_principal_id, product_id, target_id, &|s| {
-        let authorized = s.actor_role == Some("owner")
-            || (s.owner_count == 0 && s.actor_is_team_owner);
-        if !authorized {
-            return Err(rule(
-                "product_owner_required",
-                "appointing an owner requires a product owner (or team owner to restore)",
-            ));
-        }
-        let Some("member") = s.target_role else {
-            if s.target_role == Some("owner") {
-                return Err(rule("already_owner", "target is already an owner"));
+    apply_member_change(
+        pool,
+        actor,
+        actor_principal_id,
+        product_id,
+        target_id,
+        &|s| {
+            let authorized =
+                s.actor_role == Some("owner") || (s.owner_count == 0 && s.actor_is_team_owner);
+            if !authorized {
+                return Err(rule(
+                    "product_owner_required",
+                    "appointing an owner requires a product owner (or team owner to restore)",
+                ));
             }
-            return Err(rule("product_member_not_found", "product member not found"));
-        };
-        if target_id == actor_principal_id && s.actor_role == Some("owner") {
-            return Err(rule("already_owner", "caller is already an owner"));
-        }
-        Ok((
-            vec![ProductWrite::SetRole { role: "owner" }],
-            vec![ProductAuditLine {
-                action: "product_member.role_changed",
-                before_role: Some("member"),
-                after: Some(AfterRole { role: "owner", via: "succession_appointment" }),
-            }],
-        ))
-    })
+            let Some("member") = s.target_role else {
+                if s.target_role == Some("owner") {
+                    return Err(rule("already_owner", "target is already an owner"));
+                }
+                return Err(rule("product_member_not_found", "product member not found"));
+            };
+            if target_id == actor_principal_id && s.actor_role == Some("owner") {
+                return Err(rule("already_owner", "caller is already an owner"));
+            }
+            Ok((
+                vec![ProductWrite::SetRole { role: "owner" }],
+                vec![ProductAuditLine {
+                    action: "product_member.role_changed",
+                    before_role: Some("member"),
+                    after: Some(AfterRole {
+                        role: "owner",
+                        via: "succession_appointment",
+                    }),
+                }],
+            ))
+        },
+    )
     .await
 }
 
@@ -736,32 +773,42 @@ pub async fn demote_product_owner(
     product_id: Uuid,
     target_id: Uuid,
 ) -> Result<(), ProductError> {
-    apply_member_change(pool, actor, actor_principal_id, product_id, target_id, &|s| {
-        // 权限检查先行（不给无权者泄露目标状态）。
-        if !s.actor_is_team_owner {
-            return Err(rule(
-                "team_owner_required",
-                "demoting a product owner requires the team owner",
-            ));
-        }
-        let Some("owner") = s.target_role else {
-            if s.target_role.is_some() {
-                return Err(rule("already_member", "target is already a member"));
+    apply_member_change(
+        pool,
+        actor,
+        actor_principal_id,
+        product_id,
+        target_id,
+        &|s| {
+            // 权限检查先行（不给无权者泄露目标状态）。
+            if !s.actor_is_team_owner {
+                return Err(rule(
+                    "team_owner_required",
+                    "demoting a product owner requires the team owner",
+                ));
             }
-            return Err(rule("product_member_not_found", "product member not found"));
-        };
-        if s.owner_count <= 1 {
-            return Err(rule("last_owner", "the last owner cannot be demoted"));
-        }
-        Ok((
-            vec![ProductWrite::SetRole { role: "member" }],
-            vec![ProductAuditLine {
-                action: "product_member.role_changed",
-                before_role: Some("owner"),
-                after: Some(AfterRole { role: "member", via: "team_owner_demote" }),
-            }],
-        ))
-    })
+            let Some("owner") = s.target_role else {
+                if s.target_role.is_some() {
+                    return Err(rule("already_member", "target is already a member"));
+                }
+                return Err(rule("product_member_not_found", "product member not found"));
+            };
+            if s.owner_count <= 1 {
+                return Err(rule("last_owner", "the last owner cannot be demoted"));
+            }
+            Ok((
+                vec![ProductWrite::SetRole { role: "member" }],
+                vec![ProductAuditLine {
+                    action: "product_member.role_changed",
+                    before_role: Some("owner"),
+                    after: Some(AfterRole {
+                        role: "member",
+                        via: "team_owner_demote",
+                    }),
+                }],
+            ))
+        },
+    )
     .await
 }
 
@@ -777,14 +824,14 @@ pub async fn set_product_lifecycle(
     product_id: Uuid,
     action: &str,
 ) -> Result<ProductProfile, ProductError> {
-    // PA07-IMP-004（0044 四值化）：abandon→archived 终态（PA-07 §12 不提供
-    // 常规恢复）；suspend/resume/complete_resume 承接 §11 的暂停-评估-恢复
-    // 三段；restart 语义收敛为 suspended/resuming → normal 的再激活。
+    // PA-07 §§4/11/12：暂停与恢复必须经过 Suspended → Resuming → Normal；
+    // Archived 保留历史且不提供常规恢复。迁移 0044 保留的 restart action
+    // 仅作为 Resuming → Normal 的兼容别名，不得从 Suspended/Archived 直达 Normal。
     let target_status = match action {
         "abandon" => "archived",
         "suspend" => "suspended",
         "resume" => "resuming",
-        "restart" | "complete_resume" => "normal",
+        "complete_resume" | "restart" => "normal",
         _ => {
             return Err(ProductError::Validation(
                 "action must be abandon, suspend, resume, complete_resume or restart",
@@ -793,14 +840,21 @@ pub async fn set_product_lifecycle(
     };
     let mut tx = pool.begin().await?;
 
-    let locked: Option<(Uuid, String, String, Option<String>, Uuid, String, DateTime<Utc>)> =
-        sqlx::query_as(
-            "SELECT tenant_id, name, status, description, team_id, key, updated_at \
+    let locked: Option<(
+        Uuid,
+        String,
+        String,
+        Option<String>,
+        Uuid,
+        String,
+        DateTime<Utc>,
+    )> = sqlx::query_as(
+        "SELECT tenant_id, name, status, description, team_id, key, updated_at \
                FROM core.product WHERE id = $1 FOR UPDATE",
-        )
-        .bind(product_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    )
+    .bind(product_id)
+    .fetch_optional(&mut *tx)
+    .await?;
     let Some((tenant_id, name, status, description, team_id, product_key, updated_at)) = locked
     else {
         return Err(ProductError::NotFound);
@@ -818,6 +872,20 @@ pub async fn set_product_lifecycle(
     }
     if status == target_status {
         return Err(ProductError::Conflict("product_lifecycle_noop"));
+    }
+    let transition_allowed = matches!(
+        (status.as_str(), action),
+        ("normal", "suspend" | "abandon")
+            | ("suspended", "resume" | "abandon")
+            | (
+                "resuming",
+                "suspend" | "complete_resume" | "restart" | "abandon"
+            )
+    );
+    if !transition_allowed {
+        return Err(ProductError::Conflict(
+            "product_lifecycle_transition_invalid",
+        ));
     }
 
     sqlx::query("UPDATE core.product SET status = $2, updated_at = now() WHERE id = $1")
@@ -861,12 +929,11 @@ pub async fn assert_product_active(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     product_id: Uuid,
 ) -> Result<(), ProductError> {
-    let status: Option<String> = sqlx::query_scalar(
-        "SELECT status FROM core.product WHERE id = $1 FOR UPDATE",
-    )
-    .bind(product_id)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1 FOR UPDATE")
+            .bind(product_id)
+            .fetch_optional(&mut **tx)
+            .await?;
     match status.as_deref() {
         Some("normal") => Ok(()),
         Some(_) => Err(ProductError::Conflict("product_abandoned")),
@@ -897,12 +964,11 @@ pub async fn create_product_link(
 ) -> Result<Uuid, ProductError> {
     let mut tx = pool.begin().await?;
 
-    let product: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT tenant_id, status FROM core.product WHERE id = $1 FOR UPDATE",
-    )
-    .bind(product_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let product: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT tenant_id, status FROM core.product WHERE id = $1 FOR UPDATE")
+            .bind(product_id)
+            .fetch_optional(&mut *tx)
+            .await?;
     let Some((tenant_id, status)) = product else {
         return Err(ProductError::NotFound);
     };

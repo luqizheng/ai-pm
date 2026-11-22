@@ -1,0 +1,214 @@
+name: PA-08 Registry Portability
+
+concurrency:
+  group: pa08-registry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/config.toml"
+      - "crates/**"
+      - "apps/**"
+      - ".github/workflows/pa08-registry-portability.yml"
+  push:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/config.toml"
+      - "crates/**"
+      - "apps/**"
+      - ".github/workflows/pa08-registry-portability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+
+jobs:
+  windows-mirror-lock:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Windows OS-backed mirror lock semantics
+        run: cargo test -p pm-infrastructure --lib active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale --locked
+      - name: Check Runner Windows process cleanup compilation
+        run: cargo check -p ai-pm-runner --locked
+      - name: Check Worker Windows filesystem metrics compilation
+        run: cargo check -p ai-pm-worker --locked
+
+  public-registry-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify locked dependency metadata
+        run: cargo metadata --locked --format-version 1 --no-deps
+      - name: Verify all Digua crates resolve from crates.io
+        shell: bash
+        run: |
+          set -euo pipefail
+          for crate in digua_common_jwt digua_common_consul digua_file_sdk digua_http_client; do
+            grep -A3 -F "name = \"$crate\"" Cargo.lock | grep -F "registry+https://github.com/rust-lang/crates.io-index"
+          done
+      - name: Build workspace from public registries
+        run: cargo check --workspace --locked
+      - name: Run workspace Clippy
+        run: cargo clippy --workspace --all-targets --locked
+      - name: Verify SQLx migration versions are unique
+        shell: bash
+        run: |
+          set -euo pipefail
+          duplicates="$(find migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sed -E 's/^([0-9]+)_.*/\1/' | sort | uniq -d)"
+          if [[ -n "$duplicates" ]]; then
+            echo "Duplicate SQLx migration versions: $duplicates"
+            exit 1
+          fi
+          echo "All SQLx migration versions are unique."
+      - name: Validate PA08-06 Prometheus alert rules
+        run: docker run --rm --entrypoint /bin/promtool -v "$PWD/infrastructure/monitoring/pa08-alerts.yml:/etc/prometheus/pa08-alerts.yml:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/pa08-alerts.yml
+      - name: Check Rust formatting for changed files
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${PR_BASE_SHA}"
+            head="${PR_HEAD_SHA}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
+            base="${PUSH_BEFORE}"
+            head="${GITHUB_SHA}"
+          else
+            base="$(git rev-parse HEAD^)"
+            head="HEAD"
+          fi
+          mapfile -t files < <(git diff --name-only "$base" "$head" -- '*.rs')
+          if (("${#files[@]}" == 0)); then
+            echo "No changed Rust files."
+            exit 0
+          fi
+          echo "Checking ${#files[@]} changed Rust files."
+          rustfmt --edition 2021 --check --config skip_children=true,reorder_modules=false "${files[@]}"
+
+  linux-test-archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # CI executes the test binaries; full DWARF is not required for coverage or
+    # assertions and inflates the multi-GB archive downloaded by every shard.
+    # Keep debug assertions/overflow checks at Cargo's test-profile defaults.
+    env:
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and archive the complete workspace test suite
+        run: cargo nextest archive --workspace --locked --archive-file nextest-archive.tar.zst --zstd-level 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pa08-linux-nextest-archive
+          path: nextest-archive.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  linux-test-shards:
+    name: Linux full tests (shard ${{ matrix.shard }}/4)
+    needs: linux-test-archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: pa08-linux-nextest-archive
+      - name: Tune disposable PostgreSQL test service
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_container="$(docker ps --filter 'ancestor=postgres:16' --format '{{.ID}}' | head -n1)"
+          test -n "$pg_container"
+          docker exec "$pg_container" psql -U postgres -d postgres \
+            -c "ALTER SYSTEM SET fsync = 'off';" \
+            -c "ALTER SYSTEM SET full_page_writes = 'off';" \
+            -c "ALTER SYSTEM SET synchronous_commit = 'off';" \
+            -c "ALTER SYSTEM SET max_locks_per_transaction = '1024';" \
+            -c "ALTER SYSTEM SET max_wal_size = '4GB';" \
+            -c "ALTER SYSTEM SET checkpoint_timeout = '30min';"
+          docker restart "$pg_container" >/dev/null
+          for attempt in $(seq 1 60); do
+            if docker exec "$pg_container" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$pg_container" pg_isready -U postgres -d postgres
+          docker exec "$pg_container" psql -U postgres -d postgres -Atc "SHOW max_locks_per_transaction;"
+      - name: Run this complete-workspace test partition
+        run: cargo nextest run --archive-file nextest-archive.tar.zst --partition hash:${{ matrix.shard }}/4 --test-threads 2 --no-fail-fast
+
+  linux-doctests:
+    name: Linux workspace doctests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run all workspace doctests
+        run: cargo test --workspace --doc --locked

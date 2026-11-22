@@ -3,14 +3,11 @@
 pub mod acceptance_overview;
 pub mod acp06_07;
 pub mod actor;
-pub mod product;
 pub mod ai_context_items;
 pub mod ai_conversations;
 pub mod ai_interaction_envelope;
 pub mod ai_interactions;
 pub mod ai_roles;
-pub mod human_consultation;
-pub mod identity;
 pub mod ai_team_policies;
 pub mod analysis_report;
 pub mod approver;
@@ -36,9 +33,12 @@ pub mod docproc_service;
 pub mod execution_read;
 pub mod external_commit;
 pub mod git_access;
+pub mod human_consultation;
+pub mod identity;
 pub mod ingestion;
 pub mod intake;
 pub mod interaction;
+pub mod issue_risk;
 pub mod kb_service;
 pub mod knowledge;
 pub mod knowledge_index;
@@ -57,9 +57,8 @@ pub mod pc;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
+pub mod product;
 pub mod projc;
-pub mod issue_risk;
-pub mod work_item;
 pub mod project_gate;
 pub mod project_info;
 pub mod project_goal;
@@ -86,22 +85,25 @@ pub mod run_context;
 pub mod run_dispatch;
 pub mod run_events;
 pub mod run_executor;
+pub mod run_transition_guard;
 pub mod secret;
 pub mod snapshot_analysis;
 pub mod supervision;
 pub mod task_dependency;
 pub mod task_knowledge;
-pub mod task_products;
-pub mod task_traceability;
 pub mod task_plan;
+pub mod task_products;
 pub mod task_read;
-pub mod task_revisions;
 pub mod task_repository_binding;
+pub mod task_revisions;
+pub mod task_traceability;
 pub mod team_llm;
 pub mod team_llm_catalog;
 pub mod team_onboarding;
 pub mod visualization;
+pub mod work_item;
 pub mod worker_command;
+pub mod workspace_reclamation;
 
 pub use acceptance_overview::{
     load_overview, AcceptanceBadge, AcceptanceCounts, AcceptanceOverview, AcceptanceTask,
@@ -119,7 +121,9 @@ pub use ai_roles::{
     list_project_roles, list_role_versions, set_project_role_enabled, AiRoleError,
     AiRoleVersionSummary, AiRoleVersionView, ProjectAiRoleView,
 };
-pub use archive::{close_project, is_project_lifecycle_manager, reopen_project, ArchiveError, ArchiveOutcome};
+pub use archive::{
+    close_project, is_project_lifecycle_manager, reopen_project, ArchiveError, ArchiveOutcome,
+};
 pub use authz::{require_project_member, resolve_project_executor, AuthzError, ExecutorKind};
 pub use bootstrap::{
     bootstrap_project, bootstrap_project_for_customer, bootstrap_project_for_customer_owned,

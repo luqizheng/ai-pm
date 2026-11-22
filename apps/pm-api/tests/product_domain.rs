@@ -58,7 +58,10 @@ async fn send(app: &axum::Router, request: Request<Body>) -> (StatusCode, Value)
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn call(
@@ -197,7 +200,14 @@ fn members_uri(product_id: Uuid) -> String {
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_requires_team_owner(pool: PgPool) {
     let (app, _t, team_id, _owner) = team_world(pool.clone()).await;
-    let member = seed_member(&app, &pool, team_id, &token_for("usr-owner", 1), "usr-member").await;
+    let member = seed_member(
+        &app,
+        &pool,
+        team_id,
+        &token_for("usr-owner", 1),
+        "usr-member",
+    )
+    .await;
     let (st, body) = call(
         &app,
         "POST",
@@ -647,6 +657,8 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     assert_eq!(st, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["message"], json!("product_abandoned"));
 
+    // PA-07 §12: Archived is not ordinarily restorable. The legacy
+    // restart alias is valid only from Resuming -> Normal.
     let (st, body) = call(
         &w.app,
         "POST",
@@ -655,19 +667,11 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
         Some(json!({ "action": "restart" })),
     )
     .await;
-    assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], json!("normal"));
-
-    // active 建 Link 需要项目存在；bogus project → 404。
-    let (st, _) = call(
-        &w.app,
-        "POST",
-        &format!("/v1/pm/products/{}/links", w.product_id),
-        &owner_token,
-        Some(json!({ "project_id": Uuid::new_v4() })),
-    )
-    .await;
-    assert_eq!(st, StatusCode::NOT_FOUND);
+    assert_eq!(st, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
 
     // 生命周期审计。
     let audits: i64 = sqlx::query_scalar(
@@ -678,5 +682,106 @@ async fn lifecycle_owner_only_and_link_gate(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits, 2, "abandon + restart audits");
+    assert_eq!(audits, 1, "only the accepted abandon transition is audited");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn lifecycle_requires_suspended_resuming_normal_sequence(pool: PgPool) {
+    let w = product_world(pool.clone()).await;
+    let owner_token = token_for("usr-owner", 1);
+    let endpoint = format!("/v1/pm/products/{}/lifecycle", w.product_id);
+
+    for (action, expected_status) in [
+        ("suspend", "suspended"),
+        ("resume", "resuming"),
+        ("complete_resume", "normal"),
+    ] {
+        let (status, body) = call(
+            &w.app,
+            "POST",
+            &endpoint,
+            &owner_token,
+            Some(json!({ "action": action })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{action}: {body}");
+        assert_eq!(body["status"], json!(expected_status));
+    }
+
+    // A second resume cannot skip the Suspended state.
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "resume" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
+
+    // Legacy restart remains a compatibility alias only after Portfolio Review
+    // has placed the Product in Resuming; it cannot skip the intermediate state.
+    for (action, expected_status) in [
+        ("suspend", "suspended"),
+        ("resume", "resuming"),
+        ("restart", "normal"),
+    ] {
+        let (status, body) = call(
+            &w.app,
+            "POST",
+            &endpoint,
+            &owner_token,
+            Some(json!({ "action": action })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{action}: {body}");
+        assert_eq!(body["status"], json!(expected_status));
+    }
+
+    // Archived is terminal for ordinary lifecycle actions.
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "abandon" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], json!("archived"));
+
+    let (status, body) = call(
+        &w.app,
+        "POST",
+        &endpoint,
+        &owner_token,
+        Some(json!({ "action": "complete_resume" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["message"],
+        json!("product_lifecycle_transition_invalid")
+    );
+
+    let final_status: String = sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
+        .bind(w.product_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(final_status, "archived");
+
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.tenant_audit_log \
+          WHERE action = 'product.lifecycle_changed' AND target_id = $1",
+    )
+    .bind(w.product_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 7, "invalid transitions must not write audit rows");
 }

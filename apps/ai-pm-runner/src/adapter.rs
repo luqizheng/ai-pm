@@ -296,6 +296,85 @@ pub async fn reap(spawned: &mut SpawnedProcess) -> Option<ExitOutcome> {
     }
 }
 
+/// Terminate a process left by a previous Runner instance, but only when the
+/// persisted process identity still matches. This prevents PID-reuse kills.
+pub fn terminate_orphan(report: &OrphanReport) -> Result<(), AdapterError> {
+    if !report.alive {
+        return Ok(());
+    }
+    let expected = report.record.identity_hint.as_deref().ok_or_else(|| {
+        AdapterError::Invalid(
+            "orphan process has no identity anchor; refusing unsafe termination".into(),
+        )
+    })?;
+    #[cfg(target_os = "linux")]
+    if !expected.starts_with("proc-start-") {
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Unix host".into(),
+        ));
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    if !expected.starts_with("ps-start-") {
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Unix host".into(),
+        ));
+    }
+    #[cfg(windows)]
+    if !expected.starts_with("win-ft-") {
+        return Err(AdapterError::Invalid(
+            "orphan process identity anchor is not verifiable on this Windows host".into(),
+        ));
+    }
+    let Some(actual) = process_identity_hint(report.record.pid) else {
+        return Ok(());
+    };
+    if actual != expected {
+        // PID has been reused or the recorded process is already gone. Never
+        // terminate a process whose creation identity differs from the record.
+        return Ok(());
+    }
+
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(-(report.record.pid as i32), libc::SIGKILL) };
+        if result != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(AdapterError::Io(error));
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("taskkill")
+            .args(["/PID", &report.record.pid.to_string(), "/T", "/F"])
+            .output()?;
+        if !output.status.success()
+            && process_identity_hint(report.record.pid).as_deref() == Some(expected)
+        {
+            return Err(AdapterError::Invalid(format!(
+                "taskkill failed for orphan pid {}: {}",
+                report.record.pid,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+    }
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        if process_identity_hint(report.record.pid).as_deref() != Some(expected)
+            || !process_is_running(report.record.pid)
+        {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    Err(AdapterError::Invalid(format!(
+        "orphan pid {} still matches its recorded process identity after termination",
+        report.record.pid
+    )))
+}
+
 /// 扫描未上报标记文件（P2-1 收敛：文件名含 event_id）：
 /// `{run_dir}/.aipm/interaction.{event_id}.json` 与子目录 `{workspace_path}/
 /// .aipm/…` 两层约定。文件名 event_id 与正文不一致 = 非法（双键必须一致）。
@@ -513,7 +592,7 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
             ))
         }
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
         // comm 可含空格/括号：取最后一个 ')' 之后；其后首字段 = state（第 3 列），
@@ -521,6 +600,55 @@ pub fn process_identity_hint(pid: u32) -> Option<String> {
         let after = stat.rsplit_once(')')?.1;
         let fields: Vec<&str> = after.split_whitespace().collect();
         fields.get(19).map(|value| format!("proc-start-{value}"))
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "lstart=", "-p", &pid.to_string()])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let started = String::from_utf8(output.stdout).ok()?.trim().to_string();
+        if started.is_empty() {
+            None
+        } else {
+            Some(format!("ps-start-{started}"))
+        }
+    }
+}
+
+/// Whether the process can still execute. Unix zombies are already stopped even
+/// though `/proc/{pid}` remains until the original parent reaps the exit status.
+fn process_is_running(pid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        let Some((_, after)) = stat.rsplit_once(')') else {
+            return false;
+        };
+        after.split_whitespace().next() != Some("Z")
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        let Ok(output) = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output()
+        else {
+            return false;
+        };
+        if !output.status.success() {
+            return false;
+        }
+        let state = String::from_utf8_lossy(&output.stdout);
+        !state.trim().is_empty() && !state.trim().starts_with('Z')
+    }
+    #[cfg(windows)]
+    {
+        process_identity_hint(pid).is_some()
     }
 }
 

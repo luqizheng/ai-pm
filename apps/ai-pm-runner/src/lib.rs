@@ -5,6 +5,7 @@
 
 pub mod adapter;
 pub mod mcp;
+pub mod metrics;
 pub mod profiles;
 pub mod runner_loop;
 pub mod workspace;

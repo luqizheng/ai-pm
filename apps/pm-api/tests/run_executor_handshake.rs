@@ -162,7 +162,7 @@ async fn seed_claimed_run(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid)
 /// 推进 running）且立即终止子进程（阶段 C 登记失败 → kill，§8.3）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
-    let (_project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
+    let (project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
 
     // 归档先落定（P2 cancel_run 撤凭据 + 终态化——stage='dispatch' 意图保留）。
@@ -213,7 +213,9 @@ async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
     let _ = owner;
 
     // 清理账本里有该 Run（cancel_run 已登记）→ 后续轮次会兜底终止残留进程。
-    let entries = run_cleanup::list_needs_human(&pool).await.unwrap();
+    let entries = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100)
+        .await
+        .unwrap();
     let _ = entries;
 }
 
@@ -301,7 +303,7 @@ async fn failed_terminate_keeps_terminal_state_and_retries(pool: PgPool) {
 /// I1-040：重试达到阈值 → needs_human（持续可查询）；人工介入 requeue 后可再清。
 #[sqlx::test(migrations = "../../migrations")]
 async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
-    let (_project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-4").await;
+    let (project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-4").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
     executor
         .terminate_fails
@@ -333,7 +335,9 @@ async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(status, run_cleanup::STATUS_NEEDS_HUMAN, "达到阈值转人工");
-    let queue = run_cleanup::list_needs_human(&pool).await.unwrap();
+    let queue = run_cleanup::list_needs_human(&pool, SYSTEM_TENANT, project_id, 100)
+        .await
+        .unwrap();
     assert!(
         queue.iter().any(|entry| entry.run_id == run_id),
         "I1-040：人工队列可查询"

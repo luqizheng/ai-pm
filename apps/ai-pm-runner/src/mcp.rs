@@ -81,6 +81,22 @@ impl McpClient {
     /// structured 输出），无结构化体时回退解析 `content[0].text`；
     /// `isError: true` → [`RunnerError::Tool`]（content[0].text 文本）。
     pub async fn call_tool(&self, name: &str, args: Value) -> Result<Value, RunnerError> {
+        let operation = match name {
+            "pm_claim_task" => "claim",
+            "pm_discover_runs" => "discover",
+            "pm_heartbeat_run" => "heartbeat",
+            "pm_poll_commands" => "command_poll",
+            "pm_ack_command" => "command_ack",
+            "pm_reacquire_lease" => "lease_reacquire",
+            "pm_report_interaction" | "pm_report_interaction_consumed" => "interaction",
+            _ => "other",
+        };
+        let result = self.call_tool_inner(name, args).await;
+        crate::metrics::record_mcp_operation(operation, result.is_ok());
+        result
+    }
+
+    async fn call_tool_inner(&self, name: &str, args: Value) -> Result<Value, RunnerError> {
         let id = self
             .next_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
