@@ -83,6 +83,24 @@ pub async fn close_project(
         .map_err(db_err)?;
 
     // 3) P1：queued Run 条件取消（只动 queued——claimed/running 交 P2 协议）。
+    // Lock and validate each row first so Delivery and Reviewer Runs use their own
+    // lifecycle matrices while retaining one atomic Project-close transaction.
+    let queued_runs: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, run_kind FROM delivery.task_run \
+          WHERE project_id = $1 AND status = 'queued' ORDER BY id FOR UPDATE",
+    )
+    .bind(project_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    for (run_id, kind_text) in queued_runs {
+        let kind = crate::run_transition_guard::RunKind::parse(&kind_text)
+            .map_err(|e| ArchiveError::Db(e.to_string()))?;
+        crate::run_transition_guard::lock_and_validate_transition(
+            &mut tx, project_id, run_id, kind,
+            crate::run_transition_guard::RunStatus::Cancelled,
+        ).await.map_err(|e| ArchiveError::Db(e.to_string()))?;
+    }
     let cancelled_run_ids: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE delivery.task_run SET status = 'cancelled', termination_reason = $2, \
          terminated_at = now() \
