@@ -397,17 +397,17 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for FakeReclaimer
         _run_id: Uuid,
         _repository_id: Uuid,
         _workspace_path: &str,
-    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+    ) -> Result<u64, pm_application::run_dispatch::ExecutorError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Ok(())
+        Ok(0)
     }
 
     async fn reclaim_repository_mirror(
         &self,
         _repository_id: Uuid,
-    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+    ) -> Result<u64, pm_application::run_dispatch::ExecutorError> {
         self.mirror_calls.fetch_add(1, Ordering::SeqCst);
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -562,14 +562,14 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLoc
         _run_id: Uuid,
         _repository_id: Uuid,
         _workspace_path: &str,
-    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+    ) -> Result<u64, pm_application::run_dispatch::ExecutorError> {
         unreachable!("mirror round must not call worktree reclamation")
     }
 
     async fn reclaim_repository_mirror(
         &self,
         _repository_id: Uuid,
-    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
+    ) -> Result<u64, pm_application::run_dispatch::ExecutorError> {
         let pool = self.pool.clone();
         let repository_id = self.repository_id;
         let updated = Arc::clone(&self.updated);
@@ -585,7 +585,7 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLoc
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         self.blocked.store(!update.is_finished(), Ordering::SeqCst);
-        Ok(())
+        Ok(0)
     }
 }
 
