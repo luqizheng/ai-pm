@@ -4,7 +4,7 @@
 //! deletion is performed by the infrastructure adapter only after a claim has
 //! been revalidated immediately before the operation.
 
-use pm_domain::Uuid;
+use uuid::Uuid;
 use sqlx::PgPool;
 
 pub const DEFAULT_RETENTION_DAYS: i32 = 30;
