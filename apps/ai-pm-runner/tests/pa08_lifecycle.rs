@@ -535,6 +535,7 @@ async fn restart_recovery_reacquires_same_run_and_routes_continue() {
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     let recovered = recover_inflight_run(&cfg, &client)
         .await
+        .expect("discovery and lease reacquisition should succeed")
         .expect("a discovered in-flight run should be recovered");
 
     assert_eq!(recovered.project_id, Uuid::nil());
