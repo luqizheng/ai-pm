@@ -648,10 +648,12 @@ pub async fn tick(
 
     // ③ 命令轮询与执行（terminate / continue）。
     if run.last_command_poll.elapsed() >= Duration::from_secs(cfg.command_poll_secs) {
-        run.last_command_poll = Instant::now();
         let commands = client
             .poll_commands(run.project_id, run.run_id, &run.worker_id)
             .await?;
+        // A transport/HTTP failure must leave polling due so the next
+        // supervision tick retries immediately rather than waiting a full interval.
+        run.last_command_poll = Instant::now();
         for command in commands {
             execute_command(cfg, client, run, command).await;
         }
