@@ -237,10 +237,16 @@ async fn claim_drains_multiple_projects_without_deadlock(pool: PgPool) {
 async fn product_pause_wins_against_waiting_run_claim(pool: PgPool) {
     let (project_id, _owner) = seed_project(&pool, "PA08-PRODUCT-CLAIM-RACE").await;
     let task_id = seed_ready_task_and_run(&pool, project_id, "product-gate-race").await;
-    let (tenant_id, team_id): (Uuid, Uuid) = sqlx::query_as(
-        "SELECT tenant_id, team_id FROM core.project WHERE id = $1",
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let team_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.team (tenant_id, name) VALUES ($1, 'PA08 Claim Race Team') RETURNING id",
     )
-    .bind(project_id)
+    .bind(tenant_id)
     .fetch_one(&pool)
     .await
     .unwrap();
