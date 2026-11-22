@@ -9,6 +9,7 @@ tabs:
   delivery: Delivery
   recovery: Recovery
   authorization: Authorization
+  commits: External commits
 
 frame:
   tabsLabel: AI collaboration tabs
@@ -302,3 +303,75 @@ recovery:
   ctxLimit: Recovery limit
   ctxLimitText: "Retries are bounded\nRecovery window is bounded\nEscalate when unsuccessful"
   ctxNote: Low-level failures never interrupt you unless they change project impact.
+
+commits:
+  loadingEyebrow: Loading external commits · context kept
+  headline: External commit adoption
+  headlineMeta: Discovery ≠ adoption — external commits go through analysis, clarification and human approval; everything is traceable.
+  discoverBadge: Anchor-deduplicated · repeat scans add nothing
+  scanAction: Scan external commits
+  scanDone: "Scan finished: {count} new commits across {repos} repositories"
+  filterLabel: Status filter
+  filterAll: All statuses
+  emptyTitle: No external commits
+  emptyHint: New commits appear here after a scan; history before the anchor stays out of the adoption queue.
+  status:
+    discovered: Discovered
+    analyzed: Analyzed
+    awaiting_adoption: Awaiting decision
+    adopted: Adopted
+    closed: Closed
+    failed: Failed
+  openQuestions: "{count} open clarifications"
+  changeSection: Change
+  diffTruncated: Diff too large; showing the first 64K characters only.
+  analysisSection: AI analysis (draft · unverified)
+  modeLlm: LLM analysis
+  modeDerived: Derived mode (no LLM)
+  deviationLabel: Deviation
+  updatesSection: Knowledge update suggestions (draft · full text visible before adoption)
+  notAnalyzed: Not analyzed yet. Failed analyses can be retried; errors are never silent.
+  clarifySection: Clarifications
+  clarifyState:
+    not_needed: No clarification needed (recorded)
+    pending: Awaiting answers
+    resolved: All answered
+  answerPlaceholder: Type your answer…
+  answerAction: Answer
+  answeredToast: Clarification answered
+  notNeededNote: The analysis raised no uncertainties; explicitly recorded as "no clarification needed".
+  decisionSection: Adoption decision
+  decision:
+    approved: Approved
+    no_update: No update needed
+    rejected: Rejected
+  notePlaceholder: Decision note (goes to audit)…
+  approveAction: Approve adoption
+  noUpdateAction: No update needed
+  rejectAction: Reject
+  decisionNote: Approved updates go through the existing proposal pipeline (quality gates + red-line human confirmation); this page never writes the authoritative body directly.
+  approvedToast: Adoption approved
+  noUpdateToast: Recorded as "no update needed" and closed
+  rejectedToast: Rejected and closed
+  proposalsNote: Knowledge proposals submitted; see the list below.
+  proposalOutcome:
+    committed: Published
+    redline_pending: Red-line pending human confirmation
+    rejected: Rejected by quality gates
+    duplicate: Duplicate content skipped
+    pipeline_failed: Pipeline failed
+  closeAction: Complete adoption (close)
+  closeNote: Closing requires every knowledge proposal to be terminal; settle pending ones in Knowledge review first.
+  closedSummary: "Closed · decision: {decision}"
+  closedToast: Adoption loop closed
+  analyzeAction: AI analysis
+  retryAction: Retry analysis
+  analyzedToast: Analysis finished
+  analyzeFailed: "Analysis failed: {error} (recorded; retry available)"
+  ctxTitle: AI-PM notes
+  ctxIntro: I discover and analyze external commits; adoption is yours to decide — I never rewrite formal knowledge on my own.
+  ctxChain: Loop state machine
+  ctxChainText: Discovered → Analyzed → Awaiting decision → Adopted → Closed; failed analyses are retryable. Discovery and adoption are different states.
+  ctxKnowledge: Knowledge update boundary
+  ctxKnowledgeText: Suggestions carry the full draft for your review; after approval they still pass quality gates and red-line confirmation.
+  ctxNote: Scans are idempotent — one commit per repository is recorded once; the first scan only establishes the anchor.

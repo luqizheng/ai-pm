@@ -9,6 +9,7 @@ tabs:
   delivery: 交付
   recovery: 恢复
   authorization: 授权
+  commits: 外部提交
 
 frame:
   tabsLabel: AI 协作页签
@@ -302,3 +303,75 @@ recovery:
   ctxLimit: 恢复上限
   ctxLimitText: "重试有上限\n恢复窗口受限\n失败即升级"
   ctxNote: 低层失败不会打断你，除非它们改变项目影响。
+
+commits:
+  loadingEyebrow: 加载外部提交 · 保留上下文
+  headline: 外部提交采纳
+  headlineMeta: 发现 ≠ 采纳：外部提交须经历分析、澄清与人类批准；全过程可追溯。
+  discoverBadge: 锚点去重 · 重复扫描零新增
+  scanAction: 扫描外部提交
+  scanDone: "扫描完成：新增 {count} 条提交（{repos} 个仓库）"
+  filterLabel: 状态过滤
+  filterAll: 全部状态
+  emptyTitle: 暂无外部提交
+  emptyHint: 扫描后新提交会出现在这里；锚点建立前的历史不进入采纳队列。
+  status:
+    discovered: 已发现
+    analyzed: 已分析
+    awaiting_adoption: 待采纳决定
+    adopted: 已采纳
+    closed: 已关闭
+    failed: 失败
+  openQuestions: "{count} 条待澄清"
+  changeSection: 变更
+  diffTruncated: 差异过大，仅显示前 64K 字符。
+  analysisSection: AI 分析（草稿 · 未验证）
+  modeLlm: LLM 分析
+  modeDerived: 派生模式（无 LLM）
+  deviationLabel: 偏离判断
+  updatesSection: 知识更新建议（拟稿 · 采纳前可见全文）
+  notAnalyzed: 尚未分析。分析失败可重试；错误不会静默。
+  clarifySection: 澄清
+  clarifyState:
+    not_needed: 无需澄清（显式记录）
+    pending: 待答复
+    resolved: 已全部答复
+  answerPlaceholder: 输入答复…
+  answerAction: 答复
+  answeredToast: 澄清已答复
+  notNeededNote: 分析未产出不确定事项；已按「无需澄清」显式记录。
+  decisionSection: 采纳决定
+  decision:
+    approved: 批准采纳
+    no_update: 无需更新
+    rejected: 已拒绝
+  notePlaceholder: 决定说明（记入审计）…
+  approveAction: 批准采纳
+  noUpdateAction: 无需更新
+  rejectAction: 拒绝采纳
+  decisionNote: 批准后知识更新走既有提案管线（质量门 + 红线人类确认）；本页不直接改写权威正文。
+  approvedToast: 已批准采纳
+  noUpdateToast: 已记录「无需更新」并关闭
+  rejectedToast: 已拒绝采纳并关闭
+  proposalsNote: 知识提案已提交，状态见下方清单。
+  proposalOutcome:
+    committed: 已提交发布
+    redline_pending: 红线待人工确认
+    rejected: 质量门拒绝
+    duplicate: 重复内容幂等跳过
+    pipeline_failed: 管线失败
+  closeAction: 完成采纳（关闭）
+  closeNote: 全部知识提案到终态后才能关闭；未决提案先到知识审核页处理。
+  closedSummary: "已关闭 · 决定：{decision}"
+  closedToast: 采纳闭环已关闭
+  analyzeAction: AI 分析
+  retryAction: 重试分析
+  analyzedToast: 分析完成
+  analyzeFailed: "分析失败：{error}（可重试，已记录）"
+  ctxTitle: AI-PM 说明
+  ctxIntro: 我发现并分析外部提交；采纳与否由你决定，我不自动改写正式知识。
+  ctxChain: 闭环状态机
+  ctxChainText: 已发现 → 已分析 → 待采纳决定 → 已采纳 → 已关闭；分析失败可重试。发现与采纳是不同状态。
+  ctxKnowledge: 知识更新边界
+  ctxKnowledgeText: 更新建议携带拟稿全文供你审阅；批准后仍走质量门与红线确认，权威正文不由本页直写。
+  ctxNote: 扫描幂等：同仓库同提交只登记一次；首次扫描只建立锚点。

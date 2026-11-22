@@ -353,6 +353,13 @@ export function buildRoutes(): RouteRecordRaw[] {
       component: () =>
         import("@/views/project/collaboration/AuthorizationView.vue"),
       meta: { title: "pa06.tabs.authorization" }
+    },
+    // P0 外部 Commit 采纳闭环（迁移 0054）：发现→分析→澄清→采纳→关闭。
+    {
+      path: "/project/collaboration/commits",
+      component: () =>
+        import("@/views/project/collaboration/ExternalCommitsView.vue"),
+      meta: { title: "pa06.tabs.commits" }
     }
   );
 

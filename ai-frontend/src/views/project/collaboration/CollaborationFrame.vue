@@ -64,6 +64,11 @@ const COLLAB_TABS = [
     key: "authorization",
     path: "/project/collaboration/authorization",
     labelKey: "pa06.tabs.authorization"
+  },
+  {
+    key: "commits",
+    path: "/project/collaboration/commits",
+    labelKey: "pa06.tabs.commits"
   }
 ] as const;
 
