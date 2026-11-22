@@ -2,7 +2,7 @@
 //! through the real MCP client and a scripted Platform endpoint.
 use ai_pm_runner::adapter::terminate;
 use ai_pm_runner::mcp::McpClient;
-use ai_pm_runner::runner_loop::{claim_and_start, tick, ActiveRun, Config};
+use ai_pm_runner::runner_loop::{claim_and_start, recover_inflight_run, tick, ActiveRun, Config};
 use std::time::{Duration, Instant};
 use serde_json::json;
 use std::path::PathBuf;
@@ -460,5 +460,145 @@ async fn failed_heartbeat_keeps_renewal_due() {
         run.last_heartbeat.elapsed() >= Duration::from_secs(cfg.heartbeat_secs),
         "failed renewal must remain due for the next tick"
     );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+
+/// A restarted Runner discovers the in-flight intervention, reacquires the
+/// same Run with a newer generation, and resumes in a process-less waiting state.
+#[tokio::test]
+async fn restart_recovery_reacquires_same_run_and_routes_continue() {
+    let server = MockServer::start().await;
+    let task_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    let interaction_id = Uuid::new_v4();
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "runs": [{
+            "run_id": run_id,
+            "task_id": task_id,
+            "interaction_id": interaction_id
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": {
+                "name": "pm_reacquire_lease",
+                "arguments": {
+                    "project_id": Uuid::nil(),
+                    "run_id": run_id
+                }
+            }
+        })))
+        .respond_with(structured(json!({
+            "lease_token": "recovered-lease-token",
+            "lease_generation": 14,
+            "worker_id": "client:pa08-restarted-device",
+            "rerouted_commands": 1
+        })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let recovered = recover_inflight_run(&cfg, &client)
+        .await
+        .expect("a discovered in-flight run should be recovered");
+
+    assert_eq!(recovered.project_id, Uuid::nil());
+    assert_eq!(recovered.task_id, task_id);
+    assert_eq!(recovered.run_id, run_id);
+    assert_eq!(recovered.lease_token, "recovered-lease-token");
+    assert_eq!(recovered.lease_generation, 14);
+    assert_eq!(recovered.worker_id, "client:pa08-restarted-device");
+    assert_eq!(recovered.pending_interaction, Some(interaction_id));
+    assert!(recovered.process.is_none(), "recovery must not invent a local child handle");
+    assert!(recovered.awaiting_continue);
+    assert!(root.join(run_id.to_string()).is_dir());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// No discoverable in-flight intervention must leave the Runner with no active Run.
+#[tokio::test]
+async fn restart_recovery_returns_none_when_no_runs_are_discoverable() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_discover_runs" }
+        })))
+        .respond_with(structured(json!({ "runs": [] })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let cfg = config(&server, root.clone());
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    assert!(recover_inflight_run(&cfg, &client).await.is_none());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Spawn failure after a successful claim/context exchange must be surfaced,
+/// not silently converted into a running Agent.
+#[tokio::test]
+async fn claim_and_start_surfaces_agent_spawn_failure() {
+    let server = MockServer::start().await;
+    let task_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_list_tasks" }
+        })))
+        .respond_with(structured(json!({ "tasks": [{
+            "task_id": task_id, "queued_run_id": run_id
+        }] })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_claim_task" }
+        })))
+        .respond_with(structured(json!({
+            "run_id": run_id,
+            "lease_token": "test-lease-token",
+            "lease_generation": 2,
+            "lease_owner": "client:pa08-test-device"
+        })))
+        .expect(1)
+        .mount(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call",
+            "params": { "name": "pm_get_run_context" }
+        })))
+        .respond_with(structured(json!({ "repositories": [] })))
+        .expect(1)
+        .mount(&server).await;
+
+    let root = temp_dir();
+    let mut cfg = config(&server, root.clone());
+    cfg.agent_cmd = "this-command-does-not-exist-pa08".into();
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let result = claim_and_start(&cfg, &client).await;
+    assert!(result.is_err(), "a failed spawn must not produce an ActiveRun");
     let _ = std::fs::remove_dir_all(root);
 }
