@@ -98,7 +98,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - 新增 Runner 可选 Prometheus exporter：`AI_PM_RUNNER_METRICS_ADDR` 未设置时关闭；默认仅允许 loopback，非 loopback 需显式 `AI_PM_RUNNER_METRICS_ALLOW_REMOTE=true`。固定 operation/outcome 维度覆盖 claim/discover/heartbeat/command poll/ack/lease reacquire/interaction，并输出 supervision、cleanup、uptime、scrape counters。
 - Worker 已新增 workspace filesystem total/available byte gauges：Unix 使用 `statvfs`，Windows 使用 `GetDiskFreeSpaceExW`，采样根路径与 Run dispatch workspace root 一致。
 - API `/metrics` HTTP 集成测试已覆盖无 Bearer 401、认证成功的 Prometheus content type/HELP/TYPE/sample/ID 排除，以及 DB failure 503。
-- `infrastructure/monitoring/pa08-alerts.yml` 已加入 Prometheus `promtool check rules` Hosted CI 验证步骤。
+- `infrastructure/monitoring/pa08-alerts.yml` 已加入 Prometheus `promtool check rules` Hosted CI 验证步骤，覆盖 Worker command pending、cleanup/reclamation needs-human、workspace filesystem low、Runner supervision errors 与 cleanup errors。
 - 最新 Runner/Worker exporter、filesystem gauges、API endpoint tests 与 alert validation 均已加入 Hosted CI；须等待最新 commit 的 PA08/PA07 jobs 通过后才能关闭 PA08-06。
 
 ## 4. 全局红线
