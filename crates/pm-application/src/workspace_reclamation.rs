@@ -111,6 +111,8 @@ pub async fn stage_candidates(
                  WHERE rr.repository_id = pr.id \
                    AND ( \
                        r.status NOT IN ('succeeded', 'failed', 'timed_out', 'cancelled') \
+                       OR r.finished_at IS NULL \
+                       OR r.finished_at > now() - make_interval(days => $1) \
                        OR (r.executor_session IS NOT NULL AND NOT EXISTS ( \
                            SELECT 1 FROM delivery.task_run_cleanup cleanup \
                             WHERE cleanup.run_id = r.id AND cleanup.status = 'completed' \
@@ -118,6 +120,13 @@ pub async fn stage_candidates(
                        OR EXISTS ( \
                            SELECT 1 FROM delivery.task_run_cleanup cleanup \
                             WHERE cleanup.run_id = r.id AND cleanup.status <> 'completed' \
+                       ) \
+                       OR NOT EXISTS ( \
+                           SELECT 1 FROM delivery.workspace_reclamation worktree \
+                            WHERE worktree.resource_kind = 'run_worktree' \
+                              AND worktree.run_id = r.id \
+                              AND worktree.repository_id = pr.id \
+                              AND worktree.status = 'completed' \
                        ) \
                    ) \
             ) \
@@ -443,21 +452,37 @@ async fn revalidate_mirror_candidate_tx(
         return Ok(false);
     }
 
-    let runs = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-        "SELECT r.id, r.status, r.executor_session \
+    let runs = sqlx::query_as::<_, (Uuid, String, Option<String>, bool)>(
+        "SELECT r.id, r.status, r.executor_session, \
+                (r.finished_at IS NOT NULL AND r.finished_at <= now() - make_interval(days => $2)) \
            FROM delivery.task_run_repository rr \
            JOIN delivery.task_run r ON r.id = rr.run_id \
           WHERE rr.repository_id = $1 \
           FOR UPDATE OF r",
     )
     .bind(entry.repository_id)
+    .bind(retention_days)
     .fetch_all(&mut **tx)
     .await?;
-    for (run_id, run_status, executor_session) in runs {
-        if !matches!(
-            run_status.as_str(),
-            "succeeded" | "failed" | "timed_out" | "cancelled"
-        ) {
+    for (run_id, run_status, executor_session, run_retained) in runs {
+        if !run_retained
+            || !matches!(
+                run_status.as_str(),
+                "succeeded" | "failed" | "timed_out" | "cancelled"
+            )
+        {
+            return Ok(false);
+        }
+        let worktree_status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM delivery.workspace_reclamation \
+              WHERE resource_kind = 'run_worktree' AND run_id = $1 AND repository_id = $2 \
+              FOR UPDATE",
+        )
+        .bind(run_id)
+        .bind(entry.repository_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if worktree_status.as_deref() != Some("completed") {
             return Ok(false);
         }
         let cleanup_status: Option<String> = sqlx::query_scalar(
