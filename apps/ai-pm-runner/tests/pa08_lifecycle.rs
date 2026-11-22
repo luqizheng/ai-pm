@@ -218,7 +218,7 @@ async fn terminate_command_kills_child_and_acks_receipt() {
     let root = temp_dir();
     let cfg = config(&server, root.clone());
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
-    let process = ai_pm_runner::adapter::spawn(
+    let process = ai_pm_runner::adapter::spawn_agent(
         &cfg.agent_cmd,
         &root,
         &[],
