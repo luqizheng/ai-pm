@@ -89,9 +89,9 @@ pub async fn claim_batch(pool: &PgPool) -> Result<Vec<CleanupEntry>, sqlx::Error
            FROM candidates
           WHERE cleanup.run_id = candidates.run_id
          RETURNING cleanup.run_id, cleanup.session, cleanup.executor_kind,
-                   cleanup.pid, cleanup.process_started_at, cleanup.process_command,
-                   cleanup.status, cleanup.attempts, cleanup.max_attempts,
-                   cleanup.next_retry_at, cleanup.last_error, cleanup.claim_token",
+                   cleanup.identity_hint, cleanup.status, cleanup.attempts,
+                   cleanup.max_attempts, cleanup.next_retry_at,
+                   cleanup.last_error, cleanup.claim_token",
     )
     .bind(CLEANUP_CLAIM_LEASE_SECS)
     .fetch_all(pool)
@@ -105,7 +105,7 @@ pub async fn mark_completed(
 ) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
         "UPDATE delivery.task_run_cleanup
-            SET status = 'completed', claim_token = NULL, updated_at = now()
+            SET status = 'completed', completed_at = now(), claim_token = NULL, updated_at = now()
           WHERE run_id = $1 AND status = 'cleaning' AND claim_token = $2",
     )
     .bind(run_id)
@@ -147,7 +147,7 @@ pub async fn requeue(pool: &PgPool, run_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE delivery.task_run_cleanup \
             SET status = 'pending', attempts = 0, next_retry_at = now(), \
-                last_error = NULL, updated_at = now() \
+                last_error = NULL, claim_token = NULL, completed_at = NULL, updated_at = now() \
           WHERE run_id = $1",
     )
     .bind(run_id)
@@ -181,13 +181,20 @@ pub async fn run_cleanup_round(
             run_id: entry.run_id,
             workspace_root: crate::run_dispatch::workspace_root_from_env(),
         };
+        let claim_token = entry.claim_token.ok_or_else(|| {
+            sqlx::Error::Protocol("claimed cleanup row is missing its fencing token".into())
+        })?;
         match executor
             .terminate(&session, crate::run_dispatch::TerminateReason::Cancelled)
             .await
         {
             Ok(()) => {
-                mark_completed(pool, entry.run_id).await?;
-                ok += 1;
+                if mark_completed(pool, entry.run_id, claim_token).await? {
+                    ok += 1;
+                } else {
+                    tracing::warn!(run = %entry.run_id, "stale cleanup claim could not mark completion");
+                    failed += 1;
+                }
             }
             Err(error) => {
                 tracing::warn!(
@@ -196,7 +203,9 @@ pub async fn run_cleanup_round(
                     error = %error,
                     "cleanup attempt failed; backoff retry scheduled"
                 );
-                mark_failed(pool, entry.run_id, &error.to_string(), 60).await?;
+                if !mark_failed(pool, entry.run_id, claim_token, &error.to_string(), 60).await? {
+                    tracing::warn!(run = %entry.run_id, "stale cleanup claim could not record failure");
+                }
                 failed += 1;
             }
         }
