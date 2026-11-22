@@ -48,12 +48,6 @@ Implementation changes committed on this branch:
 - Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, now point to the canonical crates.io registry and retain their existing checksums.
 - **Not yet verified:** this editing session cannot run Cargo locally; the hosted workflow must prove index/artifact availability and a locked workspace build before status becomes VERIFIED.
 
-### PA08-01 — Registry portability (foundation)
-- 将直接依赖 `digua_common_jwt`、`digua_common_consul`、`digua_file_sdk` 指向 crates.io。
-- 确认传递依赖 `digua_http_client` 也从 crates.io 解析。
-- 保持已验证的 `1.7.0` 版本与 `tls-native` feature 选择；不得因迁移 Registry 改变 TLS 后端。
-- 更新 Cargo.lock 的 registry source，移除 Kellnr 配置和文档中的过时前提。
-- 使用 `cargo metadata --locked`、`cargo check --locked` 和 CI 验证；Hosted Runner 不得依赖内网 Registry。
 
 ### PA08-02 — Runner lifecycle test harness
 - 为 Runner 主循环抽取可注入的时钟、Runner API/claim、executor/process、heartbeat 与 command channel 边界；避免为了测试重写运行模型。
