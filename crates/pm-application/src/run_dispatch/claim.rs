@@ -506,7 +506,7 @@ async fn claim_core_in_project(
     let mut run_id: Uuid = candidate.get("id");
     let task_id: Uuid = candidate.get("task_id");
     let project_id: Uuid = candidate.get("project_id");
-    let mut run_state: String = candidate.get("status");
+    let run_state: String = candidate.get("status");
     let dispatch_attempts: i32 = candidate.get("dispatch_attempts");
     let executor_session: Option<String> = candidate.get("executor_session");
     let candidate_stage: Option<String> = candidate.get("stage");
@@ -642,7 +642,6 @@ async fn claim_core_in_project(
                 crate::run_transition_guard::RunStatus::Queued,
             ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
             requeue_for_redispatch(&mut tx, run_id).await?;
-            run_state = run_status::QUEUED.to_string();
             audit_run(
                 &mut tx,
                 project_id,
