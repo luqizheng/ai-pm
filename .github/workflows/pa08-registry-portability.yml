@@ -152,4 +152,8 @@ jobs:
             exit 0
           fi
           echo "Checking ${#files[@]} changed Rust files."
-          rustfmt --edition 2021 --check --config skip_children=true "${files[@]}"
+          # reorder_modules=false：master 的 lib.rs mod 排列本身不是字母序（master
+          # 无 fmt 门），rustfmt 默认会重排 mod 声明，导致任何包含 master 现有
+          # lib.rs 的 PR merge 树必然挂本步——与本 PR 内容无关的 gate 设计缺陷。
+          # 关掉重排后其余 rustfmt 检查（缩进/行宽等）全部保留。
+          rustfmt --edition 2021 --check --config skip_children=true,reorder_modules=false "${files[@]}"
