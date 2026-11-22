@@ -4,6 +4,8 @@
 
 use std::sync::Arc;
 
+mod metrics;
+
 use pm_ai::model::AnalysisModel;
 use pm_ai::orchestrator::{HandleOutcome, Orchestrator};
 use pm_application::project_import::{import_id_for_event, run_import_job};
@@ -50,6 +52,19 @@ async fn main() {
         .await
         .expect("database pool");
 
+
+    let metrics = Arc::new(metrics::WorkerMetrics::new());
+    let metrics_addr = std::env::var("AI_PM_WORKER_METRICS_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:9465".to_string());
+    {
+        let metrics = metrics.clone();
+        tokio::spawn(async move {
+            if let Err(error) = metrics::serve(&metrics_addr, metrics).await {
+                tracing::error!(%error, "worker metrics listener stopped");
+            }
+        });
+    }
+
     let policy_path =
         std::env::var("AI_PM_POLICY_FILE").unwrap_or_else(|_| DEFAULT_POLICY_FILE.to_string());
     let policy_yaml = std::fs::read_to_string(&policy_path).unwrap_or_else(|e| {
@@ -90,10 +105,14 @@ async fn main() {
     // 第二条循环：冷启动 `repo_import` job，与 `ai_analysis` 互不阻塞。
     let repo_pool = pool.clone();
     let repo_worker_id = worker_id.clone();
+    let repo_metrics = metrics.clone();
     tokio::spawn(async move {
         loop {
             match job_queue::claim(&repo_pool, "repo_import", &repo_worker_id, LEASE_SECS).await {
-                Some(job) => handle_repo_job(&repo_pool, &job).await,
+                Some(job) => {
+                    repo_metrics.repo_import_jobs_claimed();
+                    handle_repo_job(&repo_pool, &job).await
+                },
                 None => {
                     tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
                 }
@@ -128,6 +147,7 @@ async fn main() {
     // 领取即 start 失败退避，不伪造执行成功）。
     let dispatch_pool = pool.clone();
     let dispatch_worker_id = worker_id.clone();
+    let dispatch_metrics = metrics.clone();
     tokio::spawn(async move {
         let mut stats_ticks = 0u32;
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
@@ -200,6 +220,7 @@ async fn main() {
         }
         tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, executor = run_executor.kind(), "run dispatch loop started");
         loop {
+            dispatch_metrics.run_dispatch_claim_attempt();
             match pm_application::run_executor::claim_and_start(
                 &dispatch_pool,
                 run_executor.as_ref(),
@@ -211,6 +232,7 @@ async fn main() {
             {
                 Ok(_) => {}
                 Err(e) => {
+                    dispatch_metrics.run_dispatch_error();
                     tracing::warn!(error = %e, "claim_and_start failed; backing off");
                 }
             }
@@ -224,6 +246,7 @@ async fn main() {
             {
                 Ok(_) => {}
                 Err(e) => {
+                    dispatch_metrics.run_poll_error();
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
@@ -424,7 +447,10 @@ async fn main() {
 
     loop {
         match job_queue::claim(&pool, "ai_analysis", &worker_id, LEASE_SECS).await {
-            Some(job) => handle_job(&orchestrator, &job).await,
+            Some(job) => {
+                metrics.ai_analysis_jobs_claimed();
+                handle_job(&orchestrator, &job).await
+            },
             None => tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await,
         }
     }
