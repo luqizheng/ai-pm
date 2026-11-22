@@ -1,0 +1,48 @@
+name: PA-08 Registry Portability
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/config.toml"
+      - "crates/**"
+      - "apps/**"
+      - ".github/workflows/pa08-registry-portability.yml"
+  push:
+    branches: [master]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/config.toml"
+      - "crates/**"
+      - "apps/**"
+      - ".github/workflows/pa08-registry-portability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+
+jobs:
+  public-registry-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify locked dependency metadata
+        run: cargo metadata --locked --format-version 1 --no-deps
+      - name: Verify all Digua crates resolve from crates.io
+        shell: bash
+        run: |
+          for crate in digua_common_jwt digua_common_consul digua_file_sdk digua_http_client; do
+            grep -A3 -F "name = \"$crate\"" Cargo.lock | grep -F "registry+https://github.com/rust-lang/crates.io-index"
+          done
+      - name: Build workspace from public registries
+        run: cargo check --workspace --locked
