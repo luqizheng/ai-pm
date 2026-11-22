@@ -1,6 +1,6 @@
 //! PA08-02 first lifecycle slice: exercise the production claim-and-spawn path
 //! through the real MCP client and a scripted Platform endpoint.
-use ai_pm_runner::adapter::terminate;
+use ai_pm_runner::adapter::{read_process_record, scan_orphans, spawn_agent, terminate, terminate_orphan};
 use ai_pm_runner::mcp::McpClient;
 use ai_pm_runner::runner_loop::{claim_and_start, recover_inflight_run, tick, ActiveRun, Config};
 use std::time::{Duration, Instant};
@@ -831,5 +831,41 @@ async fn failed_command_poll_retries_on_next_supervision_tick() {
         .await
         .expect("next tick should retry command polling immediately");
     assert!(run.last_command_poll.elapsed() < Duration::from_secs(2));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A replacement Runner must reap the exact process recorded by its previous
+/// instance before it is allowed to continue startup recovery.
+#[cfg(unix)]
+#[tokio::test]
+async fn replacement_runner_terminates_identity_matched_orphan_process_group() {
+    let root = temp_dir();
+    let run_dir = root.join(Uuid::new_v4().to_string());
+    let mut spawned = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
+    let pid = spawned.pid;
+    let reports = scan_orphans(&root);
+    assert_eq!(reports.len(), 1);
+    assert!(reports[0].alive);
+    terminate_orphan(&reports[0]).expect("identity-matched orphan process group must be terminated");
+    let _ = spawned.child.wait().await;
+    assert!(!ai_pm_runner::adapter::is_pid_alive(pid), "orphan PID must no longer be alive after reap");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A PID whose creation identity no longer matches the process record must
+/// never be killed: this is the PID-reuse fencing guard.
+#[tokio::test]
+async fn orphan_cleanup_refuses_to_kill_pid_reuse() {
+    let root = temp_dir();
+    let run_dir = root.join(Uuid::new_v4().to_string());
+    let mut spawned = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
+    let pid = spawned.pid;
+    let mut record = read_process_record(&run_dir).expect("spawn writes process record");
+    record.identity_hint = Some("different-process-identity".into());
+    std::fs::write(run_dir.join(".aipm").join("process.json"), serde_json::to_vec(&record).unwrap()).unwrap();
+    let report = scan_orphans(&root).into_iter().next().unwrap();
+    terminate_orphan(&report).expect("PID reuse must be treated as an already-gone original child");
+    assert!(ai_pm_runner::adapter::is_pid_alive(pid), "unrelated PID must remain alive");
+    terminate(&mut spawned.child).await.expect("test child cleanup");
     let _ = std::fs::remove_dir_all(root);
 }
