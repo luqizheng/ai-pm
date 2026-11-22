@@ -1311,8 +1311,14 @@ mod tests {
         let error = reacquire_active_run(&cfg, &client, &mut run)
             .await
             .expect_err("HTTP 503 must fail lease reacquisition");
-        assert!(run.process.is_some(), "failed reacquisition must retain the Child handle");
-        assert!(adapter::is_pid_alive(pid), "Agent must remain supervised until explicit cleanup");
+        assert!(
+            run.process.is_some(),
+            "failed reacquisition must retain the Child handle"
+        );
+        assert!(
+            adapter::is_pid_alive(pid),
+            "Agent must remain supervised until explicit cleanup"
+        );
 
         write_cleanup_escalation_evidence(&run, &error.to_string()).unwrap();
         let evidence_path = root.join(".aipm").join("cleanup-needs-human.json");
@@ -1324,10 +1330,16 @@ mod tests {
             .await
             .expect("Runner must terminate and reap the child before releasing its slot");
         run.process = None;
-        assert!(!adapter::is_pid_alive(pid), "Agent must be reaped before the handle is released");
+        assert!(
+            !adapter::is_pid_alive(pid),
+            "Agent must be reaped before the handle is released"
+        );
 
         std::fs::remove_file(&evidence_path).unwrap();
-        assert!(!evidence_path.exists(), "successful cleanup clears the escalation marker");
+        assert!(
+            !evidence_path.exists(),
+            "successful cleanup clears the escalation marker"
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 
