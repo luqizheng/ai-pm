@@ -316,6 +316,7 @@ async fn main() {
                                 completed = report.completed,
                                 failed = report.failed,
                                 skipped = report.skipped,
+                                reclaimed_bytes = report.reclaimed_bytes,
                                 "Run worktree reclamation round"
                             ),
                             Ok(_) => {}
@@ -337,6 +338,7 @@ async fn main() {
                                 completed = report.completed,
                                 failed = report.failed,
                                 skipped = report.skipped,
+                                reclaimed_bytes = report.reclaimed_bytes,
                                 "Repository mirror reclamation round"
                             ),
                             Ok(_) => {}
