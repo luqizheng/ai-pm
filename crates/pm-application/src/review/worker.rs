@@ -340,14 +340,17 @@ async fn fail_review(
         crate::run_transition_guard::RunKind::Review,
         crate::run_transition_guard::RunStatus::Failed,
     ).await;
-    if let Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_)
-        | crate::run_transition_guard::RunTransitionGuardError::Invalid(
+    match guard {
+        Ok(_) => {}
+        Err(crate::run_transition_guard::RunTransitionGuardError::NotFound(_))
+        | Err(crate::run_transition_guard::RunTransitionGuardError::Invalid(
             crate::run_transition_guard::RunTransitionError::TerminalImmutable(_)
-        )) = guard {
-        tx.rollback().await.ok();
-        return Ok(ReviewStep::Idle);
+        )) => {
+            tx.rollback().await.ok();
+            return Ok(ReviewStep::Idle);
+        }
+        Err(error) => return Err(ReviewError::Transition(error.to_string())),
     }
-    guard.map_err(|e| ReviewError::Transition(e.to_string()))?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = 'failed', outcome = 'failed', finished_at = now(), \
