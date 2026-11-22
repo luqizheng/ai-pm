@@ -18,6 +18,8 @@ pub struct ReclamationRoundReport {
     pub completed: usize,
     pub failed: usize,
     pub skipped: usize,
+    /// Logical file bytes removed; not physical block accounting.
+    pub reclaimed_bytes: u64,
 }
 
 #[async_trait::async_trait]
@@ -27,12 +29,12 @@ pub trait WorkspaceReclaimer: Send + Sync {
         run_id: Uuid,
         repository_id: Uuid,
         workspace_path: &str,
-    ) -> Result<(), crate::run_dispatch::ExecutorError>;
+    ) -> Result<u64, crate::run_dispatch::ExecutorError>;
 
     async fn reclaim_repository_mirror(
         &self,
         repository_id: Uuid,
-    ) -> Result<(), crate::run_dispatch::ExecutorError>;
+    ) -> Result<u64, crate::run_dispatch::ExecutorError>;
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -280,15 +282,17 @@ pub async fn mark_completed(
     pool: &PgPool,
     id: Uuid,
     claim_token: Uuid,
+    reclaimed_bytes: u64,
 ) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
         "UPDATE delivery.workspace_reclamation \
             SET status = 'completed', completed_at = now(), claim_token = NULL, \
-                last_error = NULL, updated_at = now() \
+                reclaimed_bytes = $3, last_error = NULL, updated_at = now() \
           WHERE id = $1 AND status = 'cleaning' AND claim_token = $2",
     )
     .bind(id)
     .bind(claim_token)
+    .bind(reclaimed_bytes.min(i64::MAX as u64) as i64)
     .execute(pool)
     .await?
     .rows_affected();
@@ -377,9 +381,10 @@ pub async fn run_worktree_reclamation_round(
             .reclaim_run_worktree(run_id, entry.repository_id, &entry.relative_path)
             .await
         {
-            Ok(()) => {
-                if mark_completed(pool, entry.id, token).await? {
+            Ok(reclaimed_bytes) => {
+                if mark_completed(pool, entry.id, token, reclaimed_bytes).await? {
                     report.completed += 1;
+                    report.reclaimed_bytes = report.reclaimed_bytes.saturating_add(reclaimed_bytes);
                 } else {
                     // Filesystem removal is idempotent. A new claimant can
                     // safely complete the ledger on its next pass.
@@ -508,15 +513,17 @@ async fn mark_completed_tx(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     claim_token: Uuid,
+    reclaimed_bytes: u64,
 ) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
         "UPDATE delivery.workspace_reclamation \
             SET status = 'completed', completed_at = now(), claim_token = NULL, \
-                last_error = NULL, updated_at = now() \
+                reclaimed_bytes = $3, last_error = NULL, updated_at = now() \
           WHERE id = $1 AND status = 'cleaning' AND claim_token = $2",
     )
     .bind(id)
     .bind(claim_token)
+    .bind(reclaimed_bytes.min(i64::MAX as u64) as i64)
     .execute(&mut **tx)
     .await?
     .rows_affected();
@@ -595,9 +602,10 @@ pub async fn run_repository_mirror_reclamation_round(
         }
 
         match reclaimer.reclaim_repository_mirror(entry.repository_id).await {
-            Ok(()) => {
-                if mark_completed_tx(&mut tx, entry.id, token).await? {
+            Ok(reclaimed_bytes) => {
+                if mark_completed_tx(&mut tx, entry.id, token, reclaimed_bytes).await? {
                     report.completed += 1;
+                    report.reclaimed_bytes = report.reclaimed_bytes.saturating_add(reclaimed_bytes);
                 } else {
                     report.failed += 1;
                 }
