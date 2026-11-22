@@ -57,7 +57,7 @@ CREATE INDEX idx_workspace_reclamation_due
 COMMENT ON TABLE delivery.workspace_reclamation IS
     'Lifecycle ledger for derived local Run worktrees and shared Git mirrors; never deletes Run, Repository, Commit, artifact, or audit records.';
 COMMENT ON COLUMN delivery.workspace_reclamation.relative_path IS
-    'Validated path relative to the configured Codex workspace root; absolute paths are never persisted.';
+    'Validated relative path: relative to the Run root for run_worktree, or to the configured workspace root for repository_mirror; absolute paths are never persisted.';
 COMMENT ON COLUMN delivery.workspace_reclamation.next_retry_at IS
     'Pending retry due time; while cleaning, the claim lease expiry used for crash recovery.';
 COMMENT ON COLUMN delivery.workspace_reclamation.claim_token IS
