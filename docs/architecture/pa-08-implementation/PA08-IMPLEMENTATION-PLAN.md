@@ -46,7 +46,8 @@ Implementation changes committed on this branch:
 - Workspace direct dependencies for `digua_common_jwt`, `digua_common_consul`, and `digua_file_sdk` now use crates.io (version 1.7.0, `default-features = false`, `tls-native`).
 - `.cargo/config.toml` no longer defines the Kellnr registry or rsproxy source replacement; crates resolve directly from crates.io.
 - Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, now point to the canonical crates.io registry and retain their existing checksums.
-- **Not yet verified:** this editing session cannot run Cargo locally; the hosted workflow must prove index/artifact availability and a locked workspace build before status becomes VERIFIED.
+- **Checksum reconciliation:** the first Hosted Runner attempt correctly rejected the private-registry checksums. The crates.io index confirms the 1.7.0 checksums differ; Cargo.lock has been corrected to the published checksums. A fresh hosted build is required.
+- **Not yet verified:** this editing session cannot run Cargo locally; the hosted workflow must prove artifact availability and a locked workspace build before status becomes VERIFIED.
 
 
 ### PA08-02 — Runner lifecycle test harness
