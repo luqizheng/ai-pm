@@ -40,7 +40,7 @@ A Run worktree is eligible only when all are true:
 - The target path is a validated relative `workspace_path`, canonicalizes beneath the canonical configured root and Run root, and does not traverse a symlink outside either boundary.
 - The operation holds the repository's existing mirror lock while removing the worktree and running `git worktree prune`.
 
-Only the worktree path is deleted. The Run root, logs, process identity file, executor events, task/run rows, task_run_repository snapshot, commits, artifacts, audit and outbox records remain.
+Only the worktree path is deleted. The Run root, logs, process identity file, executor events, task/run rows, task_run_repository snapshot, commits, artifacts, audit and outbox records remain. The immutable workspace_path field remains as historical execution metadata; the separate reclamation ledger must explicitly mark that this path's bytes have been reclaimed. A historical metadata pointer is not treated as an active execution reference after terminal retention and process cleanup are proven.
 
 ### Shared bare mirror
 
@@ -51,7 +51,7 @@ A mirror is a cache, not the Repository record. It is eligible only when:
 - Under `lock_mirror(repository_id)`, `git worktree list --porcelain` confirms no linked worktrees remain.
 - The mirror path canonicalizes beneath `<root>/git-mirror` and is not a symlink escape.
 
-Deleting the bare mirror never deletes `integration.project_repository`, repository credentials, commit metadata, or remote history. A future checkout can recreate the mirror from the configured remote. If any check is uncertain, skip and retain the mirror.
+Deleting the bare mirror never deletes `integration.project_repository`, repository credentials, commit metadata, or remote history. The repository row remains the canonical reference; only its derived local cache is reclaimed. A future checkout can recreate the mirror from the configured remote. If any check is uncertain, skip and retain the mirror.
 
 ### Universal protections
 
