@@ -165,6 +165,11 @@ pub async fn claim_and_start(
                     return Err(RunDispatchError::Db(sqlx::Error::Protocol(err.to_string())));
                 }
             }
+            crate::run_transition_guard::lock_and_validate_transition(
+                &mut tx, project_id, run_id,
+                crate::run_transition_guard::RunKind::Delivery,
+                crate::run_transition_guard::RunStatus::Running,
+            ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
                     SET status = 'running', stage = 'started', started_at = now() \
@@ -725,6 +730,11 @@ async fn start_failed(
     detail: &str,
 ) -> Result<(), RunDispatchError> {
     let mut tx = pool.begin().await?;
+    let from_status = crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::Queued,
+    ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let row: Option<(String, i32)> = sqlx::query_as(
         "UPDATE delivery.task_run \
             SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL, \
@@ -733,12 +743,13 @@ async fn start_failed(
                 next_dispatch_at = now() + make_interval(secs => \
                     LEAST($3::float8, power(2, dispatch_attempts))::float8), \
                 release_reason = 'executor_start_failed' \
-          WHERE id = $1 AND status IN ('claimed', 'running') \
+          WHERE id = $1 AND status = $4 \
          RETURNING status, infrastructure_retry_count",
     )
     .bind(run_id)
     .bind(detail)
     .bind(cfg.backoff_cap_secs)
+    .bind(from_status.as_str())
     .fetch_optional(&mut *tx)
     .await?;
     let Some((status, retry_count)) = row else {
@@ -788,6 +799,11 @@ async fn start_failed(
     .execute(&mut *tx)
     .await?;
     if status == "queued" && retry_count >= cfg.max_infrastructure_attempts {
+        crate::run_transition_guard::lock_and_validate_transition(
+            &mut tx, project_id, run_id,
+            crate::run_transition_guard::RunKind::Delivery,
+            crate::run_transition_guard::RunStatus::Failed,
+        ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
         let exhausted = sqlx::query(
             "UPDATE delivery.task_run \
                 SET status = 'failed', outcome = 'failed', finished_at = now(), \
@@ -865,18 +881,26 @@ async fn record_termination(
         _ => "failed",
     };
     let mut tx = pool.begin().await?;
+    let target_status = crate::run_transition_guard::RunStatus::parse(terminal)
+        .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+    let from_status = crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        target_status,
+    ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = $3, outcome = $3, finished_at = now(), terminated_at = now(), \
                 termination_reason = $4, \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1 AND status IN ('claimed', 'running') \
+          WHERE id = $1 AND status = $5 \
          RETURNING task_id",
     )
     .bind(run_id)
     .bind(project_id)
     .bind(terminal)
     .bind(reason_code)
+    .bind(from_status.as_str())
     .fetch_optional(&mut *tx)
     .await?;
     let Some(task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
@@ -950,16 +974,27 @@ async fn finish_run(
 ) -> Result<(), RunDispatchError> {
     let succeeded = matches!(outcome, ExitOutcome::Success);
     let mut tx = pool.begin().await?;
+    let target_status = if succeeded {
+        crate::run_transition_guard::RunStatus::Succeeded
+    } else {
+        crate::run_transition_guard::RunStatus::Failed
+    };
+    let from_status = crate::run_transition_guard::lock_and_validate_transition(
+        &mut tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        target_status,
+    ).await.map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
             SET status = $3, outcome = $3, finished_at = now(), \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
-          WHERE id = $1 AND status IN ('claimed', 'running') \
+          WHERE id = $1 AND status = $4 \
         RETURNING task_id",
     )
     .bind(run_id)
     .bind(project_id)
     .bind(if succeeded { "succeeded" } else { "failed" })
+    .bind(from_status.as_str())
     .fetch_optional(&mut *tx)
     .await?;
     let Some(task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
