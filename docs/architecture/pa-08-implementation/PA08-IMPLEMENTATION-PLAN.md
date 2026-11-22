@@ -115,4 +115,4 @@ PA-08 不以“代码已合并”作为完成定义。每个工作流必须提�
 
 ## 6. 当前状态
 
-PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
+PA08-01 已由 Hosted CI 验证通过。PA08-02 当前实施切片已由 Hosted CI Run #28 验证通过；延迟/重复命令响应和更广泛故障注入仍作为后续增强。PA08-03 转换守卫已由 Run #63 完整验证（真实 PostgreSQL 七项集成测试 + 单元测试），Run #58 的 Project 范围 compare-and-set 收紧也已通过。PA08-04 已开始资源所有权盘点和 process-cleanup claim 缺陷复现；尚未实施文件删除。PA08-05 至 PA08-06 尚未开始。本文件状态以代码、测试和 CI 证据为准。
