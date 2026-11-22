@@ -9,14 +9,7 @@ replace-with = "rsproxy-sparse"
 [source.rsproxy-sparse]
 registry = "sparse+https://rsproxy.cn/index/"
 
-# lmms 私有 crate registry（消费基座 crates：{ version = "x", registry = "kellnr" }）
-# 代理注意：git 全局 http.proxy（v2ray 127.0.0.1:10808）会被 cargo 回退采用。本机 v2ray
-# 未运行/只管外网，cargo 命令须带环境变量：CARGO_HTTP_PROXY=""（屏蔽死代理回退，外网走
-# rsproxy 直连）+ NO_PROXY=192.168.2.103（内网 kellnr 直连）
-# 拓扑变更（2026-11-21）：原 kellnr 主机 192.168.2.12 已不可达；本机以
-# tools/fake-kellnr.py 从本机 cargo 缓存提供同协议只读服务（index+download）。
-[registries.kellnr]
-index = "sparse+http://192.168.2.103:16444/api/v1/crates/"
+# Digua dependencies are published on crates.io; no private registry is required.
 # rust-lld 链接器（仅 Windows MSVC host；Linux/Docker 构建不受影响）。
 # 实测 lld 比 link.exe 快 ~35–40%，本仓 pm-api / pm-worker / ai-pm-worker
 # 三个 bin 与测试二进制的链接段都受益。回退：删掉本段（会再触发一次全量
