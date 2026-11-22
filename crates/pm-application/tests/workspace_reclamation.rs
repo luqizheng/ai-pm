@@ -296,7 +296,8 @@ async fn archived_mirror_candidate_waits_for_all_run_cleanup(pool: PgPool) {
 
     let row: (String, Option<Uuid>, String) = sqlx::query_as(
         "SELECT resource_kind, run_id, relative_path \
-           FROM delivery.workspace_reclamation WHERE repository_id = $1",
+           FROM delivery.workspace_reclamation \
+          WHERE repository_id = $1 AND resource_kind = 'repository_mirror'",
     )
     .bind(fx.repository_id)
     .fetch_one(&pool)
