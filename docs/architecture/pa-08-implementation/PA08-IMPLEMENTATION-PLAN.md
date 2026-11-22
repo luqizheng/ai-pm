@@ -46,6 +46,7 @@ IMP-014（Submit 长事务）、IMP-015（LLM token/cost budget）、IMP-017（D
 - `.cargo/config.toml` no longer defines the Kellnr registry or rsproxy source replacement.
 - Cargo.lock source identifiers for all four Digua packages, including transitive `digua_http_client`, point to canonical crates.io; checksums match the published index.
 - Hosted verification: [GitHub Actions Run #4](https://github.com/luqizheng/ai-pm/actions/runs/44967203110) completed successfully. Locked metadata, all four registry-source checks, and `cargo check --workspace --locked` passed.
+- Follow-up CI portability: `.github/workflows/pa07-blast-radius.yml` was moved from the now-unavailable `self-hosted, internal-registry` labels to `ubuntu-latest` for both jobs. The prior queued runs were infrastructure-blocked, not test failures; the new Hosted regression run is [Run #25](https://github.com/luqizheng/ai-pm/actions/runs/44968929358). PostgreSQL integration still explicitly skips unless `AIPM_TEST_DATABASE_URL` is configured.
 
 ### PA08-02 — Runner lifecycle test harness — IN PROGRESS
 - Keep the production Runner state machine and MCP contract authoritative; add the smallest test seams needed rather than rewriting the execution model.
