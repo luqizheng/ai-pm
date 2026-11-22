@@ -156,6 +156,11 @@ pub(crate) async fn recover_lost_run(
     project_id: Uuid,
     cfg: &RunDispatchConfig,
 ) -> Result<CreatedRun, sqlx::Error> {
+    crate::run_transition_guard::lock_and_validate_transition(
+        tx, project_id, run_id,
+        crate::run_transition_guard::RunKind::Delivery,
+        crate::run_transition_guard::RunStatus::TimedOut,
+    ).await.map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     isolate_started_run(tx, run_id, cfg).await?;
     let created = insert_task_run(tx, project_id, task_id, None).await?;
     sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
