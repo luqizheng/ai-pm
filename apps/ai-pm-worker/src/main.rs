@@ -151,6 +151,7 @@ async fn main() {
         let reclamation_retention_days = std::env::var("AI_PM_WORKSPACE_RECLAMATION_RETENTION_DAYS")
             .ok()
             .and_then(|value| value.parse::<i32>().ok())
+            .filter(|days| *days >= 0)
             .unwrap_or(pm_application::workspace_reclamation::DEFAULT_RETENTION_DAYS);
         let workspace_reclaimer: Option<
             Arc<dyn pm_application::workspace_reclamation::WorkspaceReclaimer>,
