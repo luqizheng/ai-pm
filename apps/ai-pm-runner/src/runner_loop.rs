@@ -199,20 +199,9 @@ pub async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Opti
         project_id: cfg.project_id,
         task_id,
         run_id,
-        lease_token: reacquired
-            .get("lease_token")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
-        lease_generation: reacquired
-            .get("lease_generation")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(1) as i32,
-        worker_id: reacquired
-            .get("worker_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string(),
+        lease_token: required_nonempty_string(&reacquired, "lease_token")?,
+        lease_generation: required_positive_generation(&reacquired)?,
+        worker_id: required_nonempty_string(&reacquired, "worker_id")?,
         run_dir,
         stage: "started".into(),
         process: None,
@@ -456,6 +445,19 @@ fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(),
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     std::fs::write(path, bytes)
 }
+fn required_nonempty_string(value: &Value, field: &str) -> Result<String, mcp::RunnerError> {
+    value.get(field).and_then(Value::as_str).filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| mcp::RunnerError::Malformed(format!("lease response missing valid {field}")))
+}
+
+fn required_positive_generation(value: &Value) -> Result<i32, mcp::RunnerError> {
+    value.get("lease_generation").and_then(Value::as_i64)
+        .filter(|generation| *generation > 0 && *generation <= i32::MAX as i64)
+        .map(|generation| generation as i32)
+        .ok_or_else(|| mcp::RunnerError::Malformed("lease response missing valid positive lease_generation".into()))
+}
+
 /// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
 async fn reacquire_active_run(
     cfg: &Config,
@@ -474,18 +476,18 @@ async fn reacquire_active_run(
     run.last_lease_attempt = Some(Instant::now());
     run.lease_failures += 1;
     let reacquired = client.reacquire_lease(run.project_id, run.run_id).await?;
-    run.lease_token = reacquired
-        .get("lease_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-    run.lease_generation = reacquired
-        .get("lease_generation")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(run.lease_generation as i64) as i32;
-    if let Some(worker_id) = reacquired.get("worker_id").and_then(|v| v.as_str()) {
-        run.worker_id = worker_id.to_string();
+    let lease_token = required_nonempty_string(&reacquired, "lease_token")?;
+    let lease_generation = required_positive_generation(&reacquired)?;
+    if lease_generation <= run.lease_generation {
+        return Err(mcp::RunnerError::Malformed(format!(
+            "reacquired lease generation {} did not fence prior generation {}",
+            lease_generation, run.lease_generation
+        )));
     }
+    let worker_id = required_nonempty_string(&reacquired, "worker_id")?;
+    run.lease_token = lease_token;
+    run.lease_generation = lease_generation;
+    run.worker_id = worker_id;
     run.lease_failures = 0;
     Ok(())
 }
