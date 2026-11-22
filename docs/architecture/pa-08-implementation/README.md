@@ -10,12 +10,26 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 
 | ID | Workstream | Priority | Status |
 |---|---|---:|---|
-| PA08-00 | Baseline & inventory | P1 | IN PROGRESS |
-| PA08-01 | Registry portability | Foundation | IMPLEMENTED_UNVERIFIED |
-| PA08-02 | Runner lifecycle test harness | P1 | PLANNED |
+| PA08-00 | Baseline & inventory | P1 | COMPLETE (static inventory) |
+| PA08-01 | Registry portability | Foundation | VERIFIED |
+| PA08-02 | Runner lifecycle test harness | P1 | IN PROGRESS |
 | PA08-03 | Run transition guard | P1 | PLANNED |
 | PA08-04 | Workspace / mirror reclamation | P1 | PLANNED |
 | PA08-05 | Product lifecycle integrity | P1 | PLANNED |
 | PA08-06 | Runtime observability | P2 | PLANNED |
+
+### PA08-01 verification evidence
+
+- GitHub Actions: [Run #4 — public-registry-build](https://github.com/luqizheng/ai-pm/actions/runs/44967203110)
+- Result: `completed / success`
+- Verified steps: locked Cargo metadata, all four Digua crates sourced from crates.io, and `cargo check --workspace --locked`.
+
+### PA08-02 current slice
+
+- Added `apps/ai-pm-runner/tests/pa08_lifecycle.rs`.
+- Exercises the production `claim_and_start` path against a scripted Wiremock Platform: ready-task discovery, claim response parsing, run-context retrieval, lease-owner routing identity, and actual child-process spawn/cleanup.
+- Covers the empty-queue path without claiming or spawning.
+- CI now runs `cargo test -p ai-pm-runner --tests --locked` after the workspace build.
+- This is an initial lifecycle slice, not completion: heartbeat/command progression, restart recovery, and failure-injection coverage remain open.
 
 Status changes require code/test evidence. A plan or merged documentation is not implementation completion.
