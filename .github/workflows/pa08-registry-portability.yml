@@ -101,3 +101,5 @@ jobs:
         run: cargo test -p pm-api --lib metrics::tests --locked
       - name: Run PA08-06 authenticated metrics HTTP integration tests
         run: cargo test -p pm-api --test auth metrics_endpoint --locked
+      - name: Validate PA08-06 Prometheus alert rules
+        run: docker run --rm -v "$PWD/infrastructure/monitoring/pa08-alerts.yml:/etc/prometheus/pa08-alerts.yml:ro" prom/prometheus:v3.5.0 promtool check rules /etc/prometheus/pa08-alerts.yml
