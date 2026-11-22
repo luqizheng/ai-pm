@@ -777,17 +777,17 @@ pub async fn set_product_lifecycle(
     product_id: Uuid,
     action: &str,
 ) -> Result<ProductProfile, ProductError> {
-    // PA07-IMP-004（0044 四值化）：abandon→archived 终态（PA-07 §12 不提供
-    // 常规恢复）；suspend/resume/complete_resume 承接 §11 的暂停-评估-恢复
-    // 三段；restart 语义收敛为 suspended/resuming → normal 的再激活。
+    // PA-07 §§4/11/12：暂停与恢复必须经过 Suspended → Resuming → Normal；
+    // Archived 保留历史且不提供常规恢复。旧 restart（Archived → Normal）
+    // 与 PA-07 冲突，因此不再作为生命周期 action 接受。
     let target_status = match action {
         "abandon" => "archived",
         "suspend" => "suspended",
         "resume" => "resuming",
-        "restart" | "complete_resume" => "normal",
+        "complete_resume" => "normal",
         _ => {
             return Err(ProductError::Validation(
-                "action must be abandon, suspend, resume, complete_resume or restart",
+                "action must be abandon, suspend, resume or complete_resume",
             ))
         }
     };
@@ -818,6 +818,17 @@ pub async fn set_product_lifecycle(
     }
     if status == target_status {
         return Err(ProductError::Conflict("product_lifecycle_noop"));
+    }
+    let transition_allowed = matches!(
+        (status.as_str(), action),
+        ("normal", "suspend" | "abandon")
+            | ("suspended", "resume" | "abandon")
+            | ("resuming", "suspend" | "complete_resume" | "abandon")
+    );
+    if !transition_allowed {
+        return Err(ProductError::Conflict(
+            "product_lifecycle_transition_invalid",
+        ));
     }
 
     sqlx::query("UPDATE core.product SET status = $2, updated_at = now() WHERE id = $1")
