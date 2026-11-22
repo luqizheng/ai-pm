@@ -1136,12 +1136,15 @@ async fn load_known_docs(
         Vec::new()
     });
 
-    documents.into_iter().map(|document| KnownDoc {
-        doc_key: document.doc_key,
-        doc_type: document.doc_type,
-        current_markdown: document.markdown,
-        current_revision_id: document.revision_id,
-    }).collect()
+    documents
+        .into_iter()
+        .map(|document| KnownDoc {
+            doc_key: document.doc_key,
+            doc_type: document.doc_type,
+            current_markdown: document.markdown,
+            current_revision_id: document.revision_id,
+        })
+        .collect()
 }
 
 // ── 3. 澄清（Clarification） ──────────────────────────────────────────────
