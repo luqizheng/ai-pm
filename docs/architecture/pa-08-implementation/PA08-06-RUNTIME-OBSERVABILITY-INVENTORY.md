@@ -34,9 +34,9 @@ A plain-text exporter is acceptable only if output follows Prometheus exposition
 | Active Run age | Gauge | `run_kind`, `status` |
 | Run cleanup backlog | Gauge | `status` |
 | Workspace reclamation backlog | Gauge | `resource_kind`, `status` |
-| Workspace filesystem bytes | Gauge | `mount`, `capacity_kind` |
+| Workspace filesystem bytes | Gauge | no labels (one configured workspace root per exporter) |
 | Reclaimed bytes total | Counter | `resource_kind` |
-| Worker loop outcomes/errors | Counter | `loop`, `outcome` |
+| Worker loop outcomes/errors | Counter | no labels (fixed metric family per operation) |
 | Runner MCP outcomes/errors | Counter | `operation`, `outcome` |
 | Pending command age/count | Gauge | no labels |
 | Interaction overview | Gauge | no labels |
