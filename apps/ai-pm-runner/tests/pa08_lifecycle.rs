@@ -704,8 +704,8 @@ async fn restart_recovery_fails_closed_when_multiple_runs_are_discovered() {
             "params": { "name": "pm_discover_runs" }
         })))
         .respond_with(structured(json!({ "runs": [
-            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4() },
-            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4() }
+            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4(), "lease_generation": 1 },
+            { "run_id": Uuid::new_v4(), "task_id": Uuid::new_v4(), "lease_generation": 2 }
         ] })))
         .expect(1)
         .mount(&server)
