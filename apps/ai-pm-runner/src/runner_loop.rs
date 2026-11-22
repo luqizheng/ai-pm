@@ -263,7 +263,10 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::
             let has_local_child = active.as_ref().and_then(|run| run.process.as_ref()).is_some();
             let cleanup_result = match active.as_mut() {
                 Some(run) if has_local_child => match run.process.as_mut() {
-                    Some(process) => adapter::terminate_spawned(process).await.map(|_| ()),
+                    Some(process) => adapter::terminate_spawned(process)
+                        .await
+                        .map(|_| ())
+                        .map_err(|error| mcp::RunnerError::Adapter(error.to_string())),
                     None => Ok(()),
                 },
                 Some(run) => reacquire_active_run(cfg, client, run).await.map(|_| ()),
@@ -411,7 +414,9 @@ fn write_cleanup_escalation_evidence(run: &ActiveRun, error: &str) -> Result<(),
         "recorded_at": chrono::Utc::now().to_rfc3339(),
     });
     let path = directory.join("cleanup-needs-human.json");
-    std::fs::write(path, serde_json::to_vec_pretty(&evidence)?)
+    let bytes = serde_json::to_vec_pretty(&evidence)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    std::fs::write(path, bytes)
 }
 /// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
 async fn reacquire_active_run(
