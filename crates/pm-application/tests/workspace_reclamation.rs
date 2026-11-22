@@ -647,3 +647,41 @@ async fn reclamation_needs_human_can_be_listed_and_explicitly_requeued(pool: PgP
     assert_eq!(status.1, 0);
     assert!(status.2.is_none());
 }
+
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn mirror_reclamation_skips_repository_reactivated_after_candidate_staging(pool: PgPool) {
+    let fx = seed(&pool, "PA08-WR-MIRROR-REACTIVATE").await;
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'archived', updated_at = now() - interval '31 days' \
+          WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        pm_application::workspace_reclamation::stage_candidates(&pool, 30)
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query(
+        "UPDATE integration.project_repository SET status = 'verified', updated_at = now() WHERE id = $1",
+    )
+    .bind(fx.repository_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let adapter = FakeReclaimer::default();
+    let report = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
+        &pool, &adapter, 30,
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.claimed, 1);
+    assert_eq!(report.skipped, 1);
+    assert_eq!(adapter.mirror_calls.load(Ordering::SeqCst), 0);
+}
