@@ -20,7 +20,7 @@ PA-08 将 PA-07 验收遗留的执行可靠性与运维债务转为可测试、�
 | PA08-03 | Run transition guard | P1 | VERIFIED |
 | PA08-04 | Workspace / mirror reclamation | P1 | VERIFIED (DEFAULT-OFF) |
 | PA08-05 | Product lifecycle integrity | P1 | VERIFIED |
-| PA08-06 | Runtime observability | P2 | PARTIAL (API aggregate metrics; remaining Worker/Runner/disk/accounting work open) |
+| PA08-06 | Runtime observability | P2 | PARTIAL — API aggregate metrics VERIFIED (Run #156); Worker/Runner/disk/accounting work open |
 
 ### PA08-01 verification evidence
 
