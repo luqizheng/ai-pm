@@ -779,16 +779,16 @@ pub async fn set_product_lifecycle(
     action: &str,
 ) -> Result<ProductProfile, ProductError> {
     // PA-07 §§4/11/12：暂停与恢复必须经过 Suspended → Resuming → Normal；
-    // Archived 保留历史且不提供常规恢复。旧 restart（Archived → Normal）
-    // 与 PA-07 冲突，因此不再作为生命周期 action 接受。
+    // Archived 保留历史且不提供常规恢复。迁移 0044 保留的 restart action
+    // 仅作为 Resuming → Normal 的兼容别名，不得从 Suspended/Archived 直达 Normal。
     let target_status = match action {
         "abandon" => "archived",
         "suspend" => "suspended",
         "resume" => "resuming",
-        "complete_resume" => "normal",
+        "complete_resume" | "restart" => "normal",
         _ => {
             return Err(ProductError::Validation(
-                "action must be abandon, suspend, resume or complete_resume",
+                "action must be abandon, suspend, resume, complete_resume or restart",
             ))
         }
     };
@@ -824,7 +824,7 @@ pub async fn set_product_lifecycle(
         (status.as_str(), action),
         ("normal", "suspend" | "abandon")
             | ("suspended", "resume" | "abandon")
-            | ("resuming", "suspend" | "complete_resume" | "abandon")
+            | ("resuming", "suspend" | "complete_resume" | "restart" | "abandon")
     );
     if !transition_allowed {
         return Err(ProductError::Conflict(
