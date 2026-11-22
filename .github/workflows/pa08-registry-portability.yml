@@ -42,6 +42,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Verify Windows OS-backed mirror lock semantics
         run: cargo test -p pm-infrastructure --lib active_mirror_lock_cannot_be_stolen_even_when_lockfile_mtime_is_stale --locked
+      - name: Check Runner Windows process cleanup compilation
+        run: cargo check -p ai-pm-runner --locked
+      - name: Check Worker Windows filesystem metrics compilation
+        run: cargo check -p ai-pm-worker --locked
 
   public-registry-build:
     runs-on: ubuntu-latest
