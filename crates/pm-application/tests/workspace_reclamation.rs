@@ -3,6 +3,7 @@
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -501,6 +502,7 @@ struct RepositoryLockProbe {
     pool: PgPool,
     repository_id: Uuid,
     blocked: AtomicBool,
+    updated: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -520,13 +522,16 @@ impl pm_application::workspace_reclamation::WorkspaceReclaimer for RepositoryLoc
     ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
         let pool = self.pool.clone();
         let repository_id = self.repository_id;
+        let updated = Arc::clone(&self.updated);
         let update = tokio::spawn(async move {
-            sqlx::query(
+            let result = sqlx::query(
                 "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
             )
             .bind(repository_id)
             .execute(&pool)
-            .await
+            .await;
+            updated.store(result.is_ok(), Ordering::SeqCst);
+            result
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         self.blocked.store(!update.is_finished(), Ordering::SeqCst);
@@ -557,6 +562,7 @@ async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter
         pool: pool.clone(),
         repository_id: fx.repository_id,
         blocked: AtomicBool::new(false),
+        updated: Arc::new(AtomicBool::new(false)),
     };
     let report = pm_application::workspace_reclamation::run_repository_mirror_reclamation_round(
         &pool, &adapter, 30,
@@ -568,4 +574,11 @@ async fn mirror_reclamation_holds_repository_row_lock_through_filesystem_adapter
         adapter.blocked.load(Ordering::SeqCst),
         "Repository reactivation must block until mirror deletion transaction commits"
     );
+    for _ in 0..20 {
+        if adapter.updated.load(Ordering::SeqCst) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(adapter.updated.load(Ordering::SeqCst), "blocked reactivation should proceed after commit");
 }
