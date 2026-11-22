@@ -107,7 +107,7 @@ pub async fn mark_completed(
 ) -> Result<bool, sqlx::Error> {
     let rows = sqlx::query(
         "UPDATE delivery.task_run_cleanup
-            SET status = 'completed', completed_at = now(), claim_token = NULL, updated_at = now()
+            SET status = 'completed', completed_at = now(), last_error = NULL, claim_token = NULL, updated_at = now()
           WHERE run_id = $1 AND status = 'cleaning' AND claim_token = $2",
     )
     .bind(run_id)
