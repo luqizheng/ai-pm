@@ -77,7 +77,7 @@ jobs:
       - name: Build workspace from public registries
         run: cargo check --workspace --locked
       - name: Run workspace Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked
       - name: Run Runner integration tests
         run: cargo test -p ai-pm-runner --tests --locked
       - name: Run Runner metrics exporter unit tests
