@@ -56,15 +56,21 @@ async fn enqueue_cleanup(pool: &PgPool, code: &str) -> Uuid {
 async fn cleaning_row_is_not_immediately_claimed_by_a_second_worker(pool: PgPool) {
     let _run_id = enqueue_cleanup(&pool, "PA08-CLEANUP-CLAIM").await;
 
-    let first = run_cleanup::claim_batch(&pool).await.unwrap();
-    assert_eq!(first.len(), 1, "first worker should claim the pending cleanup");
-    let first_token = first[0].claim_token.expect("claimed row has a fencing token");
+    let (first, second) = tokio::join!(
+        run_cleanup::claim_batch(&pool),
+        run_cleanup::claim_batch(&pool),
+    );
+    let mut claims = first.unwrap();
+    claims.extend(second.unwrap());
+    assert_eq!(claims.len(), 1, "concurrent workers must claim a row exactly once");
+    let first_claim = claims.pop().unwrap();
+    let first_token = first_claim.claim_token.expect("claimed row has a fencing token");
 
     // A cleaning row must be protected by an unexpired claim lease.
-    let second = run_cleanup::claim_batch(&pool).await.unwrap();
+    let second_claim = run_cleanup::claim_batch(&pool).await.unwrap();
     assert!(
-        second.is_empty(),
-        "second worker must not reclaim an unexpired cleaning row"
+        second_claim.is_empty(),
+        "a later worker must not reclaim an unexpired cleaning row"
     );
 
     // Simulate a crashed worker by expiring the lease. A new claim gets a new
