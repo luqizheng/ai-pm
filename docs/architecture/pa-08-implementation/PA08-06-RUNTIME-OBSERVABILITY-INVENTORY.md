@@ -1,6 +1,6 @@
 # PA08-06 — Runtime Observability Inventory
 
-**Status:** INVENTORY COMPLETE; PARTIAL IMPLEMENTATION LANDED (API AGGREGATE METRICS ONLY).
+**Status:** INVENTORY COMPLETE; PARTIAL IMPLEMENTATION LANDED (API AGGREGATE METRICS, RECLAMATION ACCOUNTING, CLEANUP NEEDS-HUMAN API).
 
 ## 1. Current-state facts
 
@@ -10,7 +10,7 @@
 - `ai-pm-runner` is a client process and uses `tracing`; it does not expose an HTTP metrics endpoint.
 - `pm_application::comm_overview::load_comm_overview` already aggregates shielded Runs, unconsumed interaction responses, open interaction chains, pending worker commands, and oldest pending command age. The Worker logs these fields every 500 dispatch-loop ticks.
 - `delivery.task_run_cleanup` has fenced retry and `needs_human` state plus explicit requeue; the application exposes a bounded project/tenant-scoped list and the API exposes it at `GET /v1/pm/task-run-cleanups/needs-human`.
-- `delivery.workspace_reclamation` has `needs_human` listing, explicit operator requeue, and logical reclaimed-byte accounting (migration `0056`). The API exports cumulative logical bytes by bounded resource/status labels.
+- `delivery.workspace_reclamation` has `needs_human` listing, explicit operator requeue, and logical reclaimed-byte accounting (migration `0056`). The API exports cumulative logical bytes by bounded `resource_kind` only; the cumulative total is stored separately from per-operation ledger state (migration `0057`) so the Prometheus Counter remains monotonic.
 - No filesystem capacity/available-space gauge is collected yet. Logical reclaimed bytes are measured from regular-file sizes before deletion and do not represent physical block accounting.
 - Existing operational logs include entity IDs in individual diagnostic events. Such identifiers must not become Prometheus labels.
 
@@ -21,7 +21,7 @@ Prefer a small pull-based Prometheus text exposition with no new monitoring serv
 1. **API metrics endpoint:** expose database-backed global aggregates for Run counts/ages, cleanup backlog, reclamation backlog, and existing communication overview.
 2. **Worker metrics endpoint:** expose bounded in-process counters and workspace filesystem capacity/available-space gauges. Bind to loopback by default; require explicit operator configuration to expose beyond localhost.
 3. **Runner telemetry:** add bounded counters for claim, heartbeat, command polling/acknowledgement, and supervision errors. Because Runner commonly executes on a separate host, keep its exporter optional and document how operators scrape it locally.
-4. **Reclamation accounting:** record reclaimed bytes per ledger operation so cumulative bytes can be exported without rescanning historical directories.
+4. **Reclamation accounting:** record logical bytes per ledger operation and atomically increment a durable per-resource cumulative total (migration `0057`) so Counter values remain monotonic across retries and requeues.
 5. **Cleanup operations:** add a bounded `needs_human` listing query for process-cleanup records, matching the reclamation ledger operations.
 
 A plain-text exporter is acceptable only if output follows Prometheus exposition syntax, has deterministic metric names/types, escapes label values correctly, and is covered by tests. Do not hand-concatenate untrusted label values.
