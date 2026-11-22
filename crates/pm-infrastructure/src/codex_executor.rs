@@ -232,6 +232,7 @@ impl CodexExecutor {
         };
 
         if let Some(mirror) = mirror {
+            ensure_bare_mirror(&mirror).await?;
             let output = tokio::process::Command::new("git")
                 .arg("--git-dir")
                 .arg(&mirror)
@@ -279,6 +280,7 @@ impl CodexExecutor {
             return Ok(());
         };
 
+        ensure_bare_mirror(&mirror).await?;
         let prune = tokio::process::Command::new("git")
             .arg("--git-dir")
             .arg(&mirror)
@@ -451,6 +453,22 @@ impl CodexExecutor {
         .map_err(|e| ExecutorError::Other(format!("git worktree add failed: {e}")))?;
         Ok(())
     }
+}
+
+async fn ensure_bare_mirror(mirror: &Path) -> Result<(), ExecutorError> {
+    let output = tokio::process::Command::new("git")
+        .arg("--git-dir")
+        .arg(mirror)
+        .args(["rev-parse", "--is-bare-repository"])
+        .output()
+        .await
+        .map_err(|e| ExecutorError::Other(format!("verify bare Git mirror failed: {e}")))?;
+    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
+        return Err(ExecutorError::Other(
+            "refusing reclamation because target is not a verified bare Git mirror".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Resolve a Run worktree without following any symlink below the Run root.
