@@ -149,9 +149,9 @@ impl CodexExecutor {
         ssh_command_with_key(url, &plain)
     }
 
-    /// T-032 §6.1：镜像仓跨进程锁（每 repo_id 一把；原子 create_new + 陈旧检测）。
-    /// 双 Run 并发首 clone / 并发 fetch 在此串行化；持锁进程崩溃后的残留锁在
-    /// 超时后可安全清除。
+    /// T-032 §6.1：每个 repository_id 使用 OS-backed advisory lock。
+    /// 双 Run 并发首 clone / fetch 与 destructive reclamation 在此串行化；
+    /// 进程退出或崩溃时由内核释放锁，持久锁文件不按 mtime 窃取或删除。
     /// Acquire a kernel-managed advisory lock for this repository mirror.
     /// The lock file is intentionally persistent: deleting a locked inode can
     /// let a later opener lock a different inode while existing holders continue.
