@@ -1,6 +1,6 @@
 # PA08-06 — Runtime Observability Inventory
 
-**Status:** INVENTORY COMPLETE; IMPLEMENTATION IN PROGRESS (API, WORKER, RUNNER EXPORTERS AND FILESYSTEM GAUGES IMPLEMENTED; HOSTED VALIDATION PENDING).
+**Status:** IMPLEMENTATION COMPLETE; HOSTED VERIFIED on code SHA `643231111624aa170d90f5bf4a467720302cb07a` (PA-08 Run #292).
 
 ## 1. Current-state facts
 
@@ -64,9 +64,9 @@ Never use `run_id`, `task_id`, `project_id`, `repository_id`, user identity, URL
 No Kafka, external SaaS, distributed tracing backend, or separate event-sourcing system is introduced.
 
 
-## 6. Implementation update — full implementation, Hosted validation pending
+## 6. Implementation and Hosted acceptance
 
-The implementation slice now covers the API, Worker, Runner, filesystem capacity, reclamation accounting, and alert rules. This is an implementation-complete slice awaiting the latest Hosted run; it is not yet PA08-06 acceptance.
+The implementation slice covers the API, Worker, Runner, filesystem capacity, reclamation accounting, and alert rules. The complete PA-08 Hosted workflow passed on code SHA `643231111624aa170d90f5bf4a467720302cb07a`; PA08-06 is accepted against that verified code SHA.
 
 ### Implemented
 
@@ -81,11 +81,11 @@ The implementation slice now covers the API, Worker, Runner, filesystem capacity
 
 The PA08 workflow now checks locked dependency metadata and public-registry resolution, workspace build, workspace Clippy, Runner integration tests, Worker/Runner metrics tests, PostgreSQL lifecycle/cleanup/reclamation tests, Product lifecycle/concurrency tests, authenticated API metrics tests, Prometheus rule syntax via `promtool`, and Windows mirror-lock plus Runner/Worker platform compilation.
 
-Latest implementation head at the time of this update: `059bab5016b2d101ab4bee96224f99340dbb7ced`. Its PA08 Hosted workflow is running; no result from that SHA is counted as passed yet. Earlier partial Hosted runs remain historical evidence only and do not close the latest-head acceptance gate.
+Verified code SHA: `643231111624aa170d90f5bf4a467720302cb07a`.
 
-### Remaining acceptance gate
+- PA-08 Run [#45044216787](https://github.com/luqizheng/ai-pm/actions/runs/45044216787): 8/8 jobs successful, including all four Linux Nextest shards (2,000 passed, 0 failed), Linux doctests, public-registry build/Clippy/format/migration/alert validation, and Windows mirror-lock plus Runner/Worker compilation.
+- PA-07 Run [#45044216776](https://github.com/luqizheng/ai-pm/actions/runs/45044216776): 2/2 jobs successful; the `batch_create_tasks` PostgreSQL integration target executed (2 passed, 0 failed; not skipped).
+- API HTTP tests cover unauthenticated rejection, authenticated Prometheus exposition/content type, bounded output without identifiers, and database failure 503. Worker and Runner exporter tests are part of the full workspace suite.
 
-- Obtain a successful PA08 Hosted run against the latest PR head, including both Windows and Linux jobs.
-- Resolve any failures on the latest SHA and rerun the complete workflow.
-- Keep this inventory and the PR verification table aligned with the final successful run SHA.
+No PA08-06 implementation or Hosted acceptance gate remains open. Archive size/performance is tracked separately as a non-blocking CI optimization follow-up. The later branch commit `b57768c7af8492fb283b7928e3b2d8b0850489c3` changes this documentation only; Hosted test evidence above is intentionally attributed to the exact code SHA.
 
