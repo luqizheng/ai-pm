@@ -786,8 +786,36 @@ pub async fn execute_command(
             ack(client, run, command_id, outcome_word, receipt, error).await;
         }
         "agent.task.continue" => {
+            // Platform may redeliver the same command when its first ack was delayed
+            // or lost. If this Runner already has a live continuation process, do not
+            // spawn a second Agent session; acknowledge the duplicate against the
+            // existing session instead.
+            if !run.awaiting_continue && run.process.is_some() {
+                let session_id = run
+                    .process
+                    .as_ref()
+                    .map(|process| process.session_id.clone())
+                    .unwrap_or_default();
+                ack(
+                    client,
+                    run,
+                    command_id,
+                    "acked",
+                    receipt_v1(
+                        run.lease_generation,
+                        json!({
+                            "duplicate": true,
+                            "session_created": false,
+                            "session_id": session_id,
+                        }),
+                    ),
+                    None,
+                )
+                .await;
+                return;
+            }
             // D-03 时序：terminate 已确认后才可能收到 continue（Platform 情形 6 过滤）。
-            // F-1：启动前置校验（guard 快照）——拒绝时命令 failed，不 spawn。
+            // F-1：启动前置校验（guard 快照）——拒绝时命令 failed，不 spawn.
             let guard = command
                 .get("payload")
                 .and_then(|p| p.get("guard"))
