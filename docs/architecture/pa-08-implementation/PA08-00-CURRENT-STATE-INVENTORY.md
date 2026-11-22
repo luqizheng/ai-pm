@@ -53,10 +53,12 @@
 - 当前实现锁定 Product 行并验证 Product Owner，但只拒绝 `status == target_status`；没有按源状态验证 action 是否允许。
 - 因此诸如从 `archived` 再执行 `resume`，或从 `normal` 直接执行 `complete_resume`，当前代码层没有状态边校验（数据库 CHECK 只约束状态值集合，不表达状态图）。
 
-**PA-08 处置**
-- PA08-05 以 PA-07 Product 状态语义为准建立显式转换矩阵。
-- 需先核对 REST action 调用点与产品端调用语义，尤其 `restart` / `complete_resume` 的区别；不可静默改变 API 语义。
-- 对非法转换验证状态、审计和 Outbox 均无副作用；并发 Product transition 与 Run start 必须由同一数据库锁/门禁顺序解决。
+**PA-08 处置（已实施，Hosted CI 验证中）**
+- 已按 PA-07 §§4/11/12 实施显式转换矩阵：`normal → suspended → resuming → normal`，允许 `resuming → suspended` 再次暂停，非归档状态可 abandon 到 `archived`。
+- `archived` 不提供普通恢复；移除旧 `restart` action（此前允许 archived→normal，与 PA-07 §12 冲突）。`complete_resume` 仅允许从 `resuming` 到 `normal`。
+- Product Owner 校验、Product 行锁、源状态校验、状态更新与审计同事务；非法跳转不写状态、不写审计。
+- API 集成测试覆盖完整恢复路径、非法源状态、归档终态和审计无副作用。详情见 `PA08-05-PRODUCT-LIFECYCLE-INVENTORY.md`。
+- Product transition 与 Run claim/start 的并发覆盖仍待补齐，不能把当前状态转换单测视为并发验收。
 
 ### INV-05 — Runtime observability 仍以结构化日志为主
 
@@ -76,8 +78,8 @@
 | PA08-01 | crates.io 源切换已提交；Hosted build 正在验证 | 等待 GitHub Actions 结果 |
 | PA08-02 | Runner 单测仅覆盖辅助逻辑 | 设计可注入测试 seam |
 | PA08-03 | Run 写入分散；Task guard 不可替代 Run guard | 建立全仓写入点清单与状态矩阵 |
-| PA08-04 | 无磁盘回收；进程清理账本另有潜在领取竞态 | 先补并发测试，再做原子领取与回收器 |
-| PA08-05 | lifecycle action 未校验源状态 | 核对 API 调用与 PA-07 状态图 |
+| PA08-04 | Worktree + mirror ledger、fenced Worker 与文件系统保护已实施；删除默认关闭 | Hosted CI 确认后纳入 PA08-06 backlog/bytes metrics |
+| PA08-05 | PA-07 源状态转换矩阵已实施，API 测试已补 | Hosted CI 确认并补 Product transition vs Run start 并发测试 |
 | PA08-06 | 无 metrics 导出 | 盘点现有依赖和服务端挂载点 |
 
 ## 3. Non-goals
