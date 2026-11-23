@@ -114,8 +114,8 @@ function sources(row: PcObjectRow): ObjectAnalysisSource[] {
   return details.value[row.object_id]?.analysis_sources ?? [];
 }
 
-function openSourceReport(reportId: string): void {
-  void router.push({
+async function openSourceReport(reportId: string): Promise<void> {
+  await router.push({
     path: `/project/analysis/reports/${encodeURIComponent(reportId)}`,
     query: projectId.value ? { project_id: projectId.value } : {}
   });
@@ -128,8 +128,8 @@ function openTrace(row: PcObjectRow): void {
   });
 }
 
-function openProposalQueue(): void {
-  void router.push({
+async function openProposalQueue(): Promise<void> {
+  await router.push({
     path: "/project/review-center",
     query: {
       ...(projectId.value ? { project_id: projectId.value } : {}),
