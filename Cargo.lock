@@ -537,9 +537,9 @@ dependencies = [
 
 [[package]]
 name = "digua_common_consul"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f215a84421ba722a7513eb9af23e62dbb9bd1fb9897fe2781843137e73b23526"
+version = "1.8.1"
+source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+checksum = "cc54865636b57d872b17705d6e14bd7702e146a0fc2b783e041812af9a3c1a92"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -553,9 +553,9 @@ dependencies = [
 
 [[package]]
 name = "digua_common_jwt"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67bf3d2ff4cc5caa03ad2885d1ede09b5ba94be2d9126167c957cf97884de6a1"
+version = "1.8.1"
+source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+checksum = "858278d43634edd778f3eb1ec3ea795b3a81825d87335b1c3a6863068471bf72"
 dependencies = [
  "chrono",
  "jsonwebtoken",
@@ -569,9 +569,9 @@ dependencies = [
 
 [[package]]
 name = "digua_file_sdk"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1215658cf524f39e147f6734fb65ab28a509fe00f18c750221b01b153e24f912"
+version = "1.8.1"
+source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+checksum = "6f1a2f6271356e1a0c3e248b759309ec1677d04f1731bb0efbfcff3360ce5971"
 dependencies = [
  "chrono",
  "digua_http_client",
@@ -584,9 +584,9 @@ dependencies = [
 
 [[package]]
 name = "digua_http_client"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40b3c32bb6f089af609442d03b839a031d825208b0d0fd2362abb317de536224"
+version = "1.8.1"
+source = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+checksum = "9edd723a49a17fd858848f265aee631bb9136ee9f16bceebc10be532e2b6845a"
 dependencies = [
  "async-trait",
  "hex",
@@ -658,7 +658,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1495,7 +1495,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2215,7 +2215,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2812,10 +2812,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

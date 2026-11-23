@@ -82,6 +82,6 @@ wiremock = "0.6"
 # lmms 发版后，下游通过 crates.io 版本升级；不做源码级同步。
 # 所有依赖保持 default-features = false + tls-native，避免意外引入
 # rustls/aws-lc-sys 构建链并保持 reqwest 的 native-tls 后端一致。
-digua_common_jwt = { version = "1.7.0", default-features = false, features = ["tls-native"] }
-digua_common_consul = { version = "1.7.0", default-features = false, features = ["tls-native"] }
-digua_file_sdk = { version = "1.7.0", default-features = false, features = ["tls-native"] }
+digua_common_jwt = { version = "1.8.1", registry = "kellnr", default-features = false, features = ["tls-native"] }
+digua_common_consul = { version = "1.8.1", registry = "kellnr", default-features = false, features = ["tls-native"] }
+digua_file_sdk = { version = "1.8.1", registry = "kellnr", default-features = false, features = ["tls-native"] }

@@ -2,8 +2,14 @@
 [build]
 rustc-wrapper = "sccache"
 
-# Public crates are resolved directly from crates.io.
-# Digua dependencies are published on crates.io; no private registry is required.
+# digua_* crates 从 v1.8.1 起发布到内部 kellnr（crates.io 停留在 1.7.0）。
+# [registries] 供 cargo 解析依赖的 registry 字段；[source] 供 cargo add/update 拉取。
+[registries.kellnr]
+index = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+protocol = "sparse"
+
+[source.kellnr]
+registry = "sparse+http://192.168.2.12:16444/api/v1/crates/"
 # rust-lld 链接器（仅 Windows MSVC host；Linux/Docker 构建不受影响）。
 # 实测 lld 比 link.exe 快 ~35–40%，本仓 pm-api / pm-worker / ai-pm-worker
 # 三个 bin 与测试二进制的链接段都受益。回退：删掉本段（会再触发一次全量
