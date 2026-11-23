@@ -12,6 +12,7 @@ vi.mock("@/api/projects", () => ({
 
 async function mountView() {
   const mounted = mountShell(ProjectCreateView);
+  await mounted.router.isReady();
   await flushPromises();
   return mounted;
 }
