@@ -59,12 +59,12 @@ if (changedFromIndex >= 0) {
     ["diff", "--name-only", "--diff-filter=ACMR", changedFrom + "...HEAD"],
     { cwd: ROOT, encoding: "utf8" }
   )
-    .split(/\\r?\\n/)
+    .split(/\r?\n/)
     .filter(
       (file) =>
         file.startsWith("ai-frontend/src/") &&
-        /\\.(vue|css|ts|tsx)$/.test(file) &&
-        !/\\.test\\.ts$/.test(file)
+        /\.(vue|css|ts|tsx)$/.test(file) &&
+        !/\.test\.ts$/.test(file)
     );
   SCAN_FILES = changedPaths.map((file) => resolve(ROOT, file));
 }
@@ -322,7 +322,7 @@ for (const file of SCAN_FILES) {
         NAMED_COLORS.includes(lowered) && !ALLOWED_KEYWORDS.has(lowered);
       const colorProp = COLOR_PROPS.includes(prop);
       const namedInValue = NAMED_COLORS.find(
-        (c) => new RegExp(`(^|[\\s,(])${c}($|[\\s,;)])`).test(lowered)
+        (c) => new RegExp(`(^|[\s,(])${c}($|[\s,;)])`).test(lowered)
       );
       if (wholeValueIsColor || (colorProp && namedInValue)) {
         violations.push(
