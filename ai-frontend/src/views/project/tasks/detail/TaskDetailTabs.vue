@@ -36,12 +36,16 @@ const DETAIL_TABS = computed(() => [
 ]);
 
 const activeKey = computed(
-  () => DETAIL_TABS.value.find(tab => tab.path === route.path)?.key ?? "overview"
+  () =>
+    DETAIL_TABS.value.find(tab => tab.path === route.path)?.key ?? "overview"
 );
 </script>
 
 <template>
-  <nav class="task-detail-tabs" :data-testid="`task-detail-tabs-${props.taskId}`">
+  <nav
+    class="task-detail-tabs"
+    :data-testid="`task-detail-tabs-${props.taskId}`"
+  >
     <RouterLink
       v-for="tab in DETAIL_TABS"
       :key="tab.key"

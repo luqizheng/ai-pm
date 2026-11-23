@@ -43,7 +43,9 @@ const loading = ref(false);
 const detailLoading = ref<string | null>(null);
 const error = ref("");
 
-function lifecycleVariant(status: string): "success" | "warning" | "danger" | "neutral" {
+function lifecycleVariant(
+  status: string
+): "success" | "warning" | "danger" | "neutral" {
   if (status === "active") return "success";
   if (status === "draft" || status === "identity") return "warning";
   if (status === "rejected" || status === "failed") return "danger";
@@ -147,10 +149,7 @@ watch(projectId, () => {
 </script>
 
 <template>
-  <PageFrame
-    :title="t('shell.app.side.item.productCognition')"
-
-  >
+  <PageFrame :title="t('shell.app.side.item.productCognition')">
     <div class="product-cognition">
       <div class="product-cognition__actions">
         <span class="product-cognition__count">
@@ -207,7 +206,10 @@ watch(projectId, () => {
             </span>
           </button>
 
-          <div v-if="!expanded[row.object_id]" class="product-cognition__summary">
+          <div
+            v-if="!expanded[row.object_id]"
+            class="product-cognition__summary"
+          >
             <p v-if="row.change_summary">{{ row.change_summary }}</p>
             <p v-if="row.excerpt">{{ row.excerpt }}</p>
           </div>
@@ -233,7 +235,11 @@ watch(projectId, () => {
                     v{{ details[row.object_id].latest_revision?.revision_no }}
                   </span>
                   <Badge
-                    :variant="details[row.object_id].latest_revision?.versioned ? 'success' : 'neutral'"
+                    :variant="
+                      details[row.object_id].latest_revision?.versioned
+                        ? 'success'
+                        : 'neutral'
+                    "
                   >
                     {{
                       details[row.object_id].latest_revision?.versioned
@@ -241,7 +247,9 @@ watch(projectId, () => {
                         : t("s01.knowledge.detail.unversioned")
                     }}
                   </Badge>
-                  <span v-if="details[row.object_id].latest_revision?.analysis_mode">
+                  <span
+                    v-if="details[row.object_id].latest_revision?.analysis_mode"
+                  >
                     {{ t("s01.knowledge.detail.analysisMode") }}:
                     {{ details[row.object_id].latest_revision?.analysis_mode }}
                   </span>
@@ -253,11 +261,16 @@ watch(projectId, () => {
                   {{ details[row.object_id].latest_revision?.summary }}
                 </p>
                 <MarkdownViewer
-                  :model-value="details[row.object_id].latest_revision?.content ?? ''"
+                  :model-value="
+                    details[row.object_id].latest_revision?.content ?? ''
+                  "
                 />
               </template>
 
-              <section v-if="sources(row).length" class="product-cognition__sources">
+              <section
+                v-if="sources(row).length"
+                class="product-cognition__sources"
+              >
                 <h3>{{ t("s01.knowledge.detail.sourceAnalysis") }}</h3>
                 <ul>
                   <li
@@ -271,7 +284,9 @@ watch(projectId, () => {
                       class="product-cognition__link"
                       @click="openSourceReport(source.report_id)"
                     >
-                      {{ source.repository_name ?? "—" }} @{{ shortSha(source.commit_sha) }}
+                      {{ source.repository_name ?? "—" }} @{{
+                        shortSha(source.commit_sha)
+                      }}
                     </button>
                     <span v-else>
                       {{ t("s01.knowledge.detail.sourceAnalysisNone") }}

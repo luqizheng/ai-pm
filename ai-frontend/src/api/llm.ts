@@ -69,14 +69,8 @@ export interface CreateLlmProviderBody {
   timeout_secs?: number;
 }
 
-export function createLlmProvider(
-  teamId: string,
-  body: CreateLlmProviderBody
-) {
-  return http.post<LlmProvider>(
-    `/v1/pm/teams/${teamId}/llm-providers`,
-    body
-  );
+export function createLlmProvider(teamId: string, body: CreateLlmProviderBody) {
+  return http.post<LlmProvider>(`/v1/pm/teams/${teamId}/llm-providers`, body);
 }
 
 export interface UpdateLlmProviderBody {

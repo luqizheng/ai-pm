@@ -52,7 +52,11 @@ const updatedLabel = computed(() =>
     <div class="exec-panel__rule" />
 
     <p class="exec-panel__caption">{{ t("pa07.panel.relatedCaption") }}</p>
-    <p v-if="props.loading" class="exec-panel__copy" data-testid="panel-loading">
+    <p
+      v-if="props.loading"
+      class="exec-panel__copy"
+      data-testid="panel-loading"
+    >
       {{ t("common.loading") }}
     </p>
     <p
@@ -63,12 +67,17 @@ const updatedLabel = computed(() =>
       {{ t("pa07.panel.relatedEmpty") }}
     </p>
     <ul v-else class="exec-panel__products" data-testid="panel-products">
-      <li v-for="product in props.products" :key="product.id" class="exec-panel__product">
+      <li
+        v-for="product in props.products"
+        :key="product.id"
+        class="exec-panel__product"
+      >
         <span class="exec-panel__product-name">{{ product.name }}</span>
         <span
           class="exec-panel__product-status"
           :class="{
-            'is-restricted': product.status === 'suspended' || product.status === 'archived'
+            'is-restricted':
+              product.status === 'suspended' || product.status === 'archived'
           }"
         >
           {{ productStatus(product.status) }}
@@ -81,7 +90,11 @@ const updatedLabel = computed(() =>
     <p class="exec-panel__caption">{{ t("pa07.panel.bypassCaption") }}</p>
     <p class="exec-panel__copy">{{ t("pa07.panel.bypassCopy") }}</p>
 
-    <p v-if="updatedLabel" class="exec-panel__updated" data-testid="panel-updated">
+    <p
+      v-if="updatedLabel"
+      class="exec-panel__updated"
+      data-testid="panel-updated"
+    >
       {{ t("pa07.panel.updated", { time: updatedLabel }) }}
     </p>
   </aside>

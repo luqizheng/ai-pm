@@ -6,7 +6,6 @@ import {
   formatDue,
   priorityGrade,
   schedulingCondition,
-  statusTone,
   type ExecutionDisplay,
   type SchedulingCondition,
   type TaskStatusTone
@@ -56,7 +55,12 @@ export function toListRow(task: Task): TaskListRow {
 }
 
 /** Dependency 筛选档（设计稿 Dependency: All 下拉） */
-export const DEPENDENCY_FILTERS = ["running", "blocked_product", "waiting", "ready"] as const;
+export const DEPENDENCY_FILTERS = [
+  "running",
+  "blocked_product",
+  "waiting",
+  "ready"
+] as const;
 export type DependencyFilterKey = (typeof DEPENDENCY_FILTERS)[number];
 
 export interface TaskListFilters {
@@ -66,16 +70,25 @@ export interface TaskListFilters {
   search: string;
 }
 
-export function filterRows(rows: TaskListRow[], filters: TaskListFilters): TaskListRow[] {
+export function filterRows(
+  rows: TaskListRow[],
+  filters: TaskListFilters
+): TaskListRow[] {
   const needle = filters.search.trim().toLowerCase();
   return rows.filter(row => {
-    if (filters.product !== "__all__" && !row.products.some(p => p.id === filters.product)) {
+    if (
+      filters.product !== "__all__" &&
+      !row.products.some(p => p.id === filters.product)
+    ) {
       return false;
     }
     if (filters.status !== "__all__" && row.status !== filters.status) {
       return false;
     }
-    if (filters.dependency !== "__all__" && row.condition.key !== filters.dependency) {
+    if (
+      filters.dependency !== "__all__" &&
+      row.condition.key !== filters.dependency
+    ) {
       return false;
     }
     if (needle && !`${row.code} ${row.title}`.toLowerCase().includes(needle)) {
@@ -86,7 +99,9 @@ export function filterRows(rows: TaskListRow[], filters: TaskListFilters): TaskL
 }
 
 /** 筛选器下拉的产品选项（列表行内出现过的关联产品聚合去重） */
-export function productOptions(rows: TaskListRow[]): Array<{ value: string; label: string }> {
+export function productOptions(
+  rows: TaskListRow[]
+): Array<{ value: string; label: string }> {
   const seen = new Map<string, string>();
   for (const row of rows) {
     for (const product of row.products) {

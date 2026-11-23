@@ -49,7 +49,10 @@ function analysisItem(): InitItemView {
     required: true,
     detail: "",
     // 深链由 real-data 映射层注入（P1 冷启动：每步可单独进入已有页面）。
-    link: { path: "/project/settings/repositories", query: { project_id: "prj-1" } }
+    link: {
+      path: "/project/settings/repositories",
+      query: { project_id: "prj-1" }
+    }
   };
 }
 
@@ -239,19 +242,21 @@ describe("InitializationCard", () => {
     ).toBe(false);
   });
 
-
   it("P1 冷启动：无待办且无进行中时自动收起，仅显示摘要与展开入口", async () => {
     const wrapper = mountCard(
-      data({ completion: "incomplete", requiredDone: 2, requiredTotal: 2, expanded: false }),
+      data({
+        completion: "incomplete",
+        requiredDone: 2,
+        requiredTotal: 2,
+        expanded: false
+      }),
       "prj-1"
     );
     await flushPromises();
     expect(wrapper.find("[data-testid='cc-init-collapsed']").exists()).toBe(
       true
     );
-    expect(
-      wrapper.find("[data-testid='cc-init-expand']").exists()
-    ).toBe(true);
+    expect(wrapper.find("[data-testid='cc-init-expand']").exists()).toBe(true);
     // 收起不得隐藏人工待办（本夹具含 warning 行 → 后端会判 expanded，此处
     // 直接验证收起态徽标计数呈现）。
     expect(wrapper.text()).toContain(

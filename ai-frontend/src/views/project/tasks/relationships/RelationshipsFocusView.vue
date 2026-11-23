@@ -42,11 +42,11 @@ const focusNode = computed(
   () => focusCandidates.value.find(node => node.id === focusId.value) ?? null
 );
 
-const upstreamEdges = computed(
-  () => (graph.value?.edges ?? []).filter(edge => edge.to_task_id === focusId.value)
+const upstreamEdges = computed(() =>
+  (graph.value?.edges ?? []).filter(edge => edge.to_task_id === focusId.value)
 );
-const downstreamEdges = computed(
-  () => (graph.value?.edges ?? []).filter(edge => edge.from_task_id === focusId.value)
+const downstreamEdges = computed(() =>
+  (graph.value?.edges ?? []).filter(edge => edge.from_task_id === focusId.value)
 );
 
 function nodeOf(id: string) {
@@ -70,7 +70,8 @@ async function load() {
   loadError.value = null;
   try {
     graph.value = await getDependencyGraph(projectId.value);
-    const fromQuery = typeof route.query.focus === "string" ? route.query.focus : "";
+    const fromQuery =
+      typeof route.query.focus === "string" ? route.query.focus : "";
     focusId.value =
       fromQuery && focusCandidates.value.some(node => node.id === fromQuery)
         ? fromQuery
@@ -103,7 +104,10 @@ function openTask(id: string) {
 </script>
 
 <template>
-  <PageFrame :title="t('pa07.relationships.title')" :description="t('pa07.relationships.subtitle')">
+  <PageFrame
+    :title="t('pa07.relationships.title')"
+    :description="t('pa07.relationships.subtitle')"
+  >
     <TasksFrame />
 
     <div class="rf-toolbar">
@@ -123,7 +127,9 @@ function openTask(id: string) {
         {{ t("pa07.list.viewRelationships") }}
       </RouterLink>
       <label class="rf-focus">
-        <span class="rf-focus__label">{{ t("pa07.relationships.selectedTask") }}</span>
+        <span class="rf-focus__label">{{
+          t("pa07.relationships.selectedTask")
+        }}</span>
         <select
           class="rf-focus__select"
           data-test="rel-focus-select"
@@ -164,7 +170,11 @@ function openTask(id: string) {
       <div class="rf-grid">
         <section class="rf-col" data-testid="rel-depends-on">
           <p class="rf-col__caption">{{ t("pa07.relationships.dependsOn") }}</p>
-          <div v-if="upstreamEdges.length === 0" class="rf-card rf-card--muted" data-test="rel-depends-empty">
+          <div
+            v-if="upstreamEdges.length === 0"
+            class="rf-card rf-card--muted"
+            data-test="rel-depends-empty"
+          >
             {{ t("pa07.relationships.emptyDependsOn") }}
           </div>
           <button
@@ -174,12 +184,16 @@ function openTask(id: string) {
             data-test="rel-upstream-card"
             @click="openTask(edge.from_task_id)"
           >
-            <span class="rf-card__title">{{ nodeOf(edge.from_task_id)?.title ?? "—" }}</span>
+            <span class="rf-card__title">{{
+              nodeOf(edge.from_task_id)?.title ?? "—"
+            }}</span>
             <span
               class="rf-card__status"
               :class="`rf-card__status--${aggregateStatusTone(nodeOf(edge.from_task_id)?.status ?? '')}`"
             >
-              {{ aggregateStatusLabel(nodeOf(edge.from_task_id)?.status ?? "") }}
+              {{
+                aggregateStatusLabel(nodeOf(edge.from_task_id)?.status ?? "")
+              }}
             </span>
             <span class="rf-card__edge">{{ edge.dependency_type }}</span>
           </button>
@@ -188,7 +202,9 @@ function openTask(id: string) {
         <div class="rf-arrow" aria-hidden="true">→</div>
 
         <section class="rf-col" data-testid="rel-selected">
-          <p class="rf-col__caption">{{ t("pa07.relationships.selectedTask") }}</p>
+          <p class="rf-col__caption">
+            {{ t("pa07.relationships.selectedTask") }}
+          </p>
           <div class="rf-card rf-card--focus">
             <span class="rf-card__title">{{ focusNode.title }}</span>
             <span
@@ -198,8 +214,9 @@ function openTask(id: string) {
               {{ aggregateStatusLabel(focusNode.status) }}
             </span>
             <span class="rf-card__meta">
-              {{ t("pa07.relationships.dependsOn") }} {{ upstreamEdges.length }} ·
-              {{ t("pa07.relationships.blocks") }} {{ downstreamEdges.length }}
+              {{ t("pa07.relationships.dependsOn") }}
+              {{ upstreamEdges.length }} · {{ t("pa07.relationships.blocks") }}
+              {{ downstreamEdges.length }}
             </span>
             <Button
               variant="secondary"
@@ -216,7 +233,11 @@ function openTask(id: string) {
 
         <section class="rf-col" data-testid="rel-blocks">
           <p class="rf-col__caption">{{ t("pa07.relationships.blocks") }}</p>
-          <div v-if="downstreamEdges.length === 0" class="rf-card rf-card--muted" data-test="rel-blocks-empty">
+          <div
+            v-if="downstreamEdges.length === 0"
+            class="rf-card rf-card--muted"
+            data-test="rel-blocks-empty"
+          >
             {{ t("pa07.relationships.emptyBlocks") }}
           </div>
           <button
@@ -226,7 +247,9 @@ function openTask(id: string) {
             data-test="rel-downstream-card"
             @click="openTask(edge.to_task_id)"
           >
-            <span class="rf-card__title">{{ nodeOf(edge.to_task_id)?.title ?? "—" }}</span>
+            <span class="rf-card__title">{{
+              nodeOf(edge.to_task_id)?.title ?? "—"
+            }}</span>
             <span
               class="rf-card__status"
               :class="`rf-card__status--${aggregateStatusTone(nodeOf(edge.to_task_id)?.status ?? '')}`"
@@ -238,9 +261,17 @@ function openTask(id: string) {
         </section>
       </div>
 
-      <div v-if="downstreamEdges.length > 1" class="rf-parallel" data-test="rel-parallel">
-        <Badge variant="accent">{{ t("pa07.relationships.parallelTitle") }}</Badge>
-        <p class="rf-parallel__copy">{{ t("pa07.relationships.parallelCopy") }}</p>
+      <div
+        v-if="downstreamEdges.length > 1"
+        class="rf-parallel"
+        data-test="rel-parallel"
+      >
+        <Badge variant="accent">{{
+          t("pa07.relationships.parallelTitle")
+        }}</Badge>
+        <p class="rf-parallel__copy">
+          {{ t("pa07.relationships.parallelCopy") }}
+        </p>
       </div>
     </template>
   </PageFrame>

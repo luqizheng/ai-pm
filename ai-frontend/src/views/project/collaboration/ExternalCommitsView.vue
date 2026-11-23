@@ -61,7 +61,15 @@ const decisionNote = ref("");
 const diffText = ref<string | null>(null);
 const diffTruncated = ref(false);
 
-const FILTERS = ["", "discovered", "analyzed", "awaiting_adoption", "adopted", "closed", "failed"];
+const FILTERS = [
+  "",
+  "discovered",
+  "analyzed",
+  "awaiting_adoption",
+  "adopted",
+  "closed",
+  "failed"
+];
 
 const selectedRow = computed(
   () => items.value.find(row => row.id === selectedId.value) ?? null
@@ -228,7 +236,10 @@ async function decide(
             : "pa06.commits.rejectedToast"
       )
     });
-    if (outcome.status === "adopted" && outcome.knowledge_proposals.length > 0) {
+    if (
+      outcome.status === "adopted" &&
+      outcome.knowledge_proposals.length > 0
+    ) {
       toast.toast({ title: t("pa06.commits.proposalsNote") });
     }
     await load();
@@ -300,11 +311,7 @@ watch(statusFilter, () => {
               :aria-label="$t('pa06.commits.filterLabel')"
               data-testid="ec-filter"
             >
-              <option
-                v-for="value in FILTERS"
-                :key="value"
-                :value="value"
-              >
+              <option v-for="value in FILTERS" :key="value" :value="value">
                 {{
                   value === ""
                     ? $t("pa06.commits.filterAll")
@@ -344,7 +351,9 @@ watch(statusFilter, () => {
                 :data-testid="`ec-row-${row.commit_sha.slice(0, 8)}`"
                 @click="select(row)"
               >
-                <span class="ec-row__sha">{{ row.commit_sha.slice(0, 8) }}</span>
+                <span class="ec-row__sha">{{
+                  row.commit_sha.slice(0, 8)
+                }}</span>
                 <span class="ec-row__subject">{{ row.subject }}</span>
                 <span class="ec-row__meta">
                   {{ row.repository_name ?? row.repository_id.slice(0, 8) }} ·
@@ -359,7 +368,11 @@ watch(statusFilter, () => {
                     v-if="row.status === 'analyzed' && row.open_questions > 0"
                     variant="danger"
                   >
-                    {{ $t("pa06.commits.openQuestions", { count: row.open_questions }) }}
+                    {{
+                      $t("pa06.commits.openQuestions", {
+                        count: row.open_questions
+                      })
+                    }}
                   </Badge>
                 </span>
               </button>
@@ -427,8 +440,14 @@ watch(statusFilter, () => {
                   {{ $t("pa06.commits.deviationLabel") }}:
                   {{ detail.analysis.deviation.note }}
                 </div>
-                <ul v-if="detail.analysis.related_objects.length" class="ec-related">
-                  <li v-for="rel in detail.analysis.related_objects" :key="rel.id">
+                <ul
+                  v-if="detail.analysis.related_objects.length"
+                  class="ec-related"
+                >
+                  <li
+                    v-for="rel in detail.analysis.related_objects"
+                    :key="rel.id"
+                  >
                     <Badge variant="neutral">{{ rel.domain }}</Badge>
                     {{ rel.title }} — {{ rel.relation }}
                   </li>
@@ -439,7 +458,9 @@ watch(statusFilter, () => {
                   v-if="detail.analysis.knowledge_updates.length"
                   class="ec-updates"
                 >
-                  <p class="ec-eyebrow">{{ $t("pa06.commits.updatesSection") }}</p>
+                  <p class="ec-eyebrow">
+                    {{ $t("pa06.commits.updatesSection") }}
+                  </p>
                   <div
                     v-for="update in detail.analysis.knowledge_updates"
                     :key="update.doc_key"
@@ -449,15 +470,23 @@ watch(statusFilter, () => {
                       {{ update.doc_key }} · {{ update.doc_type }}
                     </p>
                     <p class="ec-update__summary">{{ update.summary }}</p>
-                    <pre class="ec-update__body"><code>{{ update.proposed_markdown }}</code></pre>
+                    <pre
+                      class="ec-update__body"
+                    ><code>{{ update.proposed_markdown }}</code></pre>
                   </div>
                 </div>
               </div>
               <div
-                v-else-if="detail.status === 'discovered' || detail.status === 'failed'"
+                v-else-if="
+                  detail.status === 'discovered' || detail.status === 'failed'
+                "
                 class="ec-detail__block"
               >
-                <p v-if="detail.last_error" class="ec-error" data-testid="ec-error">
+                <p
+                  v-if="detail.last_error"
+                  class="ec-error"
+                  data-testid="ec-error"
+                >
                   {{ detail.last_error }}
                 </p>
                 <p class="ec-note">{{ $t("pa06.commits.notAnalyzed") }}</p>
@@ -465,21 +494,39 @@ watch(statusFilter, () => {
 
               <!-- 澄清（人类面；not_needed=显式记录非跳过） -->
               <div
-                v-if="detail.clarification_state !== 'not_needed' || clarifications.length"
+                v-if="
+                  detail.clarification_state !== 'not_needed' ||
+                  clarifications.length
+                "
                 class="ec-detail__block"
                 data-testid="ec-clarifications"
               >
                 <p class="ec-eyebrow">
                   {{ $t("pa06.commits.clarifySection") }}
                   <Badge
-                    :variant="detail.clarification_state === 'pending' ? 'danger' : 'neutral'"
+                    :variant="
+                      detail.clarification_state === 'pending'
+                        ? 'danger'
+                        : 'neutral'
+                    "
                   >
-                    {{ $t(`pa06.commits.clarifyState.${detail.clarification_state}`) }}
+                    {{
+                      $t(
+                        `pa06.commits.clarifyState.${detail.clarification_state}`
+                      )
+                    }}
                   </Badge>
                 </p>
-                <div v-for="row in clarifications" :key="row.id" class="ec-question">
+                <div
+                  v-for="row in clarifications"
+                  :key="row.id"
+                  class="ec-question"
+                >
                   <p class="ec-question__text">{{ row.question }}</p>
-                  <p v-if="row.status === 'answered'" class="ec-question__answer">
+                  <p
+                    v-if="row.status === 'answered'"
+                    class="ec-question__answer"
+                  >
                     {{ row.answer }}
                   </p>
                   <div v-else class="ec-question__form">
@@ -508,11 +555,10 @@ watch(statusFilter, () => {
 
               <!-- 决定与关闭 -->
               <div class="ec-detail__block" data-testid="ec-actions">
-                <p class="ec-eyebrow">{{ $t("pa06.commits.decisionSection") }}</p>
-                <p
-                  v-if="detail.status === 'closed'"
-                  class="ec-note"
-                >
+                <p class="ec-eyebrow">
+                  {{ $t("pa06.commits.decisionSection") }}
+                </p>
+                <p v-if="detail.status === 'closed'" class="ec-note">
                   {{
                     $t("pa06.commits.closedSummary", {
                       decision: $t(
@@ -568,7 +614,9 @@ watch(statusFilter, () => {
                       :key="index"
                     >
                       {{ proposal.doc_key }} ·
-                      {{ $t(`pa06.commits.proposalOutcome.${proposal.outcome}`) }}
+                      {{
+                        $t(`pa06.commits.proposalOutcome.${proposal.outcome}`)
+                      }}
                     </li>
                   </ul>
                   <Button
@@ -583,7 +631,9 @@ watch(statusFilter, () => {
                   <p class="ec-note">{{ $t("pa06.commits.closeNote") }}</p>
                 </template>
                 <Button
-                  v-else-if="detail.status === 'discovered' || detail.status === 'failed'"
+                  v-else-if="
+                    detail.status === 'discovered' || detail.status === 'failed'
+                  "
                   variant="primary"
                   size="sm"
                   :disabled="acting"

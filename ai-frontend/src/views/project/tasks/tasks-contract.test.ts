@@ -16,7 +16,9 @@ import {
  */
 describe("tasks-contract PA-07 aggregates", () => {
   it("aggregates 13 lifecycle states into the five PA-07 buckets without leftovers", () => {
-    const all = TASK_STATUS_AGGREGATES.flatMap(agg => agg.statuses as readonly string[]);
+    const all = TASK_STATUS_AGGREGATES.flatMap(
+      agg => agg.statuses as readonly string[]
+    );
     expect(new Set(all).size).toBe(all.length);
     expect(all).toContain("draft");
     expect(all).toContain("running");
@@ -68,12 +70,20 @@ describe("tasks-contract PA-07 aggregates", () => {
       latest_run: null
     };
     // 终态优先：调度条件随生命周期关闭。
-    expect(schedulingCondition({ ...base, status: "completed" }).key).toBe("closed");
+    expect(schedulingCondition({ ...base, status: "completed" }).key).toBe(
+      "closed"
+    );
     // 活跃 run 次之。
     expect(
       schedulingCondition({
         ...base,
-        latest_run: { id: "r", attempt_no: 1, status: "running", review_verdict: null, created_at: "" }
+        latest_run: {
+          id: "r",
+          attempt_no: 1,
+          status: "running",
+          review_verdict: null,
+          created_at: ""
+        }
       })
     ).toMatchObject({ key: "running", tone: "info" });
     // 产品门禁阻塞（danger）先于依赖等待。
@@ -96,7 +106,10 @@ describe("tasks-contract PA-07 aggregates", () => {
     const ready = schedulingCondition({ ...base, deps_total: 2, deps_met: 2 });
     expect(ready).toMatchObject({ key: "ready", tone: "scheduled" });
     expect(ready.detail).toBe("2/2 met");
-    expect(schedulingCondition(base)).toMatchObject({ key: "ready", detail: "No predecessors" });
+    expect(schedulingCondition(base)).toMatchObject({
+      key: "ready",
+      detail: "No predecessors"
+    });
   });
 
   it("formats due dates in the design voice and never invents dates", () => {

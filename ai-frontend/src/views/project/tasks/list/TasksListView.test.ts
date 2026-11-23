@@ -117,7 +117,9 @@ describe("TasksListView（PA-07 列表）", () => {
     expect(rows).toHaveLength(3);
 
     // 调度条件派生：running / blocked（红）/ ready。
-    const conditions = wrapper.findAll("[data-condition]").map(c => c.classes());
+    const conditions = wrapper
+      .findAll("[data-condition]")
+      .map(c => c.classes());
     expect(conditions.some(c => c.includes("sc-chip--info"))).toBe(true);
     expect(conditions.some(c => c.includes("sc-chip--danger"))).toBe(true);
     expect(conditions.some(c => c.includes("sc-chip--scheduled"))).toBe(true);

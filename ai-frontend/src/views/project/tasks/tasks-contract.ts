@@ -106,7 +106,8 @@ export const TASK_STATUS_AGGREGATES = [
   }
 ] as const;
 
-export type TaskStatusAggregateKey = (typeof TASK_STATUS_AGGREGATES)[number]["key"];
+export type TaskStatusAggregateKey =
+  (typeof TASK_STATUS_AGGREGATES)[number]["key"];
 
 export function aggregateStatus(status: string): TaskStatusAggregateKey {
   return (
@@ -118,7 +119,9 @@ export function aggregateStatus(status: string): TaskStatusAggregateKey {
 
 export function aggregateStatusLabel(status: string): string {
   const key = aggregateStatus(status);
-  return TASK_STATUS_AGGREGATES.find(agg => agg.key === key)?.label ?? "Not started";
+  return (
+    TASK_STATUS_AGGREGATES.find(agg => agg.key === key)?.label ?? "Not started"
+  );
 }
 
 export function aggregateStatusTone(status: string): TaskStatusTone {
@@ -151,13 +154,22 @@ export function priorityGrade(priority: string): "P0" | "P1" | "P2" | "P3" {
 }
 
 /** Due 列文本（planned_end_at；无排期空串）。设计稿口径「Due 23 Nov」。 */
-export function formatDue(value: string | null | undefined, today = new Date()): string {
+export function formatDue(
+  value: string | null | undefined,
+  today = new Date()
+): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOf(date) - startOf(today)) / (24 * 60 * 60 * 1000));
-  const label = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const startOf = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round(
+    (startOf(date) - startOf(today)) / (24 * 60 * 60 * 1000)
+  );
+  const label = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  });
   if (days === 0) return `Due today`;
   if (days < 0) return `Overdue · ${label}`;
   return `Due ${label}`;
@@ -169,7 +181,9 @@ export interface ExecutionDisplay {
   detail: string | null;
 }
 
-export function executionDisplay(latestRun: Task["latest_run"]): ExecutionDisplay {
+export function executionDisplay(
+  latestRun: Task["latest_run"]
+): ExecutionDisplay {
   if (!latestRun) return { label: "No run", detail: null };
   const active = ["queued", "claimed", "running"].includes(latestRun.status);
   return {
@@ -223,7 +237,9 @@ export function schedulingCondition(row: {
     return {
       key: "blocked_product",
       label: "Blocked by Product Suspension",
-      detail: gated.length ? `${gated.join(", ")} · Development restricted` : null,
+      detail: gated.length
+        ? `${gated.join(", ")} · Development restricted`
+        : null,
       tone: "danger"
     };
   }

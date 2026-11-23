@@ -16,7 +16,11 @@ import {
 } from "@/api/tasks";
 import { listTasks } from "@/api/pm";
 import { getTaskDetail, type TaskDetailView } from "@/api/task-plans";
-import { aggregateStatusLabel, aggregateStatusTone, priorityGrade } from "../../tasks-contract";
+import {
+  aggregateStatusLabel,
+  aggregateStatusTone,
+  priorityGrade
+} from "../../tasks-contract";
 
 /**
  * PA-07 任务依赖页（Figma 179:3603 B 系列）。
@@ -33,21 +37,30 @@ const router = useRouter();
 const taskId = computed(() => route.params.taskId as string);
 
 const detail = ref<TaskDetailView | null>(null);
-const edges = ref<{ upstream: TaskDependencyEdge[]; downstream: TaskDependencyEdge[] }>({
+const edges = ref<{
+  upstream: TaskDependencyEdge[];
+  downstream: TaskDependencyEdge[];
+}>({
   upstream: [],
   downstream: []
 });
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
-const candidateTasks = ref<Array<{ id: string; title: string; code: string }>>([]);
+const candidateTasks = ref<Array<{ id: string; title: string; code: string }>>(
+  []
+);
 
 const isClosed = computed(() =>
-  ["completed", "failed", "cancelled", "superseded"].includes(detail.value?.task.status ?? "")
+  ["completed", "failed", "cancelled", "superseded"].includes(
+    detail.value?.task.status ?? ""
+  )
 );
 
 const totalUpstream = computed(() => edges.value.upstream.length);
-const metUpstream = computed(() => edges.value.upstream.filter(edge => edge.satisfied).length);
+const metUpstream = computed(
+  () => edges.value.upstream.filter(edge => edge.satisfied).length
+);
 
 function conditionLabel(edge: TaskDependencyEdge): string {
   switch (edge.required_condition) {
@@ -61,7 +74,10 @@ function conditionLabel(edge: TaskDependencyEdge): string {
 }
 
 function deliverableLabel(edge: TaskDependencyEdge): string {
-  if (edge.required_condition !== "deliverable_approved" || !edge.required_deliverable_ref) {
+  if (
+    edge.required_condition !== "deliverable_approved" ||
+    !edge.required_deliverable_ref
+  ) {
     return t("pa07.dependencies.noDeliverable");
   }
   const ref = edge.required_deliverable_ref as { id?: string; path?: string };
@@ -73,7 +89,9 @@ function deliverableLabel(edge: TaskDependencyEdge): string {
 const wizardOpen = ref(false);
 const wizardStep = ref<1 | 2 | 3>(1);
 const wizardPredecessor = ref("");
-const wizardCondition = ref<"completed" | "accepted" | "deliverable_approved">("completed");
+const wizardCondition = ref<"completed" | "accepted" | "deliverable_approved">(
+  "completed"
+);
 const wizardDeliverableRef = ref("");
 const wizardError = ref<string | null>(null);
 const saving = ref(false);
@@ -87,7 +105,9 @@ const wizardPickable = computed(() =>
 );
 
 const wizardPickLabel = computed(() => {
-  const picked = wizardPickable.value.find(task => task.id === wizardPredecessor.value);
+  const picked = wizardPickable.value.find(
+    task => task.id === wizardPredecessor.value
+  );
   return picked ? `${picked.code}  ${picked.title}` : "";
 });
 
@@ -111,8 +131,11 @@ async function submitWizard() {
   try {
     await addTaskDependency(taskId.value, wizardPredecessor.value, {
       required_condition: wizardCondition.value,
-      ...(wizardCondition.value === "deliverable_approved" && wizardDeliverableRef.value.trim()
-        ? { required_deliverable_ref: { id: wizardDeliverableRef.value.trim() } }
+      ...(wizardCondition.value === "deliverable_approved" &&
+      wizardDeliverableRef.value.trim()
+        ? {
+            required_deliverable_ref: { id: wizardDeliverableRef.value.trim() }
+          }
         : {})
     });
     wizardOpen.value = false;
@@ -176,23 +199,32 @@ function openTask(id: string) {
 </script>
 
 <template>
-  <PageFrame :title="t('pa07.dependencies.title')" :description="detail?.task.title ?? ''">
+  <PageFrame
+    :title="t('pa07.dependencies.title')"
+    :description="detail?.task.title ?? ''"
+  >
     <TasksFrame />
     <TaskDetailTabs :task-id="taskId" />
 
     <p v-if="loadError" class="td-error">{{ loadError }}</p>
     <p v-else-if="loading" class="td-note">{{ t("common.loading") }}</p>
-    <EmptyState v-else-if="!detail" :title="t('pa07.dependencies.loadFailed')" />
+    <EmptyState
+      v-else-if="!detail"
+      :title="t('pa07.dependencies.loadFailed')"
+    />
 
     <template v-else>
       <div class="td-objective" data-testid="dep-objective">
-        <span class="td-objective__code" data-testid="dep-task-code">{{ detail.task.code }}</span>
+        <span class="td-objective__code" data-testid="dep-task-code">{{
+          detail.task.code
+        }}</span>
         <span class="td-objective__title">{{ detail.task.title }}</span>
         <span
           class="td-objective__status"
           :class="`td-objective__status--${aggregateStatusTone(detail.task.status)}`"
         >
-          {{ aggregateStatusLabel(detail.task.status) }} · {{ priorityGrade(detail.task.priority) }}
+          {{ aggregateStatusLabel(detail.task.status) }} ·
+          {{ priorityGrade(detail.task.priority) }}
         </span>
       </div>
 
@@ -207,17 +239,32 @@ function openTask(id: string) {
           <p class="td-gate__copy">{{ t("pa07.dependencies.emptyCopy") }}</p>
         </template>
         <template v-else-if="metUpstream < totalUpstream">
-          <p class="td-gate__title">{{ t("pa07.dependencies.blockedTitle") }}</p>
+          <p class="td-gate__title">
+            {{ t("pa07.dependencies.blockedTitle") }}
+          </p>
           <p class="td-gate__copy">
             {{ t("pa07.dependencies.blockedCopy") }}
           </p>
         </template>
         <template v-else>
-          <p class="td-gate__title">{{ t("pa07.dependencies.allSatisfiedTitle") }}</p>
-          <p class="td-gate__copy">{{ t("pa07.dependencies.allSatisfiedCopy") }}</p>
+          <p class="td-gate__title">
+            {{ t("pa07.dependencies.allSatisfiedTitle") }}
+          </p>
+          <p class="td-gate__copy">
+            {{ t("pa07.dependencies.allSatisfiedCopy") }}
+          </p>
         </template>
-        <p v-if="totalUpstream > 0" class="td-gate__summary" data-testid="dep-conditions-summary">
-          {{ t("pa07.dependencies.conditionsSummary", { met: metUpstream, total: totalUpstream }) }}
+        <p
+          v-if="totalUpstream > 0"
+          class="td-gate__summary"
+          data-testid="dep-conditions-summary"
+        >
+          {{
+            t("pa07.dependencies.conditionsSummary", {
+              met: metUpstream,
+              total: totalUpstream
+            })
+          }}
         </p>
       </div>
 
@@ -231,12 +278,20 @@ function openTask(id: string) {
         >
           {{ t("pa07.dependencies.addDependency") }}
         </Button>
-        <Badge v-else variant="neutral" :outline="true">{{ t("pa07.dependencies.lockedTitle") }}</Badge>
+        <Badge v-else variant="neutral" :outline="true">{{
+          t("pa07.dependencies.lockedTitle")
+        }}</Badge>
       </div>
 
       <section class="td-section">
-        <p class="td-section__caption">{{ t("pa07.dependencies.dependsOn") }}</p>
-        <div v-if="edges.upstream.length === 0" class="td-row td-row--muted" data-test="dep-upstream-empty">
+        <p class="td-section__caption">
+          {{ t("pa07.dependencies.dependsOn") }}
+        </p>
+        <div
+          v-if="edges.upstream.length === 0"
+          class="td-row td-row--muted"
+          data-test="dep-upstream-empty"
+        >
           {{ t("pa07.relationships.emptyDependsOn") }}
         </div>
         <div
@@ -246,9 +301,12 @@ function openTask(id: string) {
           data-test="dep-upstream-row"
         >
           <div class="td-row__main">
-            <button class="td-row__title" @click="openTask(edge.id)">{{ edge.title }}</button>
+            <button class="td-row__title" @click="openTask(edge.id)">
+              {{ edge.title }}
+            </button>
             <span class="td-row__meta">
-              {{ aggregateStatusLabel(edge.status) }} · {{ conditionLabel(edge) }} ·
+              {{ aggregateStatusLabel(edge.status) }} ·
+              {{ conditionLabel(edge) }} ·
               {{ deliverableLabel(edge) }}
             </span>
           </div>
@@ -257,7 +315,11 @@ function openTask(id: string) {
             :class="{ 'is-satisfied': edge.satisfied }"
             data-testid="dep-edge-satisfied"
           >
-            {{ edge.satisfied ? "✓ " + t("pa07.dependencies.satisfied") : "○ " + t("pa07.dependencies.notSatisfied") }}
+            {{
+              edge.satisfied
+                ? "✓ " + t("pa07.dependencies.satisfied")
+                : "○ " + t("pa07.dependencies.notSatisfied")
+            }}
           </span>
           <Button
             v-if="!isClosed"
@@ -273,7 +335,11 @@ function openTask(id: string) {
 
       <section class="td-section">
         <p class="td-section__caption">{{ t("pa07.dependencies.blocks") }}</p>
-        <div v-if="edges.downstream.length === 0" class="td-row td-row--muted" data-test="dep-downstream-empty">
+        <div
+          v-if="edges.downstream.length === 0"
+          class="td-row td-row--muted"
+          data-test="dep-downstream-empty"
+        >
           {{ t("pa07.relationships.emptyBlocks") }}
         </div>
         <div
@@ -283,16 +349,23 @@ function openTask(id: string) {
           data-test="dep-downstream-row"
         >
           <div class="td-row__main">
-            <button class="td-row__title" @click="openTask(edge.id)">{{ edge.title }}</button>
+            <button class="td-row__title" @click="openTask(edge.id)">
+              {{ edge.title }}
+            </button>
             <span class="td-row__meta">
-              {{ aggregateStatusLabel(edge.status) }} · {{ conditionLabel(edge) }}
+              {{ aggregateStatusLabel(edge.status) }} ·
+              {{ conditionLabel(edge) }}
             </span>
           </div>
           <span
             class="td-row__result"
             :class="{ 'is-satisfied': edge.satisfied }"
           >
-            {{ edge.satisfied ? "✓ " + t("pa07.dependencies.satisfied") : "○ " + t("pa07.dependencies.notSatisfied") }}
+            {{
+              edge.satisfied
+                ? "✓ " + t("pa07.dependencies.satisfied")
+                : "○ " + t("pa07.dependencies.notSatisfied")
+            }}
           </span>
         </div>
       </section>
@@ -303,21 +376,41 @@ function openTask(id: string) {
       <div class="td-wizard__head">
         <p class="td-wizard__title">{{ t("pa07.dependencies.wizardTitle") }}</p>
         <p class="td-wizard__steps">
-          <span :class="{ 'is-on': wizardStep === 1 }">{{ t("pa07.dependencies.wizardStep1") }}</span>
-          <span :class="{ 'is-on': wizardStep === 2 }">{{ t("pa07.dependencies.wizardStep2") }}</span>
-          <span :class="{ 'is-on': wizardStep === 3 }">{{ t("pa07.dependencies.wizardStep3") }}</span>
+          <span :class="{ 'is-on': wizardStep === 1 }">{{
+            t("pa07.dependencies.wizardStep1")
+          }}</span>
+          <span :class="{ 'is-on': wizardStep === 2 }">{{
+            t("pa07.dependencies.wizardStep2")
+          }}</span>
+          <span :class="{ 'is-on': wizardStep === 3 }">{{
+            t("pa07.dependencies.wizardStep3")
+          }}</span>
         </p>
       </div>
 
       <div v-if="wizardStep === 1" class="td-wizard__body">
         <label class="td-field">
-          <span class="td-field__label">{{ t("pa07.dependencies.wizardPick") }}</span>
-          <select v-model="wizardPredecessor" class="td-field__input" data-test="wizard-pick">
+          <span class="td-field__label">{{
+            t("pa07.dependencies.wizardPick")
+          }}</span>
+          <select
+            v-model="wizardPredecessor"
+            class="td-field__input"
+            data-test="wizard-pick"
+          >
             <option value="" disabled>
-              {{ wizardPickable.length === 0 ? t("pa07.dependencies.wizardNoTasks") : "" }}
+              {{
+                wizardPickable.length === 0
+                  ? t("pa07.dependencies.wizardNoTasks")
+                  : ""
+              }}
             </option>
-            <option v-for="task in wizardPickable" :key="task.id" :value="task.id">
-              {{ task.code }}  {{ task.title }}
+            <option
+              v-for="task in wizardPickable"
+              :key="task.id"
+              :value="task.id"
+            >
+              {{ task.code }} {{ task.title }}
             </option>
           </select>
         </label>
@@ -339,17 +432,32 @@ function openTask(id: string) {
 
       <div v-else-if="wizardStep === 2" class="td-wizard__body">
         <label class="td-field">
-          <span class="td-field__label">{{ t("pa07.dependencies.wizardCondition") }}</span>
-          <select v-model="wizardCondition" class="td-field__input" data-test="wizard-condition">
-            <option value="completed">{{ t("pa07.dependencies.conditionCompleted") }}</option>
-            <option value="accepted">{{ t("pa07.dependencies.conditionAccepted") }}</option>
+          <span class="td-field__label">{{
+            t("pa07.dependencies.wizardCondition")
+          }}</span>
+          <select
+            v-model="wizardCondition"
+            class="td-field__input"
+            data-test="wizard-condition"
+          >
+            <option value="completed">
+              {{ t("pa07.dependencies.conditionCompleted") }}
+            </option>
+            <option value="accepted">
+              {{ t("pa07.dependencies.conditionAccepted") }}
+            </option>
             <option value="deliverable_approved">
               {{ t("pa07.dependencies.conditionDeliverable") }}
             </option>
           </select>
         </label>
-        <label v-if="wizardCondition === 'deliverable_approved'" class="td-field">
-          <span class="td-field__label">{{ t("pa07.dependencies.conditionDeliverable") }} (id)</span>
+        <label
+          v-if="wizardCondition === 'deliverable_approved'"
+          class="td-field"
+        >
+          <span class="td-field__label"
+            >{{ t("pa07.dependencies.conditionDeliverable") }} (id)</span
+          >
           <input
             v-model="wizardDeliverableRef"
             class="td-field__input"
@@ -361,7 +469,12 @@ function openTask(id: string) {
           <Button variant="secondary" size="md" @click="wizardStep = 1">
             {{ t("pa07.dependencies.wizardBack") }}
           </Button>
-          <Button variant="primary" size="md" data-test="wizard-to-review" @click="wizardStep = 3">
+          <Button
+            variant="primary"
+            size="md"
+            data-test="wizard-to-review"
+            @click="wizardStep = 3"
+          >
             {{ t("pa07.dependencies.wizardNext") }}
           </Button>
         </div>
@@ -370,13 +483,21 @@ function openTask(id: string) {
       <div v-else class="td-wizard__body">
         <div class="td-review" data-test="wizard-review">
           <p class="td-review__line">
-            {{ wizardPickLabel }} → {{ detail?.task.code }} {{ detail?.task.title }}
+            {{ wizardPickLabel }} → {{ detail?.task.code }}
+            {{ detail?.task.title }}
           </p>
           <p class="td-review__copy">
-            {{ t("pa07.dependencies.wizardReviewCopy", { from: wizardPickLabel, to: detail?.task.code ?? "" }) }}
+            {{
+              t("pa07.dependencies.wizardReviewCopy", {
+                from: wizardPickLabel,
+                to: detail?.task.code ?? ""
+              })
+            }}
           </p>
         </div>
-        <p v-if="wizardError" class="td-error" data-test="wizard-error">{{ wizardError }}</p>
+        <p v-if="wizardError" class="td-error" data-test="wizard-error">
+          {{ wizardError }}
+        </p>
         <div class="td-wizard__actions">
           <Button variant="secondary" size="md" @click="wizardStep = 2">
             {{ t("pa07.dependencies.wizardBack") }}
@@ -405,7 +526,12 @@ function openTask(id: string) {
         <Button variant="secondary" size="md" @click="removeTarget = null">
           {{ t("common.close") }}
         </Button>
-        <Button variant="danger" size="md" data-test="dep-remove-confirm-button" @click="confirmRemove">
+        <Button
+          variant="danger"
+          size="md"
+          data-test="dep-remove-confirm-button"
+          @click="confirmRemove"
+        >
           {{ t("pa07.dependencies.removeConfirm") }}
         </Button>
       </div>

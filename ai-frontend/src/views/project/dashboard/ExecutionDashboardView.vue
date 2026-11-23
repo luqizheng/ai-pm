@@ -12,7 +12,10 @@ import type { Task } from "@/api/types";
 import { getHumanAttentionQueue, listTaskRuns } from "@/api/execution-plans";
 import type { TaskRun, HumanAttentionQueue } from "@/api/execution-plans";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
-import { schedulingCondition, type SchedulingCondition } from "@/views/project/tasks/tasks-contract";
+import {
+  schedulingCondition,
+  type SchedulingCondition
+} from "@/views/project/tasks/tasks-contract";
 import { describeError } from "@/lib/errors";
 
 /**
@@ -55,7 +58,14 @@ function taskCondition(task: TaskLite): SchedulingCondition {
   });
 }
 
-const IN_CHANNEL = ["claimed", "running", "awaiting_decision", "submitted", "reviewing", "changes_requested"];
+const IN_CHANNEL = [
+  "claimed",
+  "running",
+  "awaiting_decision",
+  "submitted",
+  "reviewing",
+  "changes_requested"
+];
 
 const statActive = computed(
   () => tasks.value.filter(task => IN_CHANNEL.includes(task.status)).length
@@ -76,7 +86,9 @@ const statAttention = computed(() => {
 });
 
 const activeRuns = computed(() =>
-  runs.value.filter(run => ["queued", "claimed", "running"].includes(run.status))
+  runs.value.filter(run =>
+    ["queued", "claimed", "running"].includes(run.status)
+  )
 );
 
 const waitingTasks = computed(() =>
@@ -91,7 +103,8 @@ const readyTasks = computed(() =>
 );
 
 const attentionItems = computed(() => {
-  if (!attention.value) return [] as Array<{ kind: string; title: string; id: string }>;
+  if (!attention.value)
+    return [] as Array<{ kind: string; title: string; id: string }>;
   return [
     ...attention.value.approvals.map(item => ({
       kind: "approval",
@@ -149,7 +162,10 @@ function goTask(id: string) {
 </script>
 
 <template>
-  <PageFrame :title="t('pa07.dashboard.title')" :description="t('pa07.dashboard.subtitle')">
+  <PageFrame
+    :title="t('pa07.dashboard.title')"
+    :description="t('pa07.dashboard.subtitle')"
+  >
     <p v-if="loadError" class="ex-error">{{ loadError }}</p>
     <p v-else-if="loading" class="ex-note">{{ t("common.loading") }}</p>
 
@@ -157,25 +173,56 @@ function goTask(id: string) {
       <!-- 1 · Execution overview -->
       <section class="ex-block" data-testid="dash-overview">
         <p class="ex-block__title">{{ t("pa07.dashboard.overviewTitle") }}</p>
-        <div v-if="tasks.length === 0" class="ex-empty">{{ t("pa07.dashboard.emptyOverview") }}</div>
+        <div v-if="tasks.length === 0" class="ex-empty">
+          {{ t("pa07.dashboard.emptyOverview") }}
+        </div>
         <div v-else class="ex-stats">
-          <StatCard :label="t('pa07.dashboard.statActive')" :value="String(statActive)" data-testid="dash-stat-active" />
-          <StatCard :label="t('pa07.dashboard.statWaiting')" :value="String(statWaiting)" data-testid="dash-stat-waiting" />
-          <StatCard :label="t('pa07.dashboard.statReady')" :value="String(statReady)" data-testid="dash-stat-ready" />
-          <StatCard :label="t('pa07.dashboard.statAttention')" :value="String(statAttention)" data-testid="dash-stat-attention" />
+          <StatCard
+            :label="t('pa07.dashboard.statActive')"
+            :value="String(statActive)"
+            data-testid="dash-stat-active"
+          />
+          <StatCard
+            :label="t('pa07.dashboard.statWaiting')"
+            :value="String(statWaiting)"
+            data-testid="dash-stat-waiting"
+          />
+          <StatCard
+            :label="t('pa07.dashboard.statReady')"
+            :value="String(statReady)"
+            data-testid="dash-stat-ready"
+          />
+          <StatCard
+            :label="t('pa07.dashboard.statAttention')"
+            :value="String(statAttention)"
+            data-testid="dash-stat-attention"
+          />
         </div>
       </section>
 
       <!-- 2 · Needs human attention -->
       <section class="ex-block" data-testid="dash-attention">
         <p class="ex-block__title">{{ t("pa07.dashboard.attentionTitle") }}</p>
-        <div v-if="attentionItems.length === 0" class="ex-empty">{{ t("pa07.dashboard.emptyAttention") }}</div>
+        <div v-if="attentionItems.length === 0" class="ex-empty">
+          {{ t("pa07.dashboard.emptyAttention") }}
+        </div>
         <ul v-else class="ex-list">
-          <li v-for="item in attentionItems" :key="`${item.kind}-${item.id}`" class="ex-item">
-            <Badge :variant="item.kind === 'approval' ? 'warning' : 'accent'" :outline="true">
+          <li
+            v-for="item in attentionItems"
+            :key="`${item.kind}-${item.id}`"
+            class="ex-item"
+          >
+            <Badge
+              :variant="item.kind === 'approval' ? 'warning' : 'accent'"
+              :outline="true"
+            >
               {{ item.kind }}
             </Badge>
-            <button class="ex-item__title" data-test="dash-attention-item" @click="goTask(item.id)">
+            <button
+              class="ex-item__title"
+              data-test="dash-attention-item"
+              @click="goTask(item.id)"
+            >
               {{ item.title }}
             </button>
           </li>
@@ -185,11 +232,17 @@ function goTask(id: string) {
       <!-- 3 · Currently executing -->
       <section class="ex-block" data-testid="dash-executing">
         <p class="ex-block__title">{{ t("pa07.dashboard.executingTitle") }}</p>
-        <div v-if="activeRuns.length === 0" class="ex-empty">{{ t("pa07.dashboard.emptyExecuting") }}</div>
+        <div v-if="activeRuns.length === 0" class="ex-empty">
+          {{ t("pa07.dashboard.emptyExecuting") }}
+        </div>
         <ul v-else class="ex-list">
           <li v-for="run in activeRuns" :key="run.id" class="ex-item">
             <Badge variant="info">Run #{{ run.attempt_no }}</Badge>
-            <button class="ex-item__title" data-test="dash-run-item" @click="goTask(run.task_id)">
+            <button
+              class="ex-item__title"
+              data-test="dash-run-item"
+              @click="goTask(run.task_id)"
+            >
               {{ run.task_title }} · {{ run.status }}
             </button>
           </li>
@@ -208,12 +261,19 @@ function goTask(id: string) {
         <template v-else>
           <ul class="ex-list">
             <li
-              v-for="{ task, condition } in [...waitingTasks, ...readyTasks].slice(0, 8)"
+              v-for="{ task, condition } in [
+                ...waitingTasks,
+                ...readyTasks
+              ].slice(0, 8)"
               :key="task.id"
               class="ex-item"
             >
               <span class="ex-item__code">{{ task.code }}</span>
-              <button class="ex-item__title" data-test="dash-waiting-item" @click="goTask(task.id)">
+              <button
+                class="ex-item__title"
+                data-test="dash-waiting-item"
+                @click="goTask(task.id)"
+              >
                 {{ task.title }}
               </button>
               <span
@@ -221,13 +281,20 @@ function goTask(id: string) {
                 :class="{ 'is-danger': condition.key === 'blocked_product' }"
               >
                 {{ condition.label }}
-                <template v-if="condition.detail"> · {{ condition.detail }}</template>
+                <template v-if="condition.detail">
+                  · {{ condition.detail }}</template
+                >
               </span>
             </li>
           </ul>
         </template>
         <div class="ex-foot">
-          <Button variant="secondary" size="sm" data-test="dash-go-tasks" @click="goTasks">
+          <Button
+            variant="secondary"
+            size="sm"
+            data-test="dash-go-tasks"
+            @click="goTasks"
+          >
             {{ t("pa07.dashboard.goTasks") }}
           </Button>
         </div>

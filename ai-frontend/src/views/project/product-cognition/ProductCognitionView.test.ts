@@ -5,12 +5,9 @@ import { flushPromises } from "@vue/test-utils";
 import ProductCognitionView from "./ProductCognitionView.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
-import { mountShell } from "@/components/shell/test-utils";
+import { mountShell, waitForRoute } from "@/components/shell/test-utils";
 import { useShellStore } from "@/stores/shell";
-import type {
-  PcObjectDetail,
-  PcObjectRow
-} from "@/api/knowledge";
+import type { PcObjectDetail, PcObjectRow } from "@/api/knowledge";
 
 const listPcObjects = vi.fn();
 const getPcObject = vi.fn();
@@ -65,9 +62,7 @@ async function mountView(projectId: string | null = "proj-1") {
   const mounted = mountShell(ProductCognitionView);
   await mounted.router.isReady();
   const shell = useShellStore();
-  shell.setProjects(
-    projectId ? [{ id: projectId, name: "评测项目" }] : []
-  );
+  shell.setProjects(projectId ? [{ id: projectId, name: "评测项目" }] : []);
   shell.setCurrentProject(projectId);
   await flushPromises();
   return mounted;
@@ -104,6 +99,8 @@ describe("ProductCognitionView", () => {
 
     await wrapper.find(".product-cognition__link").trigger("click");
     await flushPromises();
+    // 懒路由组件的动态导入跨宏任务，flushPromises 等不到导航落定
+    await waitForRoute(router, "/project/analysis/reports/report-1");
     expect(router.currentRoute.value.path).toBe(
       "/project/analysis/reports/report-1"
     );
@@ -112,13 +109,15 @@ describe("ProductCognitionView", () => {
   it("提案按钮跳转统一人工审核中心，不在本页执行审批", async () => {
     const { wrapper, router } = await mountView();
 
-    const button = wrapper.findAll("button").find(item =>
-      item.text().includes("提案")
-    );
+    const button = wrapper
+      .findAll("button")
+      .find(item => item.text().includes("提案"));
     expect(button).toBeTruthy();
     await button!.trigger("click");
     await flushPromises();
 
+    // 懒路由组件的动态导入跨宏任务，flushPromises 等不到导航落定
+    await waitForRoute(router, "/project/review-center");
     expect(router.currentRoute.value.path).toBe("/project/review-center");
     expect(router.currentRoute.value.query).toMatchObject({
       project_id: "proj-1",

@@ -40,16 +40,22 @@ const loadError = ref<string | null>(null);
 const compareOld = ref<number | null>(null);
 const compareNew = ref<number | null>(null);
 
-const activeRevision = computed(() => revisions.value.find(rev => rev.active) ?? null);
+const activeRevision = computed(
+  () => revisions.value.find(rev => rev.active) ?? null
+);
 const compareOldRevision = computed(
-  () => revisions.value.find(rev => rev.revision_no === compareOld.value) ?? null
+  () =>
+    revisions.value.find(rev => rev.revision_no === compareOld.value) ?? null
 );
 const compareNewRevision = computed(
-  () => revisions.value.find(rev => rev.revision_no === compareNew.value) ?? null
+  () =>
+    revisions.value.find(rev => rev.revision_no === compareNew.value) ?? null
 );
 
 function criteriaCount(revision: TaskRevision | null): string {
-  const criteria = revision?.acceptance_criteria as unknown as Array<unknown> | undefined;
+  const criteria = revision?.acceptance_criteria as unknown as
+    | Array<unknown>
+    | undefined;
   return Array.isArray(criteria) ? String(criteria.length) : "—";
 }
 
@@ -99,32 +105,60 @@ function goTask() {
 
     <p v-if="loadError" class="rh-error">{{ loadError }}</p>
     <p v-else-if="loading" class="rh-note">{{ t("common.loading") }}</p>
-    <EmptyState v-else-if="revisions.length === 0" :title="t('pa07.history.emptyTitle')" :description="t('pa07.history.emptyCopy')" />
+    <EmptyState
+      v-else-if="revisions.length === 0"
+      :title="t('pa07.history.emptyTitle')"
+      :description="t('pa07.history.emptyCopy')"
+    />
 
     <template v-else>
       <!-- 陈旧活跃 Run 警告（Older active Run warning） -->
-      <div v-if="staleRuns.length > 0" class="rh-warning" data-testid="rh-stale-warning">
+      <div
+        v-if="staleRuns.length > 0"
+        class="rh-warning"
+        data-testid="rh-stale-warning"
+      >
         <p class="rh-warning__title">{{ t("pa07.history.warningTitle") }}</p>
-        <p
-          v-for="run in staleRuns"
-          :key="run.run_id"
-          class="rh-warning__copy"
-        >
-          {{ t("pa07.history.warningCopy", { attempt: run.attempt_no, status: run.status, rev: run.revision_no }) }}
+        <p v-for="run in staleRuns" :key="run.run_id" class="rh-warning__copy">
+          {{
+            t("pa07.history.warningCopy", {
+              attempt: run.attempt_no,
+              status: run.status,
+              rev: run.revision_no
+            })
+          }}
         </p>
       </div>
 
       <!-- 对比选择（Compare r2 → r3） -->
       <div v-if="revisions.length > 1" class="rh-compare-bar">
-        <span class="rh-compare-bar__label">{{ t("pa07.history.compare") }}</span>
-        <select v-model.number="compareOld" class="rh-select" data-test="rh-compare-old">
-          <option v-for="rev in revisions" :key="rev.id" :value="rev.revision_no">
+        <span class="rh-compare-bar__label">{{
+          t("pa07.history.compare")
+        }}</span>
+        <select
+          v-model.number="compareOld"
+          class="rh-select"
+          data-test="rh-compare-old"
+        >
+          <option
+            v-for="rev in revisions"
+            :key="rev.id"
+            :value="rev.revision_no"
+          >
             r{{ rev.revision_no }}
           </option>
         </select>
         <span aria-hidden="true">→</span>
-        <select v-model.number="compareNew" class="rh-select" data-test="rh-compare-new">
-          <option v-for="rev in revisions" :key="rev.id" :value="rev.revision_no">
+        <select
+          v-model.number="compareNew"
+          class="rh-select"
+          data-test="rh-compare-new"
+        >
+          <option
+            v-for="rev in revisions"
+            :key="rev.id"
+            :value="rev.revision_no"
+          >
             r{{ rev.revision_no }}
           </option>
         </select>
@@ -138,21 +172,42 @@ function goTask() {
       >
         <div class="rh-card rh-card--old">
           <p class="rh-card__head">
-            r{{ compareOldRevision.revision_no }} · {{ t("pa07.history.historicalBadge") }}
+            r{{ compareOldRevision.revision_no }} ·
+            {{ t("pa07.history.historicalBadge") }}
           </p>
           <dl class="rh-facts">
-            <div><dt>{{ t("pa07.history.changedLabel") }}</dt><dd>Criteria {{ criteriaCount(compareOldRevision) }} · Deliverables {{ deliverablesCount(compareOldRevision) }}</dd></div>
-            <div><dt>Goal</dt><dd>{{ compareOldRevision.goal ?? "—" }}</dd></div>
+            <div>
+              <dt>{{ t("pa07.history.changedLabel") }}</dt>
+              <dd>
+                Criteria {{ criteriaCount(compareOldRevision) }} · Deliverables
+                {{ deliverablesCount(compareOldRevision) }}
+              </dd>
+            </div>
+            <div>
+              <dt>Goal</dt>
+              <dd>{{ compareOldRevision.goal ?? "—" }}</dd>
+            </div>
           </dl>
         </div>
         <div class="rh-card">
           <p class="rh-card__head">
             r{{ compareNewRevision.revision_no }}
-            <Badge v-if="compareNewRevision.active" variant="accent">{{ t("pa07.history.activeBadge") }}</Badge>
+            <Badge v-if="compareNewRevision.active" variant="accent">{{
+              t("pa07.history.activeBadge")
+            }}</Badge>
           </p>
           <dl class="rh-facts">
-            <div><dt>{{ t("pa07.history.changedLabel") }}</dt><dd>Criteria {{ criteriaCount(compareNewRevision) }} · Deliverables {{ deliverablesCount(compareNewRevision) }}</dd></div>
-            <div><dt>Goal</dt><dd>{{ compareNewRevision.goal ?? "—" }}</dd></div>
+            <div>
+              <dt>{{ t("pa07.history.changedLabel") }}</dt>
+              <dd>
+                Criteria {{ criteriaCount(compareNewRevision) }} · Deliverables
+                {{ deliverablesCount(compareNewRevision) }}
+              </dd>
+            </div>
+            <div>
+              <dt>Goal</dt>
+              <dd>{{ compareNewRevision.goal ?? "—" }}</dd>
+            </div>
           </dl>
         </div>
       </div>
@@ -162,11 +217,24 @@ function goTask() {
         <li v-for="rev in revisions" :key="rev.id" class="rh-item">
           <div class="rh-item__head">
             <span class="rh-item__rev">r{{ rev.revision_no }}</span>
-            <Badge :variant="rev.active ? 'accent' : 'neutral'" :outline="!rev.active" data-testid="rh-badge">
-              {{ rev.active ? t("pa07.history.activeBadge") : t("pa07.history.historicalBadge") }}
+            <Badge
+              :variant="rev.active ? 'accent' : 'neutral'"
+              :outline="!rev.active"
+              data-testid="rh-badge"
+            >
+              {{
+                rev.active
+                  ? t("pa07.history.activeBadge")
+                  : t("pa07.history.historicalBadge")
+              }}
             </Badge>
-            <span class="rh-item__time">{{ formatDateTime(rev.created_at) }}</span>
-            <span v-if="rev.epoch_no !== rev.revision_no" class="rh-item__epoch">
+            <span class="rh-item__time">{{
+              formatDateTime(rev.created_at)
+            }}</span>
+            <span
+              v-if="rev.epoch_no !== rev.revision_no"
+              class="rh-item__epoch"
+            >
               epoch {{ rev.epoch_no }}
             </span>
           </div>
@@ -178,18 +246,32 @@ function goTask() {
             </div>
             <div>
               <dt>{{ t("pa07.history.runsLabel") }}</dt>
-              <dd>{{ rev.run_count > 0 ? t("pa07.history.runsCount", { count: rev.run_count }) : t("pa07.history.runsNone") }}</dd>
+              <dd>
+                {{
+                  rev.run_count > 0
+                    ? t("pa07.history.runsCount", { count: rev.run_count })
+                    : t("pa07.history.runsNone")
+                }}
+              </dd>
             </div>
             <div>
               <dt>{{ t("pa07.history.changedLabel") }}</dt>
-              <dd>Criteria {{ criteriaCount(rev) }} · Deliverables {{ deliverablesCount(rev) }}</dd>
+              <dd>
+                Criteria {{ criteriaCount(rev) }} · Deliverables
+                {{ deliverablesCount(rev) }}
+              </dd>
             </div>
           </dl>
         </li>
       </ol>
 
       <div class="rh-foot">
-        <Button variant="secondary" size="md" data-test="rh-back" @click="goTask">
+        <Button
+          variant="secondary"
+          size="md"
+          data-test="rh-back"
+          @click="goTask"
+        >
           {{ t("pa07.history.backToTask") }}
         </Button>
       </div>

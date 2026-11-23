@@ -244,60 +244,60 @@ watch(
       >
         {{ t("s01.command-center.init.collapse") }}
       </Button>
-    <ul class="init-list">
-      <li
-        v-for="item in items"
-        :key="item.key"
-        class="init-row"
-        :data-testid="`cc-init-${item.key}`"
-      >
-        <StatusIndicator
-          :status="
-            item.tone === 'success'
-              ? 'success'
-              : item.tone === 'danger'
-                ? 'danger'
-                : item.tone === 'info'
-                  ? 'info'
-                  : 'neutral'
-          "
-          size="sm"
-        />
-        <RouterLink
-          v-if="item.link"
-          class="init-row__title init-row__link"
-          :to="item.link"
-          :aria-label="t('s01.command-center.init.openStep')"
+      <ul class="init-list">
+        <li
+          v-for="item in items"
+          :key="item.key"
+          class="init-row"
+          :data-testid="`cc-init-${item.key}`"
         >
-          {{ item.title }}
-        </RouterLink>
-        <span v-else class="init-row__title">{{ item.title }}</span>
-        <Badge v-if="item.required" variant="neutral" size="sm" outline>
-          {{ requiredLabel }}
-        </Badge>
-        <span class="init-row__status">{{ item.statusLabel }}</span>
-        <span v-if="item.detail" class="init-row__detail">{{
-          item.detail
-        }}</span>
-        <Button
-          v-if="item.key === 'code_analysis' && showAnalysisAction"
-          variant="ghost"
-          size="sm"
-          :disabled="analysisActionDisabled"
-          data-testid="cc-init-analysis-action"
-          @click="runAnalysis"
-        >
-          {{ analysisActionLabel }}
-        </Button>
-        <span
-          v-if="item.key === 'code_analysis' && analysisError"
-          class="init-row__detail"
-          data-testid="cc-init-analysis-error"
-        >
-          {{ analysisError }}
-        </span>
-      </li>
-    </ul>
+          <StatusIndicator
+            :status="
+              item.tone === 'success'
+                ? 'success'
+                : item.tone === 'danger'
+                  ? 'danger'
+                  : item.tone === 'info'
+                    ? 'info'
+                    : 'neutral'
+            "
+            size="sm"
+          />
+          <RouterLink
+            v-if="item.link"
+            class="init-row__title init-row__link"
+            :to="item.link"
+            :aria-label="t('s01.command-center.init.openStep')"
+          >
+            {{ item.title }}
+          </RouterLink>
+          <span v-else class="init-row__title">{{ item.title }}</span>
+          <Badge v-if="item.required" variant="neutral" size="sm" outline>
+            {{ requiredLabel }}
+          </Badge>
+          <span class="init-row__status">{{ item.statusLabel }}</span>
+          <span v-if="item.detail" class="init-row__detail">{{
+            item.detail
+          }}</span>
+          <Button
+            v-if="item.key === 'code_analysis' && showAnalysisAction"
+            variant="ghost"
+            size="sm"
+            :disabled="analysisActionDisabled"
+            data-testid="cc-init-analysis-action"
+            @click="runAnalysis"
+          >
+            {{ analysisActionLabel }}
+          </Button>
+          <span
+            v-if="item.key === 'code_analysis' && analysisError"
+            class="init-row__detail"
+            data-testid="cc-init-analysis-error"
+          >
+            {{ analysisError }}
+          </span>
+        </li>
+      </ul>
     </template>
   </Card>
 </template>

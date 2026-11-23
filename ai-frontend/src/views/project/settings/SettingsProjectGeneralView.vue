@@ -95,7 +95,10 @@ async function confirmClose(): Promise<void> {
   if (!current || closing.value) return;
   closing.value = true;
   try {
-    const outcome = await closeProject(current.id, closeReason.value.trim() || undefined);
+    const outcome = await closeProject(
+      current.id,
+      closeReason.value.trim() || undefined
+    );
     toast.toast({
       title: t("settings.project.general.closedToast", {
         status: outcome.status
@@ -164,7 +167,9 @@ watch(() => settingsFrame.projectId.value, load);
       <!-- 基本信息 -->
       <section class="pg-card" data-testid="pg-info">
         <header class="pg-card__head">
-          <h3 class="pg-card__title">{{ t("settings.project.general.infoTitle") }}</h3>
+          <h3 class="pg-card__title">
+            {{ t("settings.project.general.infoTitle") }}
+          </h3>
           <Badge :variant="isClosed ? 'danger' : 'neutral'">
             {{ info.status }}
           </Badge>
@@ -174,7 +179,9 @@ watch(() => settingsFrame.projectId.value, load);
             <dt>{{ t("settings.project.general.codeLabel") }}</dt>
             <dd>
               <code class="pg-code">{{ info.code }}</code>
-              <span class="pg-hint">{{ t("settings.project.general.codeHint") }}</span>
+              <span class="pg-hint">{{
+                t("settings.project.general.codeHint")
+              }}</span>
             </dd>
           </div>
           <div class="pg-identity__row">
@@ -183,7 +190,9 @@ watch(() => settingsFrame.projectId.value, load);
           </div>
         </dl>
         <label class="pg-field">
-          <span class="pg-field__label">{{ t("settings.project.general.nameLabel") }}</span>
+          <span class="pg-field__label">{{
+            t("settings.project.general.nameLabel")
+          }}</span>
           <input
             v-model="editName"
             type="text"
@@ -193,7 +202,9 @@ watch(() => settingsFrame.projectId.value, load);
           />
         </label>
         <label class="pg-field">
-          <span class="pg-field__label">{{ t("settings.project.general.descriptionLabel") }}</span>
+          <span class="pg-field__label">{{
+            t("settings.project.general.descriptionLabel")
+          }}</span>
           <textarea
             v-model="editDescription"
             class="pg-input pg-input--area"
@@ -212,7 +223,9 @@ watch(() => settingsFrame.projectId.value, load);
           >
             {{ t("settings.project.general.save") }}
           </Button>
-          <span v-if="!dirty" class="pg-hint">{{ t("settings.project.general.noChanges") }}</span>
+          <span v-if="!dirty" class="pg-hint">{{
+            t("settings.project.general.noChanges")
+          }}</span>
         </div>
       </section>
 
@@ -226,7 +239,9 @@ watch(() => settingsFrame.projectId.value, load);
         </header>
         <div class="pg-danger-row">
           <div class="pg-danger-row__text">
-            <p class="pg-danger-row__title">{{ t("settings.project.general.closeTitle") }}</p>
+            <p class="pg-danger-row__title">
+              {{ t("settings.project.general.closeTitle") }}
+            </p>
             <p class="pg-hint">{{ t("settings.project.general.closeHint") }}</p>
           </div>
           <Button

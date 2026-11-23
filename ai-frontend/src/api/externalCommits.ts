@@ -110,15 +110,18 @@ export async function listExternalCommits(
 ): Promise<ExternalCommitListItem[]> {
   const params = new URLSearchParams({ project_id: projectId });
   if (status) params.set("status", status);
-  const res = await http.get<{ items: ExternalCommitListItem[]; total: number }>(
-    `/v1/pm/projects/${projectId}/external-commits?${params.toString()}`
-  );
+  const res = await http.get<{
+    items: ExternalCommitListItem[];
+    total: number;
+  }>(`/v1/pm/projects/${projectId}/external-commits?${params.toString()}`);
   return res.items ?? [];
 }
 
-export async function getExternalCommit(
-  commitId: string
-): Promise<{ commit: ExternalCommitDetail; clarifications: Clarification[]; repository_name: string }> {
+export async function getExternalCommit(commitId: string): Promise<{
+  commit: ExternalCommitDetail;
+  clarifications: Clarification[];
+  repository_name: string;
+}> {
   return await http.get(`/v1/pm/external-commits/${commitId}`);
 }
 
@@ -130,7 +133,9 @@ export interface AnalyzeOutcome {
   error: string | null;
 }
 
-export async function analyzeExternalCommit(commitId: string): Promise<AnalyzeOutcome> {
+export async function analyzeExternalCommit(
+  commitId: string
+): Promise<AnalyzeOutcome> {
   return await http.post(`/v1/pm/external-commits/${commitId}/analyze`, {});
 }
 
@@ -163,7 +168,9 @@ export async function decideAdoption(
   });
 }
 
-export async function closeAdoption(commitId: string): Promise<AdoptionOutcome> {
+export async function closeAdoption(
+  commitId: string
+): Promise<AdoptionOutcome> {
   return await http.post(`/v1/pm/external-commits/${commitId}/close`, {});
 }
 

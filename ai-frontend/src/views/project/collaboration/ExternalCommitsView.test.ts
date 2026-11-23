@@ -103,7 +103,10 @@ async function mountView(): Promise<ReturnType<typeof mountShell>> {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: "/project/collaboration/commits", component: ExternalCommitsView },
+      {
+        path: "/project/collaboration/commits",
+        component: ExternalCommitsView
+      },
       { path: "/:pathMatch(.*)*", component: { template: "<div />" } }
     ]
   });
@@ -126,7 +129,11 @@ beforeEach(() => {
     repositories: []
   });
   getExternalCommit.mockResolvedValue(detailFixture());
-  getCommitDiff.mockResolvedValue({ diff: "", truncated: false, commit_sha: "a".repeat(40) });
+  getCommitDiff.mockResolvedValue({
+    diff: "",
+    truncated: false,
+    commit_sha: "a".repeat(40)
+  });
 });
 
 afterEach(() => {
@@ -137,9 +144,7 @@ describe("ExternalCommitsView", () => {
   it("renders the empty state without erasing history wording", async () => {
     const wrapper = await mountView();
     expect(wrapper.find("[data-testid='ec-scan']").exists()).toBe(true);
-    expect(wrapper.text()).toContain(
-      i18n.global.t("pa06.commits.emptyTitle")
-    );
+    expect(wrapper.text()).toContain(i18n.global.t("pa06.commits.emptyTitle"));
   });
 
   it("renders list rows with separated discovery/adoption badges and detail actions by state", async () => {
@@ -187,15 +192,9 @@ describe("ExternalCommitsView", () => {
     expect(wrapper.find("[data-testid='ec-reject']").exists()).toBe(true);
     expect(wrapper.find("[data-testid='ec-analyze']").exists()).toBe(false);
 
-    await wrapper
-      .find("[data-testid='ec-no-update']")
-      .trigger("click");
+    await wrapper.find("[data-testid='ec-no-update']").trigger("click");
     await flushPromises();
-    expect(decideAdoption).toHaveBeenCalledWith(
-      "ec-1",
-      "no_update",
-      undefined
-    );
+    expect(decideAdoption).toHaveBeenCalledWith("ec-1", "no_update", undefined);
   });
 
   it("renders retry entry for failed rows without hiding the error", async () => {
@@ -207,7 +206,11 @@ describe("ExternalCommitsView", () => {
       })
     ]);
     getExternalCommit.mockResolvedValue(
-      detailFixture({ status: "failed", attempts: 1, last_error: "provider down" })
+      detailFixture({
+        status: "failed",
+        attempts: 1,
+        last_error: "provider down"
+      })
     );
     const wrapper = await mountView();
 
@@ -246,7 +249,10 @@ describe("ExternalCommitsView", () => {
     expect(wrapper.text()).toContain("登录态存哪里？");
 
     await input.setValue("沿用既有约定");
-    await wrapper.find("form, .ec-question__form").find("button").trigger("click");
+    await wrapper
+      .find("form, .ec-question__form")
+      .find("button")
+      .trigger("click");
     await flushPromises();
     expect(answerClarification).toHaveBeenCalledWith(
       "ec-1",
