@@ -4,6 +4,7 @@ import { flushPromises } from "@vue/test-utils";
 
 import ProductCognitionView from "./ProductCognitionView.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { useShellStore } from "@/stores/shell";
 import type {
@@ -95,7 +96,9 @@ describe("ProductCognitionView", () => {
     await flushPromises();
 
     expect(getPcObject).toHaveBeenCalledWith("pc-1", "proj-1");
-    expect(wrapper.text()).toContain("待付款 → 已付款 → 已发货。");
+    expect(wrapper.findComponent(MarkdownViewer).props("modelValue")).toContain(
+      "待付款 → 已付款 → 已发货。"
+    );
     expect(wrapper.text()).toContain("order-service @0123456789ab");
 
     await wrapper.find(".product-cognition__link").trigger("click");
