@@ -120,7 +120,7 @@ async function submit() {
       description: description.value.trim() || undefined
     });
     // Q3：创建成功即工作——直接进入项目总控台，无成功停留页、无初始化等待
-    void router.push({
+    await router.push({
       path: "/project/command-center",
       query: { project_id: project.id }
     });
