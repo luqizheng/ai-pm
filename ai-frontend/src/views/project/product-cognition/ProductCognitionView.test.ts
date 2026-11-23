@@ -63,6 +63,7 @@ function pcDetail(row: PcObjectRow): PcObjectDetail {
 
 async function mountView(projectId: string | null = "proj-1") {
   const mounted = mountShell(ProductCognitionView);
+  await mounted.router.isReady();
   const shell = useShellStore();
   shell.setProjects(
     projectId ? [{ id: projectId, name: "评测项目" }] : []
