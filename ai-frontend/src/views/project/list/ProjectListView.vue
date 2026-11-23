@@ -140,11 +140,11 @@ function setEntryStatus(id: string, status: ProjectEntry["status"]) {
   if (entry) entry.status = status;
 }
 
-function onAction(kind: ProjectActionKind, id: string) {
+async function onAction(kind: ProjectActionKind, id: string): Promise<void> {
   if (kind === "open") {
     // 总控台以 ?project_id= 为数据真源（CommandCenterView 只认 URL query），
     // 打开项目必须携带项目上下文，顶栏选择器经壳根 watch 同一 query 跟随。
-    router.push({
+    await router.push({
       path: "/project/command-center",
       query: { project_id: id }
     });
