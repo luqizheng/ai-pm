@@ -75,13 +75,6 @@ fn actor_of(principal: &AuthedPrincipal) -> AuditActor {
 }
 
 #[derive(Deserialize)]
-struct TitleBody {
-    title: String,
-    #[serde(default)]
-    description: Option<String>,
-}
-
-#[derive(Deserialize)]
 struct IssueBody {
     title: String,
     #[serde(default)]

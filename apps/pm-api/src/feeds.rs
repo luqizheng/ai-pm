@@ -133,9 +133,6 @@ fn feed_json(rows: Vec<pm_application::work_item::FeedRow>) -> Json<serde_json::
     feed_json_with_counts(rows, None)
 }
 
-#[derive(Deserialize)]
-struct MarkAllBody {}
-
 async fn mark_all_read_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
@@ -172,7 +169,7 @@ async fn my_feed_handler(
     let counts = my_feed_counts(&state.pool, principal.tenant_id, principal.principal_id)
         .await
         .map_err(api_err)?;
-    Ok(feed_json(rows))
+    Ok(feed_json_with_counts(rows, Some(counts)))
 }
 
 async fn project_feed_handler(

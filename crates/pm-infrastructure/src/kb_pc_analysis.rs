@@ -229,17 +229,6 @@ async fn project_ssh_key_path(
         .map_err(|e| AnalysisError::Secret(e.to_string()))
 }
 
-/// bare clone（每次Fresh——`clone_bare` 失败自清理，与冷启动导入同款）并采集事实。
-/// `observed_head` = verify 的 Observed HEAD（intake source_ref），作锚链次选。
-async fn collect_fresh(
-    pool: &PgPool,
-    repository_id: Uuid,
-    observed_head: Option<&str>,
-) -> Result<(RepoAccess, RepoFacts), AnalysisError> {
-    let (access, facts, _) = collect_fresh_run(pool, repository_id, observed_head, None).await?;
-    Ok((access, facts))
-}
-
 /// D-2：采集运行口径——`incremental_since = Some` 且非空时走
 /// `repo_facts::collect_incremental`（非祖先自动回退全量，used=false）。
 async fn collect_fresh_run(

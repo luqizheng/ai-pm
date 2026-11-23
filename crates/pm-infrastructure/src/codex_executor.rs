@@ -1016,11 +1016,14 @@ impl RunExecutor for CodexExecutor {
             };
             match reaped {
                 Some(Some(status)) => {
-                    // Windows：收割后立即终止 Job（回收残余子进程）。
+                    // Windows：收割后立即终止 Job（回收残余子进程）；
+                    // 非 Windows 仅移除句柄（ExitStatus 已拿到，无需 Job）。
+                    #[cfg(windows)]
                     if let Some(handle) = guard.remove(&session.session) {
-                        #[cfg(windows)]
                         handle.job.terminate();
                     }
+                    #[cfg(not(windows))]
+                    let _ = guard.remove(&session.session);
                     Step::Reaped(status)
                 }
                 Some(None) => Step::Progress(ExecutorProgress::Running),
