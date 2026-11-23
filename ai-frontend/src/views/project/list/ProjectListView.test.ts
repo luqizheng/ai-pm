@@ -24,6 +24,7 @@ async function mountList(loader?: () => Promise<unknown>) {
   const mounted = mountShell(ProjectListView, {
     props: loader ? { loader } : {}
   });
+  await mounted.router.isReady();
   await mounted.router.push("/projects");
   await flushPromises();
   return mounted;
