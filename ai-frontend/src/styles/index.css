@@ -80,8 +80,7 @@ body {
     var(--ws-context-width);
 }
 
-.workspace-shell[data-ai-panel="closed"][data-context="open"]
-  .workspace-context {
+.workspace-shell[data-ai-panel="closed"][data-context="open"] .workspace-context {
   grid-column: 3;
 }
 
