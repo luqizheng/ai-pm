@@ -302,11 +302,7 @@ watch([projectId, () => route.query.task_id], load);
         </div>
 
         <!-- 交付阻塞卡（未全过即阻塞：未通过与未覆盖都算未完成） -->
-        <div
-          v-if="!allPassed"
-          class="dl-blocked"
-          data-testid="dl-blocked"
-        >
+        <div v-if="!allPassed" class="dl-blocked" data-testid="dl-blocked">
           <p class="dl-blocked__title">
             {{
               $t("pa06.delivery.blockedTitle", {

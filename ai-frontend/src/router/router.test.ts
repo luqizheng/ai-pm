@@ -88,12 +88,12 @@ describe("router", () => {
     }
   });
 
-  it("C3：Product Cognition 占位路由渲染占位组件", () => {
+  it("Product Cognition 导航路由渲染真实业务页面", () => {
     const routes = buildRoutes();
     const route = routes.find(r => r.path === "/project/product-cognition");
     expect(route, "/project/product-cognition 未注册").toBeTruthy();
-    // 占位路由 = 无业务组件，落 PlaceholderView（能力不得伪装已上线）
-    expect(route!.component).toBe(PlaceholderView);
+    // 产品认知已接入真实页面，不再使用占位组件。
+    expect(route!.component).not.toBe(PlaceholderView);
   });
 
   it("P2-01：Analysis 独立路由——列表页为真组件，详情页已注册", () => {

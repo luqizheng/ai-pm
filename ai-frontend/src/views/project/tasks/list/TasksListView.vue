@@ -80,7 +80,8 @@ async function load() {
     });
     rows.value = (res.items ?? []).map(toListRow);
     updatedAt.value = rows.value.reduce<string | null>(
-      (latest, row) => (!latest || row.updatedAt > latest ? row.updatedAt : latest),
+      (latest, row) =>
+        !latest || row.updatedAt > latest ? row.updatedAt : latest,
       null
     );
   } catch (error) {
@@ -138,7 +139,10 @@ const statusChoices = computed(() => [
 
 const dependencyChoices = computed(() => [
   { value: FILTER_ALL, label: t("pa07.list.filterDependencyAll") },
-  ...DEPENDENCY_FILTERS.map(key => ({ value: key, label: t(`pa07.condition.${key}`) }))
+  ...DEPENDENCY_FILTERS.map(key => ({
+    value: key,
+    label: t(`pa07.condition.${key}`)
+  }))
 ]);
 
 const filteredRows = computed(() =>
@@ -180,7 +184,10 @@ function describeError(error: unknown): string {
 <template>
   <div class="tasks-list-page">
     <div class="tasks-list-main">
-      <PageFrame :title="t('pa07.list.title')" :description="t('pa07.list.subtitle')">
+      <PageFrame
+        :title="t('pa07.list.title')"
+        :description="t('pa07.list.subtitle')"
+      >
         <TasksFrame />
 
         <div class="tl-views" data-testid="list-views">
@@ -240,7 +247,9 @@ function describeError(error: unknown): string {
 
         <div class="tl-meta" data-testid="list-count">
           <span>{{ countLabel }}</span>
-          <span class="tl-meta__sort">{{ t("pa07.list.sortedByPriority") }}</span>
+          <span class="tl-meta__sort">{{
+            t("pa07.list.sortedByPriority")
+          }}</span>
         </div>
 
         <p v-if="loadError" class="tl-error">{{ loadError }}</p>
@@ -260,18 +269,28 @@ function describeError(error: unknown): string {
             <TableRow
               v-for="row in filteredRows"
               :key="row.id"
-                data-test="task-list-row"
+              data-test="task-list-row"
               @click="openTask(row)"
             >
               <TableCell class="tl-cell-task">
-                <span class="tl-task-code" :data-testid="`task-code-${row.code}`">{{ row.code }}</span>
+                <span
+                  class="tl-task-code"
+                  :data-testid="`task-code-${row.code}`"
+                  >{{ row.code }}</span
+                >
                 <span class="tl-task-title">{{ row.title }}</span>
-                <span class="tl-task-meta" :class="`tl-task-meta--${priorityTone(row.priority)}`">
-                  {{ row.grade }}<template v-if="row.due"> · {{ row.due }}</template>
+                <span
+                  class="tl-task-meta"
+                  :class="`tl-task-meta--${priorityTone(row.priority)}`"
+                >
+                  {{ row.grade
+                  }}<template v-if="row.due"> · {{ row.due }}</template>
                 </span>
               </TableCell>
               <TableCell class="tl-cell-products">
-                <template v-if="row.productNames">{{ row.productNames }}</template>
+                <template v-if="row.productNames">{{
+                  row.productNames
+                }}</template>
                 <template v-else>—</template>
               </TableCell>
               <TableCell>
@@ -281,7 +300,9 @@ function describeError(error: unknown): string {
               </TableCell>
               <TableCell class="tl-cell-execution">
                 <span class="tl-exec">{{ row.execution.label }}</span>
-                <span v-if="row.execution.detail" class="tl-exec__detail">{{ row.execution.detail }}</span>
+                <span v-if="row.execution.detail" class="tl-exec__detail">{{
+                  row.execution.detail
+                }}</span>
               </TableCell>
               <TableCell class="tl-cell-condition">
                 <SchedulingConditionChip :condition="row.condition" />

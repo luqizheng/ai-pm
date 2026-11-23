@@ -19,7 +19,12 @@ import {
   type ProductProfile,
   type ProductTask
 } from "@/api/products";
-import { formatDateTime, priorityGrade, aggregateStatusLabel, aggregateStatusTone } from "@/views/project/tasks/tasks-contract";
+import {
+  formatDateTime,
+  priorityGrade,
+  aggregateStatusLabel,
+  aggregateStatusTone
+} from "@/views/project/tasks/tasks-contract";
 import { describeError } from "@/lib/errors";
 
 /**
@@ -38,7 +43,8 @@ const router = useRouter();
 const productId = computed(() => String(route.params.productId ?? ""));
 const tab = computed(() => {
   const value = route.query.tab;
-  return typeof value === "string" && ["overview", "lifecycle", "tasks", "history"].includes(value)
+  return typeof value === "string" &&
+    ["overview", "lifecycle", "tasks", "history"].includes(value)
     ? value
     : "overview";
 });
@@ -59,7 +65,10 @@ function switchTab(next: string) {
 const restrictedCount = computed(
   () =>
     tasks.value.filter(
-      task => !["completed", "failed", "cancelled", "superseded"].includes(task.status)
+      task =>
+        !["completed", "failed", "cancelled", "superseded"].includes(
+          task.status
+        )
     ).length
 );
 
@@ -68,17 +77,37 @@ const lifecycleActions = computed(() => {
   const status = product.value?.status;
   if (status === "normal")
     return [
-      { action: "suspend", label: t("pa07.products.lifecycleSuspend"), variant: "secondary" as const },
-      { action: "abandon", label: t("pa07.products.lifecycleAbandon"), variant: "danger" as const }
+      {
+        action: "suspend",
+        label: t("pa07.products.lifecycleSuspend"),
+        variant: "secondary" as const
+      },
+      {
+        action: "abandon",
+        label: t("pa07.products.lifecycleAbandon"),
+        variant: "danger" as const
+      }
     ];
   if (status === "suspended")
     return [
-      { action: "resume", label: t("pa07.products.lifecycleResume"), variant: "primary" as const },
-      { action: "abandon", label: t("pa07.products.lifecycleAbandon"), variant: "danger" as const }
+      {
+        action: "resume",
+        label: t("pa07.products.lifecycleResume"),
+        variant: "primary" as const
+      },
+      {
+        action: "abandon",
+        label: t("pa07.products.lifecycleAbandon"),
+        variant: "danger" as const
+      }
     ];
   if (status === "resuming")
     return [
-      { action: "complete_resume", label: t("pa07.products.lifecycleRestart"), variant: "primary" as const }
+      {
+        action: "complete_resume",
+        label: t("pa07.products.lifecycleRestart"),
+        variant: "primary" as const
+      }
     ];
   return [];
 });
@@ -94,7 +123,10 @@ async function runLifecycle(action: string) {
   acting.value = true;
   actionError.value = null;
   try {
-    product.value = await setProductLifecycle(product.value.id, action as never);
+    product.value = await setProductLifecycle(
+      product.value.id,
+      action as never
+    );
   } catch (error) {
     actionError.value = describeError(error);
   } finally {
@@ -131,10 +163,18 @@ function openTask(id: string) {
 </script>
 
 <template>
-  <PageFrame :title="product?.name ?? t('pa07.products.detailTitle')" :description="product ? `${product.key} · ${statusLabel(product.status)}` : ''">
+  <PageFrame
+    :title="product?.name ?? t('pa07.products.detailTitle')"
+    :description="
+      product ? `${product.key} · ${statusLabel(product.status)}` : ''
+    "
+  >
     <p v-if="loadError" class="pd-error">{{ loadError }}</p>
     <p v-else-if="loading" class="pd-note">{{ t("common.loading") }}</p>
-    <EmptyState v-else-if="!product" :title="t('pa07.dependencies.loadFailed')" />
+    <EmptyState
+      v-else-if="!product"
+      :title="t('pa07.dependencies.loadFailed')"
+    />
 
     <template v-else>
       <div class="pd-head">
@@ -147,12 +187,20 @@ function openTask(id: string) {
             :data-testid="`product-tab-${item}`"
             @click="switchTab(item)"
           >
-            {{ t(`pa07.products.tab${item.charAt(0).toUpperCase() + item.slice(1)}`) }}
+            {{
+              t(
+                `pa07.products.tab${item.charAt(0).toUpperCase() + item.slice(1)}`
+              )
+            }}
           </button>
         </div>
         <Badge
           class="pd-status"
-          :variant="product.status === 'normal' || product.status === 'resuming' ? 'success' : 'warning'"
+          :variant="
+            product.status === 'normal' || product.status === 'resuming'
+              ? 'success'
+              : 'warning'
+          "
           :outline="true"
           data-testid="product-status-badge"
         >
@@ -161,24 +209,44 @@ function openTask(id: string) {
       </div>
 
       <!-- Overview -->
-      <section v-if="tab === 'overview'" class="pd-section" data-testid="product-overview">
+      <section
+        v-if="tab === 'overview'"
+        class="pd-section"
+        data-testid="product-overview"
+      >
         <dl class="pd-facts">
-          <div><dt>Key</dt><dd>{{ product.key }}</dd></div>
-          <div><dt>{{ t("pa07.products.taskCountLabel", { count: tasks.length }) }}</dt><dd /></div>
+          <div>
+            <dt>Key</dt>
+            <dd>{{ product.key }}</dd>
+          </div>
+          <div>
+            <dt>
+              {{ t("pa07.products.taskCountLabel", { count: tasks.length }) }}
+            </dt>
+            <dd />
+          </div>
         </dl>
         <p class="pd-copy">{{ product.description ?? "—" }}</p>
       </section>
 
       <!-- Lifecycle -->
-      <section v-else-if="tab === 'lifecycle'" class="pd-section" data-testid="product-lifecycle">
+      <section
+        v-else-if="tab === 'lifecycle'"
+        class="pd-section"
+        data-testid="product-lifecycle"
+      >
         <div class="pd-impact">
           <p class="pd-impact__title">
-            {{ t("pa07.products.impactBlockedTitle", { count: restrictedCount }) }}
+            {{
+              t("pa07.products.impactBlockedTitle", { count: restrictedCount })
+            }}
           </p>
           <p class="pd-impact__note">{{ t("pa07.products.impactNote") }}</p>
         </div>
         <div class="pd-restricted">
-          <p class="pd-impact__title">{{ t("pa07.products.restrictedTitle") }}</p>
+          <p class="pd-impact__title">
+            {{ t("pa07.products.restrictedTitle") }}
+          </p>
           <p class="pd-impact__note">{{ t("pa07.products.restrictedCopy") }}</p>
         </div>
         <div class="pd-actions" data-testid="product-lifecycle-actions">
@@ -194,12 +262,25 @@ function openTask(id: string) {
             {{ item.label }}
           </Button>
         </div>
-        <p v-if="actionError" class="pd-error" data-test="product-lifecycle-error">{{ actionError }}</p>
+        <p
+          v-if="actionError"
+          class="pd-error"
+          data-test="product-lifecycle-error"
+        >
+          {{ actionError }}
+        </p>
       </section>
 
       <!-- Tasks -->
-      <section v-else-if="tab === 'tasks'" class="pd-section" data-testid="product-tasks">
-        <EmptyState v-if="tasks.length === 0" :title="t('pa07.products.tasksEmpty')" />
+      <section
+        v-else-if="tab === 'tasks'"
+        class="pd-section"
+        data-testid="product-tasks"
+      >
+        <EmptyState
+          v-if="tasks.length === 0"
+          :title="t('pa07.products.tasksEmpty')"
+        />
         <Table v-else data-test="product-tasks-table">
           <TableHeader>
             <TableRow>
@@ -209,7 +290,11 @@ function openTask(id: string) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="task in tasks" :key="task.id" data-test="product-task-row">
+            <TableRow
+              v-for="task in tasks"
+              :key="task.id"
+              data-test="product-task-row"
+            >
               <TableCell>
                 <span class="pd-task-line" @click="openTask(task.id)">
                   <span class="pd-task-code">{{ task.code }}</span>
@@ -227,7 +312,9 @@ function openTask(id: string) {
                   {{ aggregateStatusLabel(task.status) }}
                 </span>
               </TableCell>
-              <TableCell>{{ task.deps_met }}/{{ task.deps_total }} met</TableCell>
+              <TableCell
+                >{{ task.deps_met }}/{{ task.deps_total }} met</TableCell
+              >
             </TableRow>
           </TableBody>
         </Table>

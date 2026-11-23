@@ -16,9 +16,7 @@ describe("PlaceholderView", () => {
     await router.push("/project/product-cognition");
     await nextTick();
 
-    expect(wrapper.find(".shell-page-header__title").text()).toBe(
-      "产品认知"
-    );
+    expect(wrapper.find(".shell-page-header__title").text()).toBe("产品认知");
     expect(wrapper.find(".shell-placeholder__empty-title").text()).toBe(
       "该页面正在建设中"
     );

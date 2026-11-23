@@ -12,9 +12,15 @@ const props = defineProps<{ condition: SchedulingCondition }>();
 </script>
 
 <template>
-  <span class="sc-chip" :class="`sc-chip--${props.condition.tone}`" :data-condition="props.condition.key">
+  <span
+    class="sc-chip"
+    :class="`sc-chip--${props.condition.tone}`"
+    :data-condition="props.condition.key"
+  >
     <span class="sc-chip__label">{{ props.condition.label }}</span>
-    <span v-if="props.condition.detail" class="sc-chip__detail">{{ props.condition.detail }}</span>
+    <span v-if="props.condition.detail" class="sc-chip__detail">{{
+      props.condition.detail
+    }}</span>
   </span>
 </template>
 

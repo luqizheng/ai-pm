@@ -226,10 +226,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   >
     <TopBar class="workspace-topbar" @search="searchOpen = true" />
 
-    <SideNav
-      class="workspace-leftnav"
-      @open-search="searchOpen = true"
-    />
+    <SideNav class="workspace-leftnav" @open-search="searchOpen = true" />
 
     <main class="workspace-main">
       <div class="workspace-main-scroll">

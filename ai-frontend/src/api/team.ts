@@ -199,9 +199,7 @@ export interface InvitationLink {
 export async function listInvitationLinks(
   teamId: string
 ): Promise<InvitationLink[]> {
-  return http.get<InvitationLink[]>(
-    `/v1/pm/teams/${teamId}/invitation-links`
-  );
+  return http.get<InvitationLink[]>(`/v1/pm/teams/${teamId}/invitation-links`);
 }
 
 export interface LinkCreated {

@@ -50,7 +50,8 @@ const transferring = ref<ProjectMember | null>(null);
 const memberOptions = computed(() =>
   candidates.value.filter(
     candidate =>
-      candidate.is_active && !members.value.some(m => m.principal_id === candidate.id)
+      candidate.is_active &&
+      !members.value.some(m => m.principal_id === candidate.id)
   )
 );
 
@@ -196,10 +197,16 @@ watch(() => settingsFrame.projectId.value, load);
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in members" :key="row.principal_id" data-testid="pm-row">
+          <tr
+            v-for="row in members"
+            :key="row.principal_id"
+            data-testid="pm-row"
+          >
             <td class="pm-table__name">{{ row.display_name }}</td>
             <td>
-              <Badge :variant="roleBadgeVariant(row.role)">{{ row.role }}</Badge>
+              <Badge :variant="roleBadgeVariant(row.role)">{{
+                row.role
+              }}</Badge>
             </td>
             <td class="pm-table__kind">{{ row.kind }}</td>
             <td>

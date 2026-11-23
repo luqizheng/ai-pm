@@ -225,9 +225,7 @@ function buildInitialization(
       tone: initStatusTone(item.status),
       required: item.required,
       detail: item.detail ?? "",
-      link: path
-        ? { path, query: { project_id: projectId } }
-        : undefined
+      link: path ? { path, query: { project_id: projectId } } : undefined
     };
   });
   const required = (block.items ?? []).filter(item => item.required);

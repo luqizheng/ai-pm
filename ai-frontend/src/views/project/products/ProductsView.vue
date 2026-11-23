@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
+import type { BadgeVariant } from "@/components/ui/badge";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { listProjectProducts } from "@/api/products";
 import type { ProjectProduct } from "@/api/products";
@@ -33,14 +34,14 @@ const products = ref<ProjectProduct[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
-const STATUS_TONES: Record<string, string> = {
+const STATUS_TONES: Record<string, BadgeVariant> = {
   normal: "success",
   resuming: "info",
   suspended: "warning",
   archived: "neutral"
 };
 
-function statusToneClass(status: string): string {
+function statusToneClass(status: string): BadgeVariant {
   return STATUS_TONES[status] ?? "neutral";
 }
 
@@ -70,22 +71,41 @@ function openProduct(item: ProjectProduct) {
 </script>
 
 <template>
-  <PageFrame :title="t('pa07.products.title')" :description="t('pa07.products.subtitle')">
+  <PageFrame
+    :title="t('pa07.products.title')"
+    :description="t('pa07.products.subtitle')"
+  >
     <p v-if="loadError" class="pr-error">{{ loadError }}</p>
     <p v-else-if="loading" class="pr-note">{{ t("common.loading") }}</p>
-    <EmptyState v-else-if="products.length === 0" :title="t('pa07.panel.relatedEmpty')" data-test="products-empty" />
+    <EmptyState
+      v-else-if="products.length === 0"
+      :title="t('pa07.panel.relatedEmpty')"
+      data-test="products-empty"
+    />
 
     <ul v-else class="pr-list" data-testid="products-list">
       <li v-for="item in products" :key="item.link_id">
-        <button class="pr-card" data-test="product-card" @click="openProduct(item)">
+        <button
+          class="pr-card"
+          data-test="product-card"
+          @click="openProduct(item)"
+        >
           <span class="pr-card__name">{{ item.product.name }}</span>
           <span class="pr-card__key">{{ item.product.key }}</span>
           <span
             class="pr-card__status"
-            :class="{ 'is-restricted': item.product.status === 'suspended' || item.product.status === 'archived' }"
+            :class="{
+              'is-restricted':
+                item.product.status === 'suspended' ||
+                item.product.status === 'archived'
+            }"
           >
-            <Badge :variant="(statusToneClass(item.product.status) as 'success' | 'info' | 'warning' | 'neutral')">
-              {{ t(`pa07.products.status${item.product.status.charAt(0).toUpperCase() + item.product.status.slice(1)}`) }}
+            <Badge :variant="statusToneClass(item.product.status)">
+              {{
+                t(
+                  `pa07.products.status${item.product.status.charAt(0).toUpperCase() + item.product.status.slice(1)}`
+                )
+              }}
             </Badge>
           </span>
           <span class="pr-card__meta">

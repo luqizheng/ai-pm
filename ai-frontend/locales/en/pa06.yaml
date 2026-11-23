@@ -278,6 +278,8 @@ delivery:
   ctxHistory: Delivery history
   ctxHistoryText: No final delivery is recorded while acceptance is incomplete; history stays traceable.
   ctxNote: Evidence is attached to the task and delivery record; conversation is not the source of truth.
+  reviewCenterLink: Acceptance decision → Review center (human accept / reject / request changes)
+  executionReviewLink: View Run execution review (S05)
 
 recovery:
   loadingEyebrow: Loading exceptions & recovery · preserve context
@@ -375,5 +377,3 @@ commits:
   ctxKnowledge: Knowledge update boundary
   ctxKnowledgeText: Suggestions carry the full draft for your review; after approval they still pass quality gates and red-line confirmation.
   ctxNote: Scans are idempotent — one commit per repository is recorded once; the first scan only establishes the anchor.
-  reviewCenterLink: Acceptance decision → Review center (human accept / reject / request changes)
-  executionReviewLink: View Run execution review (S05)

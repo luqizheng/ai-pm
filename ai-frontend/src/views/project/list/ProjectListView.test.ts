@@ -4,7 +4,7 @@ import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
-import { mountShell } from "@/components/shell/test-utils";
+import { mountShell, waitForRoute } from "@/components/shell/test-utils";
 import { i18n } from "@/lib/i18n";
 
 import ProjectListView from "./ProjectListView.vue";
@@ -24,6 +24,7 @@ async function mountList(loader?: () => Promise<unknown>) {
   const mounted = mountShell(ProjectListView, {
     props: loader ? { loader } : {}
   });
+  await mounted.router.isReady();
   await mounted.router.push("/projects");
   await flushPromises();
   return mounted;
@@ -162,7 +163,9 @@ describe("ProjectListView", () => {
     await flushPromises();
 
     // 总控台以 ?project_id= 为数据真源（CommandCenterView 只认 URL query），
-    // 不带 query 会命中「请先在顶栏选择一个项目」空态
+    // 不带 query 会命中「请先在顶栏选择一个项目」空态。
+    // 懒路由组件的动态导入跨宏任务，flushPromises 等不到导航落定
+    await waitForRoute(mounted.router, "/project/command-center");
     expect(mounted.router.currentRoute.value.path).toBe(
       "/project/command-center"
     );

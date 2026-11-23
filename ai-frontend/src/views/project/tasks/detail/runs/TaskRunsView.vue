@@ -85,12 +85,18 @@ function verdictLabel(verdict: string | null): string {
       <TableBody>
         <TableRow v-for="run in runs" :key="run.id" data-test="task-run-row">
           <TableCell>
-            <span class="tr-run-id" :data-testid="`run-attempt-${run.attempt_no}`">
+            <span
+              class="tr-run-id"
+              :data-testid="`run-attempt-${run.attempt_no}`"
+            >
               Delivery #{{ run.attempt_no }}
             </span>
           </TableCell>
           <TableCell>
-            <span class="tr-status" :class="`tr-status--${runTone(run.status)}`">
+            <span
+              class="tr-status"
+              :class="`tr-status--${runTone(run.status)}`"
+            >
               {{ run.status }}
             </span>
           </TableCell>

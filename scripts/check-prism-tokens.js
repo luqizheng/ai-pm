@@ -14,11 +14,13 @@
  * 用法：
  *   node scripts/check-prism-tokens.js              # 扫描默认范围
  *   node scripts/check-prism-tokens.js --report     # 只报告，不以非零码退出
+ *   node scripts/check-prism-tokens.js --changed-from <ref> # 只扫描该 ref 之后变更的源码
  *
  * 退出码：0 通过；1 存在违规。
  */
 const { readFileSync, readdirSync, statSync } = require("node:fs");
 const { join, relative, resolve, sep } = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 const ROOT = join(__dirname, "..");
 /** 活跃前端工程 = ai-frontend（2026-11-04 重组后唯一工程；旧 frontend/ 冻结只读） */
@@ -39,6 +41,33 @@ const SCAN_ROOTS =
   scanRootIndex >= 0 && process.argv[scanRootIndex + 1]
     ? [resolve(process.argv[scanRootIndex + 1])]
     : DEFAULT_SCAN_ROOTS;
+
+/**
+ * CI 增量门禁：只检查本次 PR/push 变更的活跃源码文件。
+ * 不把历史遗留违规归咎于无关 PR；不带参数时仍可全量扫描以治理技术债。
+ */
+const changedFromIndex = process.argv.indexOf("--changed-from");
+let SCAN_FILES = SCAN_ROOTS.flatMap((dir) => walk(dir));
+if (changedFromIndex >= 0) {
+  const changedFrom = process.argv[changedFromIndex + 1];
+  if (!changedFrom) {
+    console.error("[check-prism-tokens] --changed-from 必须提供 Git ref");
+    process.exit(2);
+  }
+  const changedPaths = execFileSync(
+    "git",
+    ["diff", "--name-only", "--diff-filter=ACMR", changedFrom + "...HEAD"],
+    { cwd: ROOT, encoding: "utf8" }
+  )
+    .split(/\r?\n/)
+    .filter(
+      (file) =>
+        file.startsWith("ai-frontend/src/") &&
+        /\.(vue|css|ts|tsx)$/.test(file) &&
+        !/\.test\.ts$/.test(file)
+    );
+  SCAN_FILES = changedPaths.map((file) => resolve(ROOT, file));
+}
 
 /** 允许出现裸色值/裸尺寸的文件（token 定义处本身） */
 const ALLOW_RAW_COLOR_FILES = new Set([TOKENS_FILE]);
@@ -223,7 +252,7 @@ function rawDurationValues(value) {
 
 const violations = [];
 
-for (const file of SCAN_ROOTS.flatMap((dir) => walk(dir))) {
+for (const file of SCAN_FILES) {
   if (ALLOW_RAW_COLOR_FILES.has(file)) continue;
   const rel = relative(ROOT, file).split(sep).join("/");
   const source = readFileSync(file, "utf8");
@@ -293,7 +322,7 @@ for (const file of SCAN_ROOTS.flatMap((dir) => walk(dir))) {
         NAMED_COLORS.includes(lowered) && !ALLOWED_KEYWORDS.has(lowered);
       const colorProp = COLOR_PROPS.includes(prop);
       const namedInValue = NAMED_COLORS.find(
-        (c) => new RegExp(`(^|[\\s,(])${c}($|[\\s,;)])`).test(lowered)
+        (c) => new RegExp(`(^|[\s,(])${c}($|[\s,;)])`).test(lowered)
       );
       if (wholeValueIsColor || (colorProp && namedInValue)) {
         violations.push(

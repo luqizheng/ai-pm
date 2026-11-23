@@ -165,7 +165,9 @@ export interface ProjectProduct {
 }
 
 /** GET /v1/pm/projects/{project_id}/products（项目成员可见） */
-export async function listProjectProducts(projectId: string): Promise<ProjectProduct[]> {
+export async function listProjectProducts(
+  projectId: string
+): Promise<ProjectProduct[]> {
   const res = await http.get<{ items: ProjectProduct[] }>(
     `/v1/pm/projects/${projectId}/products`
   );
@@ -187,7 +189,9 @@ export interface ProductTask {
 }
 
 /** GET /v1/pm/products/{id}/tasks（Product Member 可读） */
-export async function listProductTasks(productId: string): Promise<ProductTask[]> {
+export async function listProductTasks(
+  productId: string
+): Promise<ProductTask[]> {
   const res = await http.get<{ items: ProductTask[] }>(
     `/v1/pm/products/${productId}/tasks`
   );

@@ -439,12 +439,15 @@ export const auxiliaryNavItems: NavItem[] = [
         module => module.default
       )
   },
-  // Product Cognition（四域独立入口）：页面 Phase 4 落地，PLANNED 占位路由
+  // Product Cognition：复用 PC 对象只读发布模型，独立入口；提案审批仍由 Review Center 负责。
   {
     path: "/project/product-cognition",
     labelKey: "shell.app.side.item.productCognition",
     icon: Brain,
-    planned: true
+    component: () =>
+      import("@/views/project/product-cognition/ProductCognitionView.vue").then(
+        module => module.default
+      )
   },
   // Project Cognition（四域独立入口）：真页直连（人工启动 Run + 逐项确认）
   {

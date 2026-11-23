@@ -18,9 +18,12 @@ const css = readFileSync(
 ).replace(/\/\*[\s\S]*?\*\//g, "");
 
 function ruleBody(selector: string): string {
-  const re = new RegExp(
-    `${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`
-  );
+  // 选择器内部空白容忍为 \s+：prettier 会把长选择器折行（lint 门禁要求），
+  // 契约关心的是「规则存在且列位正确」，不是 CSS 的排版字节
+  const pattern = selector
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  const re = new RegExp(`${pattern}\\s*\\{([^}]*)\\}`);
   const m = css.match(re);
   expect(m, `index.css 缺少 ${selector} 规则`).toBeTruthy();
   return m![1];

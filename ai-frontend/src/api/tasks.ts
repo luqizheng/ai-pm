@@ -38,11 +38,16 @@ export function listTaskDependencies(taskId: string) {
 export function addTaskDependency(
   taskId: string,
   dependsOnTaskId: string,
-  options?: { required_condition?: string; required_deliverable_ref?: Record<string, unknown> }
+  options?: {
+    required_condition?: string;
+    required_deliverable_ref?: Record<string, unknown>;
+  }
 ) {
   return http.post<TaskDependencyGraph>(`/v1/pm/tasks/${taskId}/dependencies`, {
     depends_on_task_id: dependsOnTaskId,
-    ...(options?.required_condition ? { required_condition: options.required_condition } : {}),
+    ...(options?.required_condition
+      ? { required_condition: options.required_condition }
+      : {}),
     ...(options?.required_deliverable_ref
       ? { required_deliverable_ref: options.required_deliverable_ref }
       : {})
@@ -120,7 +125,8 @@ export interface StaleActiveRun {
 }
 
 export function listTaskRevisions(taskId: string) {
-  return http.get<{ items: TaskRevision[]; stale_active_runs: StaleActiveRun[] }>(
-    `/v1/pm/tasks/${taskId}/revisions`
-  );
+  return http.get<{
+    items: TaskRevision[];
+    stale_active_runs: StaleActiveRun[];
+  }>(`/v1/pm/tasks/${taskId}/revisions`);
 }

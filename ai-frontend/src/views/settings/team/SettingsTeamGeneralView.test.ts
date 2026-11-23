@@ -103,10 +103,8 @@ describe("SettingsTeamGeneralView", () => {
     const { wrapper } = await mountAt();
     expect(fetchTeamProfile).toHaveBeenCalledWith(TEAM_ID);
     expect(listTeamMembers).toHaveBeenCalledWith(TEAM_ID);
-    expect(wrapper.find("[data-test='team-general-save']").exists()).toBe(
-      true
-    );
-    const nameInput = wrapper.find('input#team-name')
+    expect(wrapper.find("[data-test='team-general-save']").exists()).toBe(true);
+    const nameInput = wrapper.find("input#team-name")
       .element as HTMLInputElement;
     expect(nameInput.disabled).toBe(false);
   });
@@ -119,7 +117,7 @@ describe("SettingsTeamGeneralView", () => {
       slug: "acme-rd",
       description: null
     });
-    await wrapper.find('input#team-name').setValue('Acme Renamed');
+    await wrapper.find("input#team-name").setValue("Acme Renamed");
     await wrapper.find("[data-test='team-general-save']").trigger("click");
     await flushPromises();
     expect(updateTeamProfile).toHaveBeenCalledWith(
@@ -134,7 +132,7 @@ describe("SettingsTeamGeneralView", () => {
     expect(wrapper.find("[data-test='team-general-save']").exists()).toBe(
       false
     );
-    const nameInput = wrapper.find('input#team-name')
+    const nameInput = wrapper.find("input#team-name")
       .element as HTMLInputElement;
     expect(nameInput.disabled).toBe(true);
     // owner-transfer 已取消；Team 不可解散（DR-ORG-01）。

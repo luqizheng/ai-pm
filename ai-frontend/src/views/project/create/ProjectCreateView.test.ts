@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
 import ProjectCreateView from "./ProjectCreateView.vue";
-import { mountShell } from "@/components/shell/test-utils";
+import { mountShell, waitForRoute } from "@/components/shell/test-utils";
 
 const createProject = vi.fn();
 vi.mock("@/api/projects", () => ({
@@ -12,6 +12,7 @@ vi.mock("@/api/projects", () => ({
 
 async function mountView() {
   const mounted = mountShell(ProjectCreateView);
+  await mounted.router.isReady();
   await flushPromises();
   return mounted;
 }
@@ -90,6 +91,8 @@ describe("ProjectCreateView", () => {
     });
 
     // 创建即可工作：无成功停留页，直接进入总控台（不再经过初始化总览）
+    // 懒路由组件的动态导入跨宏任务，flushPromises 等不到导航落定
+    await waitForRoute(router, "/project/command-center");
     expect(router.currentRoute.value.path).toBe("/project/command-center");
     expect(router.currentRoute.value.query.project_id).toBe("prj-1");
     wrapper.unmount();

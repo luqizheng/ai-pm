@@ -165,7 +165,6 @@ onMounted(async () => {
         </div>
         <p v-else class="tg-note">{{ $t("team.members.readonlyNote") }}</p>
       </SettingsFormSection>
-
     </SettingsAppFrame>
   </div>
 </template>
@@ -189,5 +188,4 @@ onMounted(async () => {
   font-size: var(--font-size-micro);
   color: var(--text-tertiary);
 }
-
 </style>
