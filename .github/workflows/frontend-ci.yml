@@ -33,6 +33,8 @@ jobs:
         working-directory: ai-frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: ai-frontend/.nvmrc
@@ -42,8 +44,10 @@ jobs:
       - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Check design tokens and localization
+        env:
+          PRISM_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
         run: |
-          pnpm check:prism-tokens
+          pnpm check:prism-tokens -- --changed-from "$env:PRISM_BASE_SHA"
           pnpm check:i18n
       - name: TypeScript and Vue type check
         run: pnpm typecheck
