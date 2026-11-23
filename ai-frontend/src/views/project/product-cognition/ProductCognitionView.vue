@@ -323,7 +323,7 @@ watch(projectId, () => {
 .product-cognition__item {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-md);
   background: var(--surface-base);
 }
 
@@ -342,7 +342,7 @@ watch(projectId, () => {
 }
 
 .product-cognition__head:hover {
-  background: var(--surface-hover);
+  background: var(--surface-hover-veil);
 }
 
 .product-cognition__name {
