@@ -82,3 +82,10 @@ ART-00 已完成仓库静态代码与文档审计：现有 RustFS/file-service�
 - [ART-01](ART-01-artifact-service-api-and-data-model-v1.0.md)：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
 
 ART-01 是目标实施契约，不代表独立服务、SDK、数据库或迁移已经实现。真实 token-service claims、file-service 能力、RustFS 运维状态和 viz.* 数据量必须在 ART-02 取得证据后才能进入实施。
+
+
+### ART-02 第一轮核验
+
+- [ART-02 实施前置核验报告](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 pm-api JWT/JWKS、项目授权、file-service、viz.*、SeeCode/Mermaid 和当前 CI；明确区分代码事实、历史快照和运行态待核验项。
+
+ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，但 Artifact 专用 project/action 委托凭证和 file-service upload-intent/checksum/finalize 能力尚未得到证实。两个 P0 项关闭前，不进入生产实现或迁移。
