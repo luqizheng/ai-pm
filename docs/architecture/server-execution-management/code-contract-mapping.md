@@ -170,12 +170,12 @@ Runner 当前通过 MCP 做 Claim、Lease Renewal、命令轮询/ACK、恢复和
 9. Platform API 不可达、SEM DB 不可达、WSS 断线、SEM 重启时分别如何保持唯一执行权？
 10. 现有 ai-pm-worker 各循环如何拆分；哪些循环继续留在 Platform，哪些执行事实必须在 SEM 主机采集？
 
-**本阶段结论：** 当前代码能够提供业务状态机、Claim 事务、Lease/Generation fencing、Outbox、命令状态机和本机执行器的基础能力；但 Platform–SEM 服务 API、SEM 私有持久化、Runner WSS、服务认证和跨服务恢复均尚未实现。完成上述 10 项契约关闭后，才具备开始 Phase 1 实施的条件。
+**本阶段结论：** 当前代码能够提供业务状态机、Claim 事务、Lease/Generation fencing、Outbox、命令状态机和本机执行器的基础能力；但 Platform–SEM 服务 API、SEM 私有持久化、Runner WSS、服务认证和跨服务恢复均尚未实现。完成 G-01–G-21 架构门槛审查并满足对应 Phase 前置验收后，才具备开始实施的条件。
 
 
 ## 10. ADR-SEM-20 已关闭的控制通道契约
 
-用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。Claim 发起方和 Runner 控制轮询归属已关闭；Lease Renewal 唯一路径仍是开放问题：
+用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。Claim 发起方和 Runner 控制轮询归属已关闭；Lease Renewal 已形成建议路径，仍待用户确认：
 
 - SEM Scheduler 选择目标 Runner；`supervised` 必须先完成用户通知与明确选择，`unattended` 默认自动选择。
 - SEM 使用专用 service identity 调用 Platform HTTPS Claim API，并显式传入目标 Runner/device identity。Platform 不能信任裸 device_id，必须从注册/绑定记录验证身份、租户、项目、权限、监督策略、Scheduling Shield 和并发条件。
