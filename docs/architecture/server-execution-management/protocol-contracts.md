@@ -4,13 +4,40 @@ Status: normative design target. Exact route/function names must be reconciled w
 
 ## 1. Trust boundaries
 
-- Platform API/MCP and Platform Workers coordinate business state through PostgreSQL.
-- SEM Worker manages server-side process lifecycle and evidence through PostgreSQL.
-- Client Runner uses the existing claim, heartbeat, command-poll/ack and result paths.
-- Runner supervises its local Harness process through OS process APIs.
-- Platform and SEM have no RPC coupling. Runner does not connect directly to the SEM host. No message broker is introduced.
+- Platform and SEM are independent services and own separate databases.
+- Platform PostgreSQL is authoritative for Project/Task/Run/Lease/Generation, business status, authorization and audit. SEM must not connect to or issue SQL against Platform PostgreSQL.
+- SEM owns only execution-side private persistence: durable command-delivery records, connection/session metadata and local execution coordination. These records must not become a second Run/Lease authority.
+- Platform ↔ SEM communication uses versioned HTTPS service APIs. Platform Transactional Outbox reliably triggers dispatch; SEM processes requests idempotently and reconciles through Platform APIs.
+- Runner ↔ SEM communication uses authenticated WSS. Runner supervises its local Harness process through OS process APIs.
+- No shared database and no message broker in V1.
 
-## 2. Platform–SEM service API\n\n### 2.1 Direction and responsibilities\n\n- Platform → SEM: dispatch notification, cancellation request, policy/configuration changes, and authorized control requests.\n- SEM → Platform: claim request, execution lifecycle updates, result/error reports, termination evidence, Runner/connection telemetry and HIR-related execution evidence.\n- Platform remains the only authority that grants a Run lease or changes the authoritative Run/Generation state. SEM cannot self-assign a Run.\n\n### 2.2 Dispatch and recovery\n\n1. Platform commits the business change and an Outbox event in the same database transaction.\n2. Outbox delivery calls the versioned SEM HTTPS API. Delivery is at-least-once; each event has a stable event_id/idempotency key.\n3. SEM durably records receipt before acknowledging acceptance; duplicate event delivery returns the prior outcome.\n4. SEM requests claim through Platform API. Platform performs authorization, eligibility checks, concurrency control, generation increment, lease issuance and audit in one authoritative transaction.\n5. SEM sends the execution command to the selected Runner over WSS only after successful claim.\n6. SEM reports state and evidence through Platform APIs. On timeout/restart, SEM retries idempotently and periodically reconciles outstanding operations with Platform.\n7. Outbox notification is a wake-up/trigger, not the task payload authority. API query/reconciliation is the recovery path for missed or delayed notifications.\n\n### 2.3 API contract requirements\n\n- Version prefix (for example `/internal/sem/v1/`); exact routes are finalized during SEM-02C code mapping.\n- Service-to-service authentication, TLS, least-privilege scopes, request correlation ID, idempotency key, timeout and bounded retry policy.\n- Mutating calls carry Run ID and expected generation where applicable; stale generation and mismatched ownership fail closed.\n- No distributed transaction across Platform and SEM databases. Use outbox/inbox, idempotency, explicit operation state and reconciliation/compensation.\n- API acceptance is not proof of process start or process termination; process evidence has separate semantics.\n\n## 3. Common execution envelope
+## 2. Platform–SEM service API
+
+### 2.1 Direction and responsibilities
+
+- Platform → SEM: dispatch notification, cancellation request, policy/configuration changes, and authorized control requests.
+- SEM → Platform: claim request, execution lifecycle updates, result/error reports, termination evidence, Runner/connection telemetry and HIR-related execution evidence.
+- Platform remains the only authority that grants a Run lease or changes the authoritative Run/Generation state. SEM cannot self-assign a Run.
+
+### 2.2 Dispatch and recovery
+
+1. Platform commits the business change and an Outbox event in the same database transaction.
+2. Outbox delivery calls the versioned SEM HTTPS API. Delivery is at-least-once; each event has a stable event_id/idempotency key.
+3. SEM durably records receipt before acknowledging acceptance; duplicate event delivery returns the prior outcome.
+4. SEM requests claim through Platform API. Platform performs authorization, eligibility checks, concurrency control, generation increment, lease issuance and audit in one authoritative transaction.
+5. SEM sends the execution command to the selected Runner over WSS only after successful claim.
+6. SEM reports state and evidence through Platform APIs. On timeout/restart, SEM retries idempotently and periodically reconciles outstanding operations with Platform.
+7. Outbox notification is a wake-up/trigger, not the task payload authority. API query/reconciliation is the recovery path for missed or delayed notifications.
+
+### 2.3 API contract requirements
+
+- Version prefix (for example `/internal/sem/v1/`); exact routes are finalized during SEM-02C code mapping.
+- Service-to-service authentication, TLS, least-privilege scopes, request correlation ID, idempotency key, timeout and bounded retry policy.
+- Mutating calls carry Run ID and expected generation where applicable; stale generation and mismatched ownership fail closed.
+- No distributed transaction across Platform and SEM databases. Use outbox/inbox, idempotency, explicit operation state and reconciliation/compensation.
+- API acceptance is not proof of process start or process termination; process evidence has separate semantics.
+
+## 3. Common execution envelope
 
 Every execution-control message must be scoped to tenant/project/task as applicable, task_run_id, lease_generation, client/Runner identity, command/event ID, timestamp and idempotency key.
 
