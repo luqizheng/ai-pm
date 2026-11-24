@@ -1,9 +1,9 @@
 # SEM-02D — 阻断项关闭设计提案（D-01–D-13）
 
-- 状态：**完整设计已形成；D-01–D-12 Review Pending；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
+- 状态：**Corrective Design In Progress；D-01–D-12 Review Pending；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
 - 日期：2026-11-25
 - 基线：当前 master 的 SEM-02D 审查报告及 ADR-SEM-01–26
-- 范围：把 D-01–D-13 从“问题清单”推进为完整、可审阅、可实现的设计基线；D-13 已批准，D-01–D-12 由用户统一评审。
+- 范围：D-01–D-13 候选设计及十项评审问题的修正；上一轮完整性结论已撤回，当前以 corrective-design 为补充设计主文档。
 - 明确边界：本文件只提出设计，不代表已修改代码、Migration、API、WSS、Docker 或运行配置；Phase 0 仍未启动。
 - 不重开：独立 DB、单一 Git origin、不备份 Workspace、不引入消息中间件、SEM 唯一 Runner 控制面、Lease Renewal 唯一路径、Runner 默认 unattended 等已确认决策。
 
@@ -352,3 +352,33 @@ SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检
 ### D-04/D-05 与 ADR-SEM-26 的强制对齐补充
 
 WSS V1 消息类型清单必须包含 `runner.resource.report`。七表模型中，`runner_connection` 保存当前 Runner 的资源快照（`resource_boot_id`、`resource_sample_seq`、`resource_observed_at`、`resource_snapshot`、`resource_health`）；`dispatch_operation` 保存任务资源画像、CPU/内存/Workspace 空间预留及预留状态。该设计落实 ADR-SEM-26，不新增第八张必需表。资源报告不续租、不作为 Heartbeat 或 E1/E2/E3 证据；资源未知/过期只阻止新派发。
+
+
+## 18. 十项评审问题的规范性修正（2026-11-25，Review Pending）
+
+十项问题的逐项核验和完整修正以 [`sem-02d-review-findings-corrective-design.md`](./sem-02d-review-findings-corrective-design.md) 为准。本节明确对本提案既有内容的覆盖关系：
+
+1. **D-01 Execution Barrier**：必须区分自动安全释放与 E6 风险接受。E6 只授权一个 successor，不代表旧进程已死；旧 Barrier 保持 `risk_accepted_unconfirmed`，只有 E1/E2/E3 才释放。
+2. **D-02 HIR**：Phase 0 即建立可操作的最小 HIR（创建、查询、责任人/收件人、通知、证据追加、受控处置、审计）。Phase 4 只扩展高级 handoff，不得把最初可见性/通知推迟到 Phase 4。
+3. **D-03/D-04**：协议必须覆盖 Interaction terminate/continue、Runner process exit spool、自然退出、lease-loss cleanup、startup cleanup、boot transition、Detached reconnect sync。
+4. **D-05/D-06**：SEM 七表模型保留；`runner_connection` 承载 boot/resource/connection 当前快照，`process_observation` 追加进程证据；Platform 增加正式 Execution Barrier/HIR/通知模型。新增统一 Execution Control Port，Runner WSS adapter 与 SEM-local CodexExecutor adapter 均需有命令消费者。
+5. **D-09**：进程身份绑定 boot_id + PID + process creation identity。若 OS boot identity 可验证，boot transition 可作为 E3 子类；无法验证降级 E5。
+6. **D-10**：command receipt ACK、command result、E3 process-exit evidence、continuation-consumed 四者独立。不能以 cancel ACK 代替进程退出观察。
+7. **D-11**：HIR 处置必须映射 Interaction、Continuation、Cleanup Need 和 Execution Barrier；彼此关联但不合并。HIR closed 不自动解除 Barrier。
+8. **D-13**：资源报告仍不续租、不证明进程退出、不释放 Barrier/预留。
+
+### 18.1 证据分类修正
+
+- E1/E2/E3：进程终止事实，可自动安全恢复/重派。
+- E4/E5：进程可能仍在运行或证据不足，只隔离并创建/关联 HIR。
+- E6：有权限操作者明确接受旧进程仍可能运行的风险授权。E6 不是终止证据，只允许一次受限 successor，旧 Barrier 不释放。
+
+### 18.2 Dispatchability 修正
+
+统一 Platform `is_dispatchable` 谓词必须覆盖普通 queued claim、B3-1/B3-2、B06-D3、retry/requeue、orphan reconciliation、handoff 和 E6 successor。检查 Interaction 四值 shield 与独立 Execution Barrier。B06-D3 不得把 shielded Run 回队后被普通 queued claim 重启。Detached 不加入 scheduling_shield CHECK；Phase 0 正式 Migration 必须包含 Barrier/HIR/通知收件人模型。
+
+### 18.3 阶段修正
+
+Phase 0 = Safety + Minimum Human Intervention；Phase 1 = SEM Control Plane + Runner E3 + Detached Recovery；Phase 2 = 独立部署 + Full Interaction Acceptance；Phase 3 = Session Continuity；Phase 4 = Advanced HIR / Cross-Runner Handoff / E6；Phase 5 = Multi-Runner Chaos Acceptance。详细验收见 corrective-design §11。
+
+本节尚未获用户批准，不新增 Ratified ADR；Phase 0 仍未启动。
