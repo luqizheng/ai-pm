@@ -62,7 +62,7 @@ User selection of a Runner is not a claim and grants no execution ownership. The
 These are three distinct signals and must never be conflated:
 
 1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence, and does not automatically renew a Lease.
-2. **Lease Renewal（建议方案）**: Runner Supervisor 通过专用 WSS `lease.renew` 消息发起，SEM 转发到 Platform HTTPS API。Platform 独立校验并提交续租。该方案是本轮建议基线，待用户确认后冻结。
+2. **Lease Renewal（建议方案）**: Runner Supervisor 通过专用 WSS `lease.renew` 消息发起，SEM 转发到 Platform HTTPS API。Platform 独立校验并提交续租。该方案已由用户确认并由 ADR-SEM-21 冻结。
 3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools。它只记录业务/执行活动，不续租。
 
 Renewal constraints:
@@ -122,3 +122,11 @@ The ratified detailed baseline under ADR-SEM-21–25 is maintained in `service-p
 - Claim crash recovery: persist dispatch intent before Claim; use stable `claim_request_id`; Platform atomically persists the idempotency outcome; SEM retries the same request and never blindly creates a second Claim.
 
 These are ratified target design constraints, not current implementation facts.
+
+## 11. Idempotency and recovery contract (ADR-SEM-25)
+
+- SEM persists a dispatch operation before requesting Claim and reuses the same `claim_request_id` for every retry.
+- Platform commits the Claim business mutation and its idempotency outcome in one transaction. Repeated identical requests return the same result; conflicting reuse is rejected.
+- A lost Claim response must never cause a second Claim or a new target Runner assignment. Recovery is bound to the original target Runner and current Platform lease validity.
+- SEM may hold the opaque Lease Token only in bounded process memory for dispatch/renewal relay; it must never persist it in DB, delivery ledger, logs, traces or error payloads.
+- Inbox acceptance is acknowledged only after the SEM Inbox transaction commits; duplicate event IDs are acknowledged idempotently.
