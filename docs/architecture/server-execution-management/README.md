@@ -170,9 +170,13 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 ## SEM-02D 阻断项关闭提案
 
 - 新增 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md)，对 D-01–D-13 给出可审阅的物理模型、HTTPS/WSS 契约、SEM 七表结构、Ports/Adapters、安全、资源感知调度与阶段依赖提案。
-- 该文件是 **Proposed / 待用户确认**，不是新 ADR，不改变 ADR-SEM-01–25 的已冻结状态。
+- D-01–D-12 仍为 **Proposed / 待用户确认**；D-13 已由用户确认并登记为 **ADR-SEM-26**，不再属于待确认事项。
 - 当前仍为 `Design In Progress`；Phase 0 未启动。只有用户确认提案并完成跨文档同步复核后，才可将相关 D 项转为 Ratified。
+
+### ADR-SEM-26：Runner 资源感知与同机并发准入
+
+Runner Supervisor 通过 WSS 上报 CPU、内存和 Workspace 所在磁盘卷容量；SEM 结合任务资源画像与原子资源预留决定同一台 PC 是否可并发承载多个任务。资源报告过期/未知时停止新派发，不终止现有任务，也不作为进程退出证据。详细规范见 `sem-02d-closure-design-proposal.md` §15 和 `protocol-contracts.md`。
 
 ## SEM-02D 最终架构审查结论
 
-最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。原始审查识别 12 项实施前设计阻断项；后续新增 D-13 资源感知调度提案，当前共 13 项待关闭设计事项，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
+最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。原始审查识别 12 项实施前设计阻断项；后续新增 D-13 资源感知调度提案，当前有 12 项待关闭设计事项（D-01–D-12）；D-13 已由 ADR-SEM-26 冻结，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
