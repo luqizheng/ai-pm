@@ -23,7 +23,7 @@ The following rules are now stated consistently across the overview, decision re
 13. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
 14. Harness Resume remains disabled until exact-version real-world acceptance.
 15. SEM is the sole Runner dispatch/handoff coordinator; Runner does not poll Platform MCP for Claim/control commands. Platform alone grants Lease/Generation.
-16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals; WSS liveness never renews by itself, and the single Lease Renewal path remains to be selected.
+16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals. Proposed Lease Renewal path is Runner Supervisor WSS → SEM → Platform HTTPS; WSS liveness and Harness Agent Activity do not renew. This remains a proposed baseline pending user confirmation.
 
 ## 2. Required pre-implementation closure gates
 
@@ -48,7 +48,10 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-15 Runtime/data ownership mapping | Every existing PgPool/SQL operation in run_executor, claim, lease, worker_command, run_events and cleanup is assigned to Platform API or SEM-local process state; SEM has no Platform DB pool |
 | G-16 Runner control-channel exclusivity | Integration-level operation inventory proves Runner cannot Claim, renew Lease, poll/ACK commands or perform recovery through Platform MCP; each control operation has exactly one WSS→SEM→Platform API path; Harness business MCP remains available |
 | G-17 Target Runner authorization | Platform Claim API validates the target Runner identity against device registration, tenant/project binding, authorization and supervision policy; SEM cannot claim for an arbitrary/self-reported device |
-| G-18 Lease renewal separation | Design selects exactly one renewal initiator/transport; tests prove WSS liveness cannot renew by itself, no second path can renew, and only the selected path renews the exact current generation |
+| G-18 Lease renewal separation | User ratifies one path; tests prove WSS liveness and Harness Agent Activity cannot renew, and only the selected dedicated request renews the exact current generation |
+| G-19 Service identity and scope | Platform↔SEM JWT issuer/audience/scope/key rotation/revocation and idempotency are specified; service identities never map to human principals |
+| G-20 Runner ticket and revocation | WSS connect ticket is device-bound, short-lived, single-use; revocation events plus bounded revalidation close active connections; authorization outage fails closed |
+| G-21 SEM persistence and dispatch idempotency | Inbox, connection, ticket-use, dispatch, command-delivery, outbound-delivery and process-observation schemas have single ownership; lost Claim response recovers by same idempotency key without duplicate Claim or plaintext token persistence |
 
 ## 3. Initial SEM-02C code findings
 
@@ -91,4 +94,4 @@ SEM-02C may mark the architecture Design Complete only after:
 - every Phase has bounded scope, test plan, acceptance and rollback;
 - no unresolved product-level choice remains.
 
-Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership but does not by itself close authentication, exact DTO/schema, revocation, SEM Inbox/Delivery Ledger schema or cross-service failure gates.
+Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership. The proposed protocol/security/persistence baseline addresses G-18–G-21 for review, but those gates remain open until user ratification and later implementation/acceptance evidence.
