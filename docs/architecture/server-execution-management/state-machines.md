@@ -56,3 +56,43 @@ A self-resolved HIR may close only when the original condition is proven safe; r
 7. New execution begins only after successful claim.
 
 No direct lease-owner rewrite and no weakening of lease_client_id checks.
+
+
+## 7. Detached / Runner reconnect lifecycle（修正设计，Review Pending）
+
+```text
+Active → Detached → Reconciling
+Reconciling → Active              # same Runner + exact process alive + current Lease/Generation valid
+Reconciling → Terminated          # E1/E2/E3 proves exact process exit
+Reconciling → Quarantined         # E4/E5, identity mismatch, missing evidence
+Quarantined → RiskAccepted        # explicit E6, one bound successor only; old barrier remains unresolved
+```
+
+`Detached` 是 Execution/Session lifecycle 状态，不属于 `task_run.scheduling_shield`。当前 Interaction shield 四值保持不变。Platform 持久化的 `run_execution_barrier` 是执行不确定性的隔离载体。
+
+### 7.1 Detached → Active 条件
+
+- 必须由同一 Runner/device 重新认证并提交 reconnect sync；
+- Run/Generation/Lease 仍由 Platform 判定有效；
+- 进程必须由 boot_id + process creation identity 精确识别，且 Runner 重新建立 OS 监督句柄；
+- 仅凭 device ID、PID 或 Harness Native Session ID 不足以恢复；
+- Lease 已过期但进程仍活着时，先安全终止并获得 E3，不能重签 Lease 后让旧进程继续；
+- 无法对账则进入 Quarantined + HIR。
+
+## 8. E6 Human Risk Acceptance（授权证据，不是终止证据）
+
+| 类别 | 含义 | 允许动作 |
+|---|---|---|
+| E1/E2/E3 | 已观察到精确进程退出 | 可按安全事务释放 Barrier 并自动恢复/重派 |
+| E4/E5 | 进程可能仍运行或无法判断 | 仅隔离、通知、HIR；禁止自动重派 |
+| E6 | 有权限操作者明确接受旧进程仍可能运行的残余风险 | 可授权一个绑定的 successor Attempt；旧 Barrier 仍保持 risk_accepted_unconfirmed |
+
+E6 必须二次确认、风险展示、凭据撤销尝试/副作用缓解、独立 Workspace、唯一 successor 绑定和不可变审计。E6 不得标记原进程已死，不得解除旧 Barrier；后续只有 E1/E2/E3 才能释放。
+
+## 9. Execution Control 与 Interaction Continuation
+
+Interaction 的 terminate/continue 命令必须有确定的执行端消费者。Runner WSS adapter 与 SEM-local CodexExecutor adapter 都实现统一 Execution Control Port。continue 表示 checkpoint + 用户回复注入；默认启动新 Harness Session。它不等于 Native Session Resume，也不证明旧进程终止。Command receipt、command result、process-exit evidence 和 continuation-consumed 分别记账。
+
+## 10. 通知与 HIR
+
+Interaction/HIR 创建事务都必须追加 Outbox 通知事件并解析收件人；通知有独立 delivery 状态。HIR Phase 0 即有最小可操作生命周期和 Inbox。Interaction 的响应 deadline（当前默认 120 秒）不是通知延迟，也不能自动释放 Execution Barrier。
