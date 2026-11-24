@@ -416,3 +416,220 @@ export async function listDesignAnalysis(projectId: string) {
   );
   return items(payload);
 }
+
+// ───────────────────────────── 写路径（R4 / B04-02：前端从只读接通命令面）────
+//
+// B04-02：后端全生命周期 API 齐全但前端零封装零入口——普通用户无法在产品内
+// 建立设计与 ADR。以下函数与后端命令一一对应；**状态一律由后端权威落定**，
+// UI 只反映不推断（approved/ready 不在前端产生）。AI 可起草/提交/请求批准
+// （source='ai' 留痕），人工裁决走 decideDesignApproval（后端 require_human
+// 闸门 + 可信交互上下文，AI 主体 403——SC-05）。
+
+export interface CreateDesignPayload {
+  /** 缺省自动生成 TD-001 形态编号。 */
+  code?: string;
+  title: string;
+  /** 首版草稿正文（缺省 = `# {title}`）。 */
+  markdown?: string;
+  summary?: string;
+  technical_analysis?: Record<string, unknown>;
+  implementation_scope?: Record<string, unknown>;
+  acceptance_criteria?: Record<string, unknown>[];
+}
+
+export function createDesign(projectId: string, payload: CreateDesignPayload) {
+  return http.post<DesignDetail>(
+    `/v1/pm/projects/${projectId}/designs`,
+    payload
+  );
+}
+
+export interface DraftDesignRevisionPayload {
+  markdown: string;
+  summary?: string;
+  technical_analysis?: Record<string, unknown>;
+  implementation_scope?: Record<string, unknown>;
+  acceptance_criteria?: Record<string, unknown>[];
+}
+
+/** 新修订（每次编辑产生新版本；旧批准版不受影响）。 */
+export function createDesignRevision(
+  designId: string,
+  payload: DraftDesignRevisionPayload
+) {
+  return http.post<{ revision: DesignRevision }>(
+    `/v1/pm/designs/${designId}/revisions`,
+    payload
+  );
+}
+
+/** 更新草稿（仅 draft 态可改；已提交版本冻结）。 */
+export function updateDesignRevisionDraft(
+  designId: string,
+  revisionId: string,
+  payload: DraftDesignRevisionPayload
+) {
+  return http.patch<{ revision: DesignRevision }>(
+    `/v1/pm/designs/${designId}/revisions/${revisionId}`,
+    payload
+  );
+}
+
+/** 提交（draft → pending_confirmation；内容冻结）。 */
+export function submitDesignRevision(designId: string, revisionId: string) {
+  return http.post<{ revision: DesignRevision }>(
+    `/v1/pm/designs/${designId}/revisions/${revisionId}/submit`,
+    {}
+  );
+}
+
+export interface LinkDesignRequirementPayload {
+  requirement_id: string;
+  /** 缺省 = 该需求当前正式版本（必须已批准）。 */
+  requirement_revision_id?: string;
+}
+
+export function linkDesignRequirement(
+  designId: string,
+  revisionId: string,
+  payload: LinkDesignRequirementPayload
+) {
+  return http.post<DesignRequirementLink>(
+    `/v1/pm/designs/${designId}/revisions/${revisionId}/requirements`,
+    payload
+  );
+}
+
+export function unlinkDesignRequirement(
+  designId: string,
+  revisionId: string,
+  requirementId: string
+) {
+  return http.delete<{ removed: boolean }>(
+    `/v1/pm/designs/${designId}/revisions/${revisionId}/requirements/${requirementId}`
+  );
+}
+
+/** 请求人工审批（pending_confirmation → 审批收件箱）。 */
+export function requestDesignApproval(designId: string, revisionId: string) {
+  return http.post<{ approval: DesignApproval }>(
+    `/v1/pm/designs/${designId}/revisions/${revisionId}/approvals`,
+    {}
+  );
+}
+
+export interface DecideApprovalPayload {
+  decision: "approve" | "reject";
+  reason?: string;
+  /** SC-06 并发防护：审批人见到并核准时的设计当前版本/行版本。 */
+  expected_current_revision_id?: string;
+  expected_row_revision?: number;
+}
+
+/** 人工裁决（design_revision / adr_acceptance / baseline_freeze 同一端点）。 */
+export function decideDesignApproval(
+  approvalId: string,
+  payload: DecideApprovalPayload
+) {
+  return http.post<{ approval: DesignApproval }>(
+    `/v1/pm/design-approvals/${approvalId}/decide`,
+    payload
+  );
+}
+
+export interface CreateAdrPayload {
+  code?: string;
+  title: string;
+  decision_question: string;
+  context?: string;
+  options?: Record<string, unknown>[];
+  chosen_option?: string;
+  rationale?: string;
+  consequences?: string;
+  /** 阻塞实施项必须 accepted 才能过 Readiness Gate。 */
+  blockers_implementation?: boolean;
+}
+
+export function createAdr(projectId: string, payload: CreateAdrPayload) {
+  return http.post<AdrDetail>(`/v1/pm/projects/${projectId}/adrs`, payload);
+}
+
+export interface DraftAdrRevisionPayload {
+  decision_question: string;
+  context?: string;
+  options?: Record<string, unknown>[];
+  chosen_option?: string;
+  rationale?: string;
+  consequences?: string;
+}
+
+export function createAdrRevision(
+  adrId: string,
+  payload: DraftAdrRevisionPayload
+) {
+  return http.post<{ revision: AdrRevision }>(
+    `/v1/pm/adrs/${adrId}/revisions`,
+    payload
+  );
+}
+
+/** 提交 ADR 修订（draft → submitted；ADR proposed → under_review）。 */
+export function submitAdrRevision(adrId: string, revisionId: string) {
+  return http.post<AdrDetail>(
+    `/v1/pm/adrs/${adrId}/revisions/${revisionId}/submit`,
+    {}
+  );
+}
+
+export function linkAdrDesign(
+  adrId: string,
+  revisionId: string,
+  payload: { design_id: string; design_revision_id: string }
+) {
+  return http.post<void>(
+    `/v1/pm/adrs/${adrId}/revisions/${revisionId}/designs`,
+    payload
+  );
+}
+
+export function linkAdrRequirement(
+  adrId: string,
+  revisionId: string,
+  payload: { requirement_id: string; requirement_revision_id?: string }
+) {
+  return http.post<void>(
+    `/v1/pm/adrs/${adrId}/revisions/${revisionId}/requirements`,
+    payload
+  );
+}
+
+/** 请求人工确认（under_review → 审批收件箱）。 */
+export function requestAdrApproval(adrId: string) {
+  return http.post<{ approval: DesignApproval }>(
+    `/v1/pm/adrs/${adrId}/approvals`,
+    {}
+  );
+}
+
+/** 显式替代（真人门；successor 必须 accepted）。 */
+export function supersedeAdr(
+  adrId: string,
+  payload: { superseded_by_adr_id: string; reason?: string }
+) {
+  return http.post<{ adr: AdrEntry }>(`/v1/pm/adrs/${adrId}/supersede`, payload);
+}
+
+/** 废弃（真人门）。 */
+export function deprecateAdr(adrId: string, reason?: string) {
+  return http.post<{ adr: AdrEntry }>(`/v1/pm/adrs/${adrId}/deprecate`, {
+    reason: reason ?? null
+  });
+}
+
+/** 阻塞实施标记（真人门；Readiness Gate 条件 3 输入）。 */
+export function setAdrImplementationBlocking(adrId: string, blocked: boolean) {
+  return http.post<{ adr: AdrEntry }>(
+    `/v1/pm/adrs/${adrId}/implementation-blocking`,
+    { blockers_implementation: blocked }
+  );
+}

@@ -4,7 +4,7 @@ import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import TechnicalDesignsView from "./TechnicalDesignsView.vue";
-import { mountShell } from "@/components/shell/test-utils";
+import { mountShell, waitForRoute } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import { useShellStore } from "@/stores/shell";
 import type {
@@ -23,12 +23,14 @@ const listDesigns = vi.fn();
 const listDesignApprovals = vi.fn();
 const listDesignAnalysis = vi.fn();
 const getDesignWorkspace = vi.fn();
+const createDesign = vi.fn();
 
 vi.mock("@/api/designs", () => ({
   listDesigns: (...args: unknown[]) => listDesigns(...args),
   listDesignApprovals: (...args: unknown[]) => listDesignApprovals(...args),
   listDesignAnalysis: (...args: unknown[]) => listDesignAnalysis(...args),
-  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args)
+  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args),
+  createDesign: (...args: unknown[]) => createDesign(...args)
 }));
 
 function design(overrides: Partial<DesignEntry> = {}): DesignEntry {
@@ -119,6 +121,12 @@ beforeEach(() => {
   listDesignApprovals.mockReset();
   listDesignAnalysis.mockReset();
   getDesignWorkspace.mockReset();
+  createDesign.mockReset();
+  createDesign.mockResolvedValue({
+    design: design({ id: "design-9", code: "TD-002", title: "新设计" }),
+    revisions: [],
+    approvals: []
+  });
   getDesignWorkspace.mockResolvedValue({
     design_count: 1,
     adr_count: 0,
@@ -160,5 +168,39 @@ describe("TechnicalDesignsView", () => {
     expect(wrapper.find('[data-testid="design-row-TD-001"]').exists()).toBe(
       false
     );
+  });
+
+  // ── R4/B04-02：新建设计写入口 ──────────────────────────────────────
+
+  it("新建设计调真实命令并跳转详情", async () => {
+    const { wrapper, router } = await mountView();
+
+    await wrapper.find('[data-testid="designs-create"]').trigger("click");
+    await wrapper.find('[data-testid="design-create-title"] input').setValue("新设计");
+    await wrapper
+      .find('[data-testid="design-create-markdown"]')
+      .setValue("# 新设计 方案 A");
+    await wrapper.find('[data-testid="design-create-submit"]').trigger("click");
+    await flushPromises();
+    // 懒路由详情页导入 + 导航完成走真实定时器轮询（PR#2 教训）。
+    await waitForRoute(router, "/project/design/technical-designs/design-9");
+
+    expect(createDesign).toHaveBeenCalledWith("proj-1", {
+      title: "新设计",
+      markdown: "# 新设计 方案 A"
+    });
+    expect(router.currentRoute.value.path).toBe(
+      "/project/design/technical-designs/design-9"
+    );
+  });
+
+  it("标题为空时禁止提交（不产生无标题设计）", async () => {
+    const { wrapper } = await mountView();
+
+    await wrapper.find('[data-testid="designs-create"]').trigger("click");
+    await wrapper.find('[data-testid="design-create-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(createDesign).not.toHaveBeenCalled();
   });
 });
