@@ -82,7 +82,11 @@ pub struct RelationDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signoff_by: Option<String>,
     /// 会签时间（G-1 审计要求；旧名 signoff_date 保留兼容）。
-    #[serde(default, alias = "signoff_date", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "signoff_date",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub signoff_at: Option<String>,
     /// 会签依据 / 记录引用（会议纪要号、链接等）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,7 +148,13 @@ impl RelationDefinition {
     /// semantic_version / activated_at。key 即 `self.key`，其余六项在此校验。
     pub fn missing_audit_fields(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
-        if self.registry_version.as_deref().unwrap_or("").trim().is_empty() {
+        if self
+            .registry_version
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             missing.push("registry_version");
         }
         if self.signoff_by.as_deref().unwrap_or("").trim().is_empty() {
@@ -153,10 +163,22 @@ impl RelationDefinition {
         if self.signoff_at.as_deref().unwrap_or("").trim().is_empty() {
             missing.push("signoff_at");
         }
-        if self.signoff_record.as_deref().unwrap_or("").trim().is_empty() {
+        if self
+            .signoff_record
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             missing.push("signoff_record");
         }
-        if self.semantic_version.as_deref().unwrap_or("").trim().is_empty() {
+        if self
+            .semantic_version
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             missing.push("semantic_version");
         }
         if self.activated_at.as_deref().unwrap_or("").trim().is_empty() {
@@ -248,7 +270,9 @@ pub fn validate_registry(registry: &RelationRegistry) -> Result<(), RegistryErro
     let mut seen: Vec<&str> = Vec::new();
     for relation in &registry.relations {
         if relation.key.is_empty() {
-            return Err(RegistryError::Invalid("relation key must not be empty".into()));
+            return Err(RegistryError::Invalid(
+                "relation key must not be empty".into(),
+            ));
         }
         if seen.contains(&relation.key.as_str()) {
             return Err(RegistryError::Invalid(format!(
@@ -443,7 +467,10 @@ mod tests {
     fn validate_accepts_wellformed_registry() {
         let registry = RelationRegistry {
             version: "1".to_string(),
-            relations: vec![relation("design.covers_requirement", RelationStatus::Active)],
+            relations: vec![relation(
+                "design.covers_requirement",
+                RelationStatus::Active,
+            )],
             node_kinds: vec![],
         };
         assert!(validate_registry(&registry).is_ok());

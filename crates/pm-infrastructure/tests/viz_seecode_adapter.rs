@@ -11,9 +11,7 @@
 
 use std::path::PathBuf;
 
-use pm_application::visualization::adapter_contract::{
-    verify, OutputFormat, RenderAdapter,
-};
+use pm_application::visualization::adapter_contract::{verify, OutputFormat, RenderAdapter};
 use pm_application::visualization::artifact_safety::inspect_svg;
 use pm_domain::visualization::{
     Budget, Nature, SourceRef, VizEdge, VizMeta, VizNode, VizSpec, VizView, SPEC_VERSION,
@@ -60,8 +58,18 @@ fn trace_spec() -> VizSpec {
             layout_hint: Some("layered-lr".to_string()),
         },
         nodes: vec![
-            node("req-1", "requirement_revision", "批量导入执行器", Some("approved")),
-            node("design-1", "design_revision", "导入编排设计", Some("approved")),
+            node(
+                "req-1",
+                "requirement_revision",
+                "批量导入执行器",
+                Some("approved"),
+            ),
+            node(
+                "design-1",
+                "design_revision",
+                "导入编排设计",
+                Some("approved"),
+            ),
             node("task-1", "task", "实现导入批处理", Some("ready")),
         ],
         edges: vec![
@@ -149,10 +157,7 @@ fn empty_spec_is_rejected_not_crashed() {
     spec.nodes.clear();
     spec.edges.clear();
     let result = adapter.render(&spec, OutputFormat::Svg);
-    assert!(
-        result.is_err(),
-        "空 spec 应显式拒绝（不产残缺图）"
-    );
+    assert!(result.is_err(), "空 spec 应显式拒绝（不产残缺图）");
 }
 
 #[test]

@@ -13,9 +13,7 @@
 
 use std::path::Path;
 
-use pm_domain::visualization::{
-    validate_registry, RelationRegistry, RegistryError,
-};
+use pm_domain::visualization::{validate_registry, RegistryError, RelationRegistry};
 
 /// 词表文件默认路径（仓库内真源）。
 pub const REGISTRY_FILE: &str = "policies/viz-relation-registry.yaml";

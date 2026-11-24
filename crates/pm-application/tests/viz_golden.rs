@@ -240,15 +240,13 @@ fn golden_cases_match_expected_snapshots() {
         let actual = normalize(&validate(&spec, &ctx));
 
         let expected_path = expected_dir().join(format!("{case_name}.json"));
-        let expected_raw = std::fs::read_to_string(&expected_path).unwrap_or_else(|e| {
-            panic!("缺少期望快照 {}: {e}", expected_path.display())
-        });
+        let expected_raw = std::fs::read_to_string(&expected_path)
+            .unwrap_or_else(|e| panic!("缺少期望快照 {}: {e}", expected_path.display()));
         let expected: Vec<GoldenProblem> =
             serde_json::from_str(&expected_raw).expect("期望快照必须是合法 JSON 数组");
 
         assert_eq!(
-            actual,
-            expected,
+            actual, expected,
             "Golden 语料 {case_name} 的校验结果与快照不一致"
         );
     }

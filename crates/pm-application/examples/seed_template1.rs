@@ -49,10 +49,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("../../migrations").run(&pool).await?;
     let elapsed = started.elapsed();
 
-    let applied: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations WHERE success")
-            .fetch_one(&pool)
-            .await?;
+    let applied: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations WHERE success")
+        .fetch_one(&pool)
+        .await?;
     let tables: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM information_schema.tables \
          WHERE table_schema NOT IN ('pg_catalog', 'information_schema')",

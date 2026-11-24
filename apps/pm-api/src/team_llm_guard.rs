@@ -21,20 +21,19 @@ pub(crate) async fn guard_team(
     pool: &sqlx::PgPool,
     team_id: Uuid,
 ) -> Result<(), Response> {
-    let tenant_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.team WHERE id = $1",
-    )
-    .bind(team_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "team tenant lookup failed");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "internal error" })),
-        )
-            .into_response()
-    })?;
+    let tenant_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+            .bind(team_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "team tenant lookup failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "message": "internal error" })),
+                )
+                    .into_response()
+            })?;
     match tenant_id {
         Some(t) if t == caller.tenant_id => Ok(()),
         _ => Err(err_not_found("team not found")),

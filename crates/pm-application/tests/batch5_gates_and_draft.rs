@@ -70,7 +70,11 @@ async fn seed(pool: &PgPool, tag: &str) -> (Uuid, Uuid, Uuid) {
     (tenant, project, LEAD)
 }
 
-async fn draft_obj(pool: &PgPool, project: Uuid, key: &str) -> pm_application::pc::ObjectUpsertReceipt {
+async fn draft_obj(
+    pool: &PgPool,
+    project: Uuid,
+    key: &str,
+) -> pm_application::pc::ObjectUpsertReceipt {
     upsert_object_draft(
         pool,
         project,
@@ -305,7 +309,10 @@ async fn pc_conflict_gates_submit_and_approve(pool: PgPool) {
     )
     .await;
     assert!(
-        matches!(frozen_submit, Err(pm_application::pc::PcError::Forbidden(_))),
+        matches!(
+            frozen_submit,
+            Err(pm_application::pc::PcError::Forbidden(_))
+        ),
         "冻结下 submit 必须 403: {frozen_submit:?}"
     );
     // approve 需 submitted——先手工置 submitted（合法转换经 DB）再验证冻结
@@ -387,9 +394,7 @@ async fn reconciliation_diff_is_empty_on_consistent_state(pool: PgPool) {
         &pool,
         project,
         &AuditActor::principal(LEAD),
-        PublishVersionInput {
-            proposal_id,
-        },
+        PublishVersionInput { proposal_id },
     )
     .await
     .unwrap();

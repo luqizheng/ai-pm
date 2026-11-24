@@ -187,11 +187,10 @@ where
 /// 闭合 CONSTRAINT 触发器 DEFERRABLE INITIALLY DEFERRED——探针事务
 /// ROLLBACK，永不触发。0037 后 version 端点=全链播种行、object 端点=同
 /// 事务内已插入的 cognition_revision 行）。
-async fn insert_projc_member<'e, E>(
-    executor: E,
-    seed: &ProjcSeed,
-    object_revision_id: Uuid,
-) where E: Executor<'e, Database = Postgres> {
+async fn insert_projc_member<'e, E>(executor: E, seed: &ProjcSeed, object_revision_id: Uuid)
+where
+    E: Executor<'e, Database = Postgres>,
+{
     sqlx::query(
         "INSERT INTO projc.version_member \
          (tenant_id, project_id, version_id, object_id, object_revision_id) \
@@ -219,16 +218,16 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
     {
         let mut tx = pool.begin().await.unwrap();
         let rev = insert_projc_revision(&mut *tx, &seed, 1).await;
-        let err = sqlx::query(
-            "UPDATE projc.cognition_revision SET change_summary = 'x' WHERE id = $1",
-        )
-        .bind(rev)
-        .execute(&mut *tx)
-        .await
-        .unwrap_err();
+        let err =
+            sqlx::query("UPDATE projc.cognition_revision SET change_summary = 'x' WHERE id = $1")
+                .bind(rev)
+                .execute(&mut *tx)
+                .await
+                .unwrap_err();
         let db = err.as_database_error().unwrap();
         assert!(
-            db.message().contains("in projc.cognition_revision is immutable"),
+            db.message()
+                .contains("in projc.cognition_revision is immutable"),
             "UPDATE 普通字段必须被 trg_projc_revision_immutable 拒绝，got: {db}"
         );
         tx.rollback().await.unwrap();
@@ -244,7 +243,8 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
             .unwrap_err();
         let db = err.as_database_error().unwrap();
         assert!(
-            db.message().contains("in projc.cognition_revision is immutable"),
+            db.message()
+                .contains("in projc.cognition_revision is immutable"),
             "DELETE 必须被 trg_projc_revision_immutable 拒绝，got: {db}"
         );
         tx.rollback().await.unwrap();
@@ -255,15 +255,15 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
         let mut tx = pool.begin().await.unwrap();
         let rev = insert_projc_revision(&mut *tx, &seed, 1).await;
         insert_projc_member(&mut *tx, &seed, rev).await;
-        let err = sqlx::query(
-            "UPDATE projc.version_member SET object_revision_id = object_revision_id",
-        )
-        .execute(&mut *tx)
-        .await
-        .unwrap_err();
+        let err =
+            sqlx::query("UPDATE projc.version_member SET object_revision_id = object_revision_id")
+                .execute(&mut *tx)
+                .await
+                .unwrap_err();
         let db = err.as_database_error().unwrap();
         assert!(
-            db.message().contains("in projc.version_member is immutable"),
+            db.message()
+                .contains("in projc.version_member is immutable"),
             "UPDATE 必须被 trg_projc_vm_immutable 拒绝，got: {db}"
         );
         tx.rollback().await.unwrap();
@@ -280,7 +280,8 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
             .unwrap_err();
         let db = err.as_database_error().unwrap();
         assert!(
-            db.message().contains("in projc.version_member is immutable"),
+            db.message()
+                .contains("in projc.version_member is immutable"),
             "DELETE 必须被 trg_projc_vm_immutable 拒绝，got: {db}"
         );
         tx.rollback().await.unwrap();
@@ -606,7 +607,10 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
         .bind(author)
         .execute(&pool)
         .await;
-        assert!(dup.is_err(), "pc 同 (object_id, revision_no) 二次 INSERT 必须被拒");
+        assert!(
+            dup.is_err(),
+            "pc 同 (object_id, revision_no) 二次 INSERT 必须被拒"
+        );
     }
 
     // ── projc 探针一：同域同 (object_id, revision_no) 重复 → 仅新约束可拒 ──
@@ -703,7 +707,8 @@ async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
             .unwrap_err();
         let db = err.as_database_error().unwrap();
         assert!(
-            db.message().contains("in projc.cognition_version is immutable"),
+            db.message()
+                .contains("in projc.cognition_version is immutable"),
             "DELETE 必须被 trg_projc_version_delete 拒绝，got: {db}"
         );
         tx.rollback().await.unwrap();
@@ -767,7 +772,10 @@ async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
         "cognition_revision_object_id_revision_no_key",
         "write_operation_tenant_id_project_id_operation_id_key",
     ] {
-        assert!(uqs.contains(&expected.to_string()), "缺业务身份唯一约束 {expected}");
+        assert!(
+            uqs.contains(&expected.to_string()),
+            "缺业务身份唯一约束 {expected}"
+        );
     }
     assert_eq!(
         uqs.len(),

@@ -413,7 +413,7 @@ where
                   AND tr.status IN ('claimed', 'running') \
            ) ASC, \
            registry.principal_id ASC \
-          LIMIT 1"
+          LIMIT 1",
     )
     .bind(role_version_id)
     .bind(tenant_id)

@@ -196,8 +196,7 @@ async fn revoke_invitation_handler(
     if !caller.is_admin {
         return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), team_id, invitation_id).await
-    {
+    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), team_id, invitation_id).await {
         Ok(()) => (
             axum::http::StatusCode::OK,
             Json(json!({ "id": invitation_id, "status": "REVOKED" })),
@@ -255,8 +254,7 @@ async fn revoke_link_handler(
     if !caller.is_admin {
         return crate::team_llm_guard::err_forbidden("team owner required");
     }
-    match svc::revoke_invitation_link(&state.pool, &caller.audit_actor(), team_id, link_id).await
-    {
+    match svc::revoke_invitation_link(&state.pool, &caller.audit_actor(), team_id, link_id).await {
         Ok(()) => (
             axum::http::StatusCode::OK,
             Json(json!({ "id": link_id, "status": "REVOKED" })),

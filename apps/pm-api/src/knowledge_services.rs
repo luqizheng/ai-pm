@@ -785,9 +785,8 @@ async fn pc_object_detail(
         return Err(ApiError::NotFound("pc object not found"));
     }
     let mut body = pc_object_json(rows.pop().expect("len checked"));
-    body["analysis_sources"] = json!(
-        object_analysis_sources(&state, project_id, object_id, "pc").await?
-    );
+    body["analysis_sources"] =
+        json!(object_analysis_sources(&state, project_id, object_id, "pc").await?);
     Ok(Json(body))
 }
 
@@ -819,9 +818,8 @@ async fn projc_object_detail(
         return Err(ApiError::NotFound("projc object not found"));
     }
     let mut body = pc_object_json(rows.pop().expect("len checked"));
-    body["analysis_sources"] = json!(
-        object_analysis_sources(&state, project_id, object_id, "projc").await?
-    );
+    body["analysis_sources"] =
+        json!(object_analysis_sources(&state, project_id, object_id, "projc").await?);
     Ok(Json(body))
 }
 

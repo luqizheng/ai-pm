@@ -302,7 +302,9 @@ async fn ensure_repo_cache(
     let last_scan_anchor: Option<String> = row.get("last_external_scan_commit_sha");
 
     if status == "archived" {
-        return Err(ExternalCommitError::Conflict("repository is archived".to_string()));
+        return Err(ExternalCommitError::Conflict(
+            "repository is archived".to_string(),
+        ));
     }
 
     // 分支链与 verify 同款：Confirmed 分支 → default → main → master。
@@ -476,9 +478,16 @@ async fn scan_repository(
     }
 
     let mut note: Option<String> = None;
-    let anchor = match access.last_scan_anchor.as_deref().filter(|s| !s.trim().is_empty()) {
+    let anchor = match access
+        .last_scan_anchor
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
         Some(anchor) => Some(anchor.to_string()),
-        None => access.selected_commit.clone().filter(|s| !s.trim().is_empty()),
+        None => access
+            .selected_commit
+            .clone()
+            .filter(|s| !s.trim().is_empty()),
     };
     let Some(anchor) = anchor else {
         // 首扫只建锚：避免把既有历史全量灌进采纳队列。
@@ -567,9 +576,7 @@ async fn scan_repository(
     let truncated = commits.len() > MAX_SCAN_COMMITS;
     if truncated {
         commits.truncate(MAX_SCAN_COMMITS);
-        note = Some(format!(
-            "区间提交过多，仅跟踪最近 {MAX_SCAN_COMMITS} 条"
-        ));
+        note = Some(format!("区间提交过多，仅跟踪最近 {MAX_SCAN_COMMITS} 条"));
     }
 
     let mut discovered = 0usize;
@@ -654,10 +661,7 @@ async fn set_scan_anchor(
 }
 
 /// 单提交变更文件（diff-tree --root -r --name-status；merge/root 均可读）。
-async fn changed_files_of(
-    dest: &Path,
-    sha: &str,
-) -> Result<Vec<ChangedFile>, ExternalCommitError> {
+async fn changed_files_of(dest: &Path, sha: &str) -> Result<Vec<ChangedFile>, ExternalCommitError> {
     let raw = git_access::git_stdout(
         dest,
         &[
@@ -751,7 +755,12 @@ pub async fn analyze_external_commit(
         Ok(bytes) => {
             let text = String::from_utf8_lossy(&bytes).to_string();
             let truncated = text.chars().count() > MAX_DIFF_EXCERPT_CHARS;
-            (text.chars().take(MAX_DIFF_EXCERPT_CHARS).collect::<String>(), truncated)
+            (
+                text.chars()
+                    .take(MAX_DIFF_EXCERPT_CHARS)
+                    .collect::<String>(),
+                truncated,
+            )
         }
         Err(_) => (String::new(), false),
     };
@@ -1053,8 +1062,7 @@ async fn load_candidates(
     let mut task_hits = 0;
     for (id, title) in tasks {
         let hay = title.to_ascii_lowercase();
-        if tokens.iter().any(|t| hay.contains(t.as_str())) && task_hits < MAX_CANDIDATES_PER_KIND
-        {
+        if tokens.iter().any(|t| hay.contains(t.as_str())) && task_hits < MAX_CANDIDATES_PER_KIND {
             out.push(RelatedCandidate {
                 domain: "task".to_string(),
                 id,
@@ -1128,7 +1136,11 @@ async fn load_known_docs(
     project_id: Uuid,
 ) -> Vec<KnownDoc> {
     let documents = crate::knowledge::list_published_document_context(
-        pool, root, project_id, 20, MAX_DOC_CONTEXT_CHARS,
+        pool,
+        root,
+        project_id,
+        20,
+        MAX_DOC_CONTEXT_CHARS,
     )
     .await
     .unwrap_or_else(|err| {
@@ -1300,7 +1312,10 @@ pub async fn decide_adoption(
         .map_err(|e| ExternalCommitError::Validation(format!("stored analysis unreadable: {e}")))?;
 
     let decision = req.decision.as_str();
-    let note = req.note.as_deref().map(|n| n.chars().take(2000).collect::<String>());
+    let note = req
+        .note
+        .as_deref()
+        .map(|n| n.chars().take(2000).collect::<String>());
 
     match decision {
         "approved" => {
@@ -1358,7 +1373,14 @@ pub async fn decide_adoption(
             .bind(&proposals_json)
             .execute(pool)
             .await?;
-            audit(pool, project_id, actor, "external_commit.adoption_approved", commit_id).await?;
+            audit(
+                pool,
+                project_id,
+                actor,
+                "external_commit.adoption_approved",
+                commit_id,
+            )
+            .await?;
             Ok(AdoptionOutcome {
                 id: commit_id,
                 status: "adopted".to_string(),
@@ -1511,10 +1533,17 @@ async fn current_published_revision(
         .flatten()
 }
 
-fn proposal_record(doc_key: &str, outcome: &crate::knowledge_proposal::ProposalOutcome) -> serde_json::Value {
+fn proposal_record(
+    doc_key: &str,
+    outcome: &crate::knowledge_proposal::ProposalOutcome,
+) -> serde_json::Value {
     use crate::knowledge_proposal::ProposalOutcome as O;
     match outcome {
-        O::Committed { proposal_id, revision_id, .. } => serde_json::json!({
+        O::Committed {
+            proposal_id,
+            revision_id,
+            ..
+        } => serde_json::json!({
             "doc_key": doc_key,
             "proposal_id": proposal_id,
             "revision_id": revision_id,
@@ -1525,13 +1554,20 @@ fn proposal_record(doc_key: &str, outcome: &crate::knowledge_proposal::ProposalO
             "proposal_id": proposal_id,
             "outcome": "redline_pending",
         }),
-        O::Rejected { proposal_id, failures } => serde_json::json!({
+        O::Rejected {
+            proposal_id,
+            failures,
+        } => serde_json::json!({
             "doc_key": doc_key,
             "proposal_id": proposal_id,
             "outcome": "rejected",
             "failures": failures,
         }),
-        O::Duplicate { document_id, revision_id, .. } => serde_json::json!({
+        O::Duplicate {
+            document_id,
+            revision_id,
+            ..
+        } => serde_json::json!({
             "doc_key": doc_key,
             "document_id": document_id,
             "revision_id": revision_id,
@@ -1553,7 +1589,12 @@ async fn audit(
 ) -> Result<(), ExternalCommitError> {
     let mut tx = pool.begin().await?;
     crate::repository::support::append_audit(
-        &mut tx, project_id, actor, action, "external_commit", Some(commit_id),
+        &mut tx,
+        project_id,
+        actor,
+        action,
+        "external_commit",
+        Some(commit_id),
     )
     .await?;
     tx.commit().await?;
@@ -1623,13 +1664,12 @@ pub async fn get_external_commit(
     .fetch_optional(pool)
     .await?
     .ok_or(ExternalCommitError::NotFound)?;
-    let repository_name: Option<String> = sqlx::query_scalar(
-        "SELECT name FROM integration.project_repository WHERE id = $1",
-    )
-    .bind(row.repository_id)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let repository_name: Option<String> =
+        sqlx::query_scalar("SELECT name FROM integration.project_repository WHERE id = $1")
+            .bind(row.repository_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
     let clarifications: Vec<ClarificationRow> = sqlx::query_as(
         "SELECT id, external_commit_id, question, answer, answered_by, answered_at, status, \
                 created_at \
@@ -1647,19 +1687,17 @@ pub async fn read_commit_diff(
     pool: &PgPool,
     commit_id: Uuid,
 ) -> Result<(String, bool, String), ExternalCommitError> {
-    let repository_id: Uuid = sqlx::query_scalar(
-        "SELECT repository_id FROM integration.external_commit WHERE id = $1",
-    )
-    .bind(commit_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or(ExternalCommitError::NotFound)?;
-    let sha: String = sqlx::query_scalar(
-        "SELECT commit_sha FROM integration.external_commit WHERE id = $1",
-    )
-    .bind(commit_id)
-    .fetch_one(pool)
-    .await?;
+    let repository_id: Uuid =
+        sqlx::query_scalar("SELECT repository_id FROM integration.external_commit WHERE id = $1")
+            .bind(commit_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or(ExternalCommitError::NotFound)?;
+    let sha: String =
+        sqlx::query_scalar("SELECT commit_sha FROM integration.external_commit WHERE id = $1")
+            .bind(commit_id)
+            .fetch_one(pool)
+            .await?;
     let (_, dest) = ensure_repo_cache(pool, repository_id).await?;
     let raw = git_access::git_stdout(
         &dest,

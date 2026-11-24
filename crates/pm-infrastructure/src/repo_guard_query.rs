@@ -25,9 +25,7 @@ async fn project_id_of(
     tenant_id: Uuid,
     id: Uuid,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let sql = format!(
-        "SELECT project_id FROM {table} WHERE id = $1 AND tenant_id = $2"
-    );
+    let sql = format!("SELECT project_id FROM {table} WHERE id = $1 AND tenant_id = $2");
     let id: Option<Uuid> = sqlx::query_scalar(&sql)
         .bind(id)
         .bind(tenant_id)
@@ -51,7 +49,13 @@ impl GuardQueryRepo for PgGuardQueryRepo {
         tenant_id: Uuid,
         requirement_id: Uuid,
     ) -> Result<Option<Uuid>, sqlx::Error> {
-        project_id_of(&self.pool, "delivery.requirement", tenant_id, requirement_id).await
+        project_id_of(
+            &self.pool,
+            "delivery.requirement",
+            tenant_id,
+            requirement_id,
+        )
+        .await
     }
 
     async fn plan_project_id(
@@ -67,7 +71,13 @@ impl GuardQueryRepo for PgGuardQueryRepo {
         tenant_id: Uuid,
         interaction_id: Uuid,
     ) -> Result<Option<Uuid>, sqlx::Error> {
-        project_id_of(&self.pool, "delivery.task_interaction", tenant_id, interaction_id).await
+        project_id_of(
+            &self.pool,
+            "delivery.task_interaction",
+            tenant_id,
+            interaction_id,
+        )
+        .await
     }
 
     async fn run_project_id(
@@ -78,11 +88,7 @@ impl GuardQueryRepo for PgGuardQueryRepo {
         project_id_of(&self.pool, "delivery.task_run", tenant_id, run_id).await
     }
 
-    async fn project_exists(
-        &self,
-        tenant_id: Uuid,
-        project_id: Uuid,
-    ) -> Result<bool, sqlx::Error> {
+    async fn project_exists(&self, tenant_id: Uuid, project_id: Uuid) -> Result<bool, sqlx::Error> {
         let id: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2")
                 .bind(project_id)

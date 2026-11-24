@@ -27,8 +27,8 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
+use pm_application::repo::GuardQueryRepo;
 
 impl From<AiRoleError> for ApiError {
     fn from(e: AiRoleError) -> Self {
@@ -66,7 +66,10 @@ async fn require_project_tenant(
     project_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<()> {
-    if guard_query_repo(&state.pool).project_tenant(project_id).await?.as_ref()
+    if guard_query_repo(&state.pool)
+        .project_tenant(project_id)
+        .await?
+        .as_ref()
         != Some(&principal.tenant_id)
     {
         return Err(ApiError::NotFound("project not found"));

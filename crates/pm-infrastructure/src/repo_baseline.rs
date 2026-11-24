@@ -41,12 +41,14 @@ impl BaselineRepo for PgBaselineRepo {
         .bind(project_id)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row.map(|(version, proposal_id, confirmed_by, confirmed_at)| BaselineCurrent {
-            version,
-            proposal_id,
-            confirmed_by,
-            confirmed_at,
-        }))
+        Ok(row.map(
+            |(version, proposal_id, confirmed_by, confirmed_at)| BaselineCurrent {
+                version,
+                proposal_id,
+                confirmed_by,
+                confirmed_at,
+            },
+        ))
     }
 
     async fn pending_proposal(
@@ -62,15 +64,15 @@ impl BaselineRepo for PgBaselineRepo {
         .bind(project_id)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(
-            row.map(|(id, version, status, created_by, created_at)| PendingProposal {
+        Ok(row.map(
+            |(id, version, status, created_by, created_at)| PendingProposal {
                 id,
                 version,
                 status,
                 created_by,
                 created_at,
-            }),
-        )
+            },
+        ))
     }
 
     async fn proposal_items(
@@ -298,7 +300,8 @@ impl BaselineRepo for PgBaselineRepo {
         .bind(project_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let proposal = proposal.ok_or(BaselineRepoError::NotFound("no pending baseline proposal"))?;
+        let proposal =
+            proposal.ok_or(BaselineRepoError::NotFound("no pending baseline proposal"))?;
 
         let proposed: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM ai.baseline_item \

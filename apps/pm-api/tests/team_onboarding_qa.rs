@@ -193,14 +193,12 @@ async fn invite(app: &Router, team_id: Uuid, token: &str, email: &str) -> (Statu
 }
 
 async fn db_role(db: &PgPool, team_id: Uuid, principal_id: Uuid) -> Option<String> {
-    sqlx::query_scalar(
-        "SELECT role FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
-    )
-    .bind(team_id)
-    .bind(principal_id)
-    .fetch_optional(db)
-    .await
-    .unwrap()
+    sqlx::query_scalar("SELECT role FROM core.team_member WHERE team_id = $1 AND principal_id = $2")
+        .bind(team_id)
+        .bind(principal_id)
+        .fetch_optional(db)
+        .await
+        .unwrap()
 }
 
 // ═══════════════════════════════════════════════════════════ B01 建团/认领
@@ -449,7 +447,10 @@ async fn qa_b02_12_owner_invites_member_lands_team_member_row(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let ada_id = uuid_of(&me(&app, &ada).await["principal_id"]);
-    assert_eq!(db_role(&db, team_id, ada_id).await.as_deref(), Some("member"));
+    assert_eq!(
+        db_role(&db, team_id, ada_id).await.as_deref(),
+        Some("member")
+    );
     let (st, accepted_by): (String, Option<Uuid>) = sqlx::query_as(
         "SELECT status, accepted_principal_id FROM core.tenant_invitation \
           WHERE email_normalized = 'ada@example.com'",
@@ -490,7 +491,10 @@ async fn qa_b02_13_already_member_accept_does_not_change_role(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["outcome"], json!("already_member"));
-    assert_eq!(db_role(&db, team_id, mem_id).await.as_deref(), Some("member"));
+    assert_eq!(
+        db_role(&db, team_id, mem_id).await.as_deref(),
+        Some("member")
+    );
     let rows: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND principal_id = $2",
     )
@@ -1121,7 +1125,11 @@ async fn qa_b05_02_removed_member_loses_team_visibility(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "被移除者仍可读名册：{status} {body}");
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "被移除者仍可读名册：{status} {body}"
+    );
     assert_eq!(body["message"], json!("not an active member"));
 }
 

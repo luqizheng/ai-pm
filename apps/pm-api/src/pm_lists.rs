@@ -74,7 +74,13 @@ async fn principals(
         .get("is_active")
         .and_then(|value| value.parse::<bool>().ok());
     let (items, total) = repo(&state)
-        .list_principals(is_active, ListPage { size: page.size, offset: page.offset })
+        .list_principals(
+            is_active,
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
+        )
         .await?;
     Ok(Json(page.to_response(items, total)))
 }
@@ -91,7 +97,10 @@ async fn projects(
             caller.tenant_id,
             caller.principal_id,
             customer_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -225,7 +234,10 @@ async fn requirements(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -252,7 +264,10 @@ async fn tasks(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -279,7 +294,10 @@ async fn milestones(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -306,7 +324,10 @@ async fn approvals(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -334,7 +355,10 @@ async fn decisions(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))
@@ -361,7 +385,10 @@ async fn audit_logs(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            ListPage { size: page.size, offset: page.offset },
+            ListPage {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))

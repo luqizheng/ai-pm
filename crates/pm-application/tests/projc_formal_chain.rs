@@ -18,9 +18,9 @@ use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
 use pm_application::projc::{
-    approve_proposal, create_conflict, create_proposal, create_relationship_draft,
-    expire_proposal, propose_from_analysis, publish_version, register_evidence, register_source,
-    resolve_conflict, reject_proposal, submit_proposal, upsert_object_draft, withdraw_proposal,
+    approve_proposal, create_conflict, create_proposal, create_relationship_draft, expire_proposal,
+    propose_from_analysis, publish_version, register_evidence, register_source, reject_proposal,
+    resolve_conflict, submit_proposal, upsert_object_draft, withdraw_proposal,
     AnalysisProposalInput, AnalysisProposalOutcome, ConflictInput, CreateProposalInput,
     EvidenceInput, EvidenceSubject, ProjcEndpoint, ProjcError, PublishVersionInput,
     RelationshipDraftInput, ResolveAction, ResolveInput, SourceInput, UpsertObjectDraft,
@@ -159,9 +159,14 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
     let project = seed_project_with_lead(&pool, "pj-l1").await;
     let lead = AuditActor::principal(LEAD);
 
-    let obj = upsert_object_draft(&pool, project, &lead, draft("repository", Some("r1"), "仓库", "c1"))
-        .await
-        .unwrap();
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("r1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
     let proposal = create_proposal(
         &pool,
         project,
@@ -192,12 +197,20 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
     .unwrap();
     assert_eq!(rejected.status, "rejected");
     let resubmit = submit_proposal(&pool, project, &lead, proposal.proposal_id, None).await;
-    assert!(matches!(resubmit, Err(ProjcError::Conflict(_))), "{resubmit:?}");
+    assert!(
+        matches!(resubmit, Err(ProjcError::Conflict(_))),
+        "{resubmit:?}"
+    );
 
     // withdraw：draft/submitted → withdrawn
-    let obj2 = upsert_object_draft(&pool, project, &lead, draft("repository", Some("r2"), "仓库2", "c2"))
-        .await
-        .unwrap();
+    let obj2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("r2"), "仓库2", "c2"),
+    )
+    .await
+    .unwrap();
     let p2 = create_proposal(
         &pool,
         project,
@@ -223,17 +236,28 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
         "{member_withdraw:?}"
     );
     // 提案人本人撤回 → withdrawn；再 withdraw 409
-    let withdrawn = withdraw_proposal(&pool, project, &lead, p2.proposal_id, Some("改期".to_string()))
-        .await
-        .unwrap();
+    let withdrawn = withdraw_proposal(
+        &pool,
+        project,
+        &lead,
+        p2.proposal_id,
+        Some("改期".to_string()),
+    )
+    .await
+    .unwrap();
     assert_eq!(withdrawn.status, "withdrawn");
     let again = withdraw_proposal(&pool, project, &lead, p2.proposal_id, None).await;
     assert!(matches!(again, Err(ProjcError::Conflict(_))), "{again:?}");
 
     // approve → publish → applied：全链绿灯路径
-    let obj3 = upsert_object_draft(&pool, project, &lead, draft("tech_stack", Some("t1"), "技术栈", "rust"))
-        .await
-        .unwrap();
+    let obj3 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("tech_stack", Some("t1"), "技术栈", "rust"),
+    )
+    .await
+    .unwrap();
     let p3 = create_proposal(
         &pool,
         project,
@@ -272,21 +296,18 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
     assert_eq!(receipt.member_count, 1);
     assert!(!receipt.replayed);
 
-    let (p_status,): (String,) = sqlx::query_as(
-        "SELECT status FROM projc.proposal WHERE id = $1",
-    )
-    .bind(p3.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (p_status,): (String,) = sqlx::query_as("SELECT status FROM projc.proposal WHERE id = $1")
+        .bind(p3.proposal_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(p_status, "applied");
-    let (lifecycle,): (String,) = sqlx::query_as(
-        "SELECT lifecycle_status FROM projc.cognition_object WHERE id = $1",
-    )
-    .bind(obj3.object_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (lifecycle,): (String,) =
+        sqlx::query_as("SELECT lifecycle_status FROM projc.cognition_object WHERE id = $1")
+            .bind(obj3.object_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(lifecycle, "active", "首次入正式版本 = active");
 
     // applied 后同提案再发布 = 同键幂等重放（Q-04/GAP-15：发布键按提案派生，
@@ -319,7 +340,10 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
         "projc_proposal.approve",
         "projc_version.publish",
     ] {
-        assert!(actions.iter().any(|a| a.0 == expected), "missing {expected}");
+        assert!(
+            actions.iter().any(|a| a.0 == expected),
+            "missing {expected}"
+        );
     }
 }
 
@@ -333,9 +357,14 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
     let ai = AuditActor::principal(DISPATCH);
 
     // 提案面 AI 可达（create draft）；草稿面 AI 可达
-    let obj = upsert_object_draft(&pool, project, &ai, draft("repository", Some("r1"), "仓库", "c1"))
-        .await
-        .unwrap();
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &ai,
+        draft("repository", Some("r1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
     let proposal = create_proposal(
         &pool,
         project,
@@ -360,7 +389,10 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(ai_approve, Err(ProjcError::Forbidden(_))), "{ai_approve:?}");
+    assert!(
+        matches!(ai_approve, Err(ProjcError::Forbidden(_))),
+        "{ai_approve:?}"
+    );
 
     // 非授权真人（member 无 grant）approve → 403（A3 闸）
     let member_approve = approve_proposal(
@@ -401,7 +433,10 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(ai_publish, Err(ProjcError::Forbidden(_))), "{ai_publish:?}");
+    assert!(
+        matches!(ai_publish, Err(ProjcError::Forbidden(_))),
+        "{ai_publish:?}"
+    );
 
     // 显式 Approver 授权行放行非 Lead 真人（grant → approve 幂等重放 OK）
     let tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
@@ -455,9 +490,14 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
     let project = seed_project_with_lead(&pool, "pj-c1").await;
     let lead = AuditActor::principal(LEAD);
 
-    let obj = upsert_object_draft(&pool, project, &lead, draft("repository", Some("r1"), "仓库", "c1"))
-        .await
-        .unwrap();
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("r1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
     let p1 = create_proposal(
         &pool,
         project,
@@ -471,9 +511,14 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
         .unwrap();
 
     // p2 与 p1 同期起草（基线同为 0）——p1 发布后 p2 的基线即过期
-    let obj2 = upsert_object_draft(&pool, project, &lead, draft("tech_stack", Some("t1"), "栈", "rust"))
-        .await
-        .unwrap();
+    let obj2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("tech_stack", Some("t1"), "栈", "rust"),
+    )
+    .await
+    .unwrap();
     let p2 = create_proposal(
         &pool,
         project,
@@ -569,13 +614,11 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
     )
     .await;
     assert!(matches!(cas, Err(ProjcError::Conflict(_))), "{cas:?}");
-    let (p2_status,): (String,) = sqlx::query_as(
-        "SELECT status FROM projc.proposal WHERE id = $1",
-    )
-    .bind(p2.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (p2_status,): (String,) = sqlx::query_as("SELECT status FROM projc.proposal WHERE id = $1")
+        .bind(p2.proposal_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(p2_status, "failed", "CAS 失配提案内置 failed");
     let (op_status,): (String,) = sqlx::query_as(
         "SELECT status FROM projc.write_operation           WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND project_id = $1 AND operation_id = $2",
@@ -606,9 +649,14 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
     let lead = AuditActor::principal(LEAD);
     let ai = AuditActor::principal(DISPATCH);
 
-    let obj = upsert_object_draft(&pool, project, &lead, draft("repository", Some("r1"), "仓库", "c1"))
-        .await
-        .unwrap();
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("r1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
     let conflict = create_conflict(
         &pool,
         project,
@@ -640,7 +688,10 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(ai_conflict, Err(ProjcError::Forbidden(_))), "{ai_conflict:?}");
+    assert!(
+        matches!(ai_conflict, Err(ProjcError::Forbidden(_))),
+        "{ai_conflict:?}"
+    );
 
     // 冻结：submit / approve / publish 均 403
     let proposal = create_proposal(
@@ -652,7 +703,10 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
     .await
     .unwrap();
     let frozen_submit = submit_proposal(&pool, project, &lead, proposal.proposal_id, None).await;
-    assert!(matches!(frozen_submit, Err(ProjcError::Forbidden(_))), "{frozen_submit:?}");
+    assert!(
+        matches!(frozen_submit, Err(ProjcError::Forbidden(_))),
+        "{frozen_submit:?}"
+    );
 
     resolve_conflict(
         &pool,
@@ -741,7 +795,10 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
     .await
     .unwrap();
     let refrozen = submit_proposal(&pool, project, &lead, p2.proposal_id, None).await;
-    assert!(matches!(refrozen, Err(ProjcError::Forbidden(_))), "{refrozen:?}");
+    assert!(
+        matches!(refrozen, Err(ProjcError::Forbidden(_))),
+        "{refrozen:?}"
+    );
     let no_note = resolve_conflict(
         &pool,
         project,
@@ -753,7 +810,10 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(no_note, Err(ProjcError::Invalid(_))), "{no_note:?}");
+    assert!(
+        matches!(no_note, Err(ProjcError::Invalid(_))),
+        "{no_note:?}"
+    );
     let dismissed = resolve_conflict(
         &pool,
         project,
@@ -784,7 +844,12 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         &pool,
         project,
         &lead,
-        draft("repository_module", Some("repo:x:module:src"), "src", "src/"),
+        draft(
+            "repository_module",
+            Some("repo:x:module:src"),
+            "src",
+            "src/",
+        ),
     )
     .await
     .unwrap();
@@ -792,7 +857,12 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         &pool,
         project,
         &lead,
-        draft("repository_module", Some("repo:x:module:lib"), "lib", "lib/"),
+        draft(
+            "repository_module",
+            Some("repo:x:module:lib"),
+            "lib",
+            "lib/",
+        ),
     )
     .await
     .unwrap();
@@ -841,7 +911,10 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(bad_type, Err(ProjcError::Invalid(_))), "{bad_type:?}");
+    assert!(
+        matches!(bad_type, Err(ProjcError::Invalid(_))),
+        "{bad_type:?}"
+    );
 
     // 自引用拒绝（allow_self_reference=false）
     let self_ref = create_relationship_draft(
@@ -857,7 +930,10 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(self_ref, Err(ProjcError::Invalid(_))), "{self_ref:?}");
+    assert!(
+        matches!(self_ref, Err(ProjcError::Invalid(_))),
+        "{self_ref:?}"
+    );
 
     // 活跃唯一：同类型同端点重复 → Conflict（同 ext 四元组定位）
     let dup = create_relationship_draft(
@@ -889,7 +965,10 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(unknown, Err(ProjcError::Invalid(_))), "{unknown:?}");
+    assert!(
+        matches!(unknown, Err(ProjcError::Invalid(_))),
+        "{unknown:?}"
+    );
 
     // 端点闭合：create_relationship 提案发布 → 版本自动并入端点成员（F-05）
     let proposal = create_proposal(
@@ -1076,18 +1155,19 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
 
     // 首轮：起草+提交（origin_kind=repo_analysis；AI 主体可达）
     let task1 = Uuid::new_v4();
-    let first = propose_from_analysis(&pool, project, input_for(task1)).await.unwrap();
+    let first = propose_from_analysis(&pool, project, input_for(task1))
+        .await
+        .unwrap();
     let AnalysisProposalOutcome::Proposed(receipt) = first else {
         panic!("expected Proposed");
     };
     assert_eq!(receipt.member_count, 1);
-    let (origin, status): (String, String) = sqlx::query_as(
-        "SELECT origin_kind, status FROM projc.proposal WHERE id = $1",
-    )
-    .bind(receipt.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (origin, status): (String, String) =
+        sqlx::query_as("SELECT origin_kind, status FROM projc.proposal WHERE id = $1")
+            .bind(receipt.proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(origin, "repo_analysis");
     assert_eq!(status, "submitted");
 
@@ -1095,7 +1175,10 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
     let rerun = propose_from_analysis(&pool, project, input_for(Uuid::new_v4()))
         .await
         .unwrap();
-    assert!(matches!(rerun, AnalysisProposalOutcome::NoChange), "{rerun:?}");
+    assert!(
+        matches!(rerun, AnalysisProposalOutcome::NoChange),
+        "{rerun:?}"
+    );
 
     // approved/applied 已收 → 仍覆盖；发布后版本已含 → 排除（口径①）
     approve_proposal(
@@ -1172,13 +1255,12 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
     let AnalysisProposalOutcome::Proposed(receipt2) = second else {
         panic!("expected Proposed for new revision");
     };
-    let (change_kind,): (String,) = sqlx::query_as(
-        "SELECT change_kind FROM projc.proposal_member WHERE proposal_id = $1",
-    )
-    .bind(receipt2.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (change_kind,): (String,) =
+        sqlx::query_as("SELECT change_kind FROM projc.proposal_member WHERE proposal_id = $1")
+            .bind(receipt2.proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(change_kind, "update_object", "已正式化对象走 update_object");
 
     // rejected 亦阻断（已人工裁决同一内容）；failed 放行
@@ -1203,13 +1285,12 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
     );
 
     // 幂等键：同任务重投递不追加第二种结论（outbox 幂等坍缩）
-    let (event_rows,): (i64,) = sqlx::query_as(
-        "SELECT count(*) FROM integration.outbox_event WHERE idempotency_key = $1",
-    )
-    .bind(format!("projc_analysis:{task1}"))
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (event_rows,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM integration.outbox_event WHERE idempotency_key = $1")
+            .bind(format!("projc_analysis:{task1}"))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(event_rows, 1);
 }
 
@@ -1401,7 +1482,10 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
     // reason 契约：None/空 → Invalid
     for bad in [None, Some("   ".to_string())].into_iter() {
         let r = expire_proposal(&pool, project, &lead, proposal.proposal_id, bad).await;
-        assert!(matches!(r, Err(ProjcError::Invalid(_))), "bad reason → Invalid: {r:?}");
+        assert!(
+            matches!(r, Err(ProjcError::Invalid(_))),
+            "bad reason → Invalid: {r:?}"
+        );
     }
 
     // 正常路径：submitted → expired；列值+审计落库
@@ -1415,14 +1499,17 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(receipt.status, "expired");
-    let (status, expired_at, expired_reason): (String, Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>, Option<String>) =
-        sqlx::query_as(
-            "SELECT status, expired_at, expired_reason FROM projc.proposal WHERE id = $1",
-        )
-        .bind(proposal.proposal_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let (status, expired_at, expired_reason): (
+        String,
+        Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT status, expired_at, expired_reason FROM projc.proposal WHERE id = $1",
+    )
+    .bind(proposal.proposal_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(status, "expired");
     assert!(expired_at.is_some());
     assert_eq!(expired_reason.as_deref(), Some("长期未决"));
@@ -1458,5 +1545,8 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(decide_after, Err(ProjcError::Conflict(_))), "{decide_after:?}");
+    assert!(
+        matches!(decide_after, Err(ProjcError::Conflict(_))),
+        "{decide_after:?}"
+    );
 }

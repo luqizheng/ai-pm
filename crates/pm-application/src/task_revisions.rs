@@ -53,13 +53,12 @@ pub async fn list_task_revisions(
     tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<Option<(Vec<TaskRevisionRow>, Vec<StaleActiveRunRow>)>, sqlx::Error> {
-    let exists: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await?;
+    let exists: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
     if exists.is_none() {
         return Ok(None);
     }

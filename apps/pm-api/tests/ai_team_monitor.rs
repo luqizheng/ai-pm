@@ -731,7 +731,12 @@ async fn ai_readiness_reflects_llm_data_plane(pool: PgPool) {
     let alice_token = token_for("alice", 1);
 
     // ① 全零：默认部署事实（不伪造就绪）。
-    let (status, body) = call(&app, &format!("/v1/pm/projects/{project}/ai-readiness"), &alice_token).await;
+    let (status, body) = call(
+        &app,
+        &format!("/v1/pm/projects/{project}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["provider_enabled_count"], 0);
     assert_eq!(body["catalog_model_enabled_count"], 0);
@@ -784,7 +789,12 @@ async fn ai_readiness_reflects_llm_data_plane(pool: PgPool) {
     .await
     .unwrap();
 
-    let (status, body) = call(&app, &format!("/v1/pm/projects/{project}/ai-readiness"), &alice_token).await;
+    let (status, body) = call(
+        &app,
+        &format!("/v1/pm/projects/{project}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["provider_enabled_count"], 1);
     assert_eq!(body["catalog_model_enabled_count"], 1);
@@ -797,6 +807,11 @@ async fn ai_readiness_reflects_llm_data_plane(pool: PgPool) {
     let bob = seed_tenant_member(&pool, tenant2, "bob").await;
     let project2 = seed_project(&pool, tenant2, "RDY2").await;
     seed_project_member(&pool, tenant2, project2, bob).await;
-    let (status, _) = call(&app, &format!("/v1/pm/projects/{project2}/ai-readiness"), &alice_token).await;
+    let (status, _) = call(
+        &app,
+        &format!("/v1/pm/projects/{project2}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

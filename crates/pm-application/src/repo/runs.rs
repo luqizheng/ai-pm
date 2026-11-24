@@ -161,10 +161,7 @@ pub trait RunRepo: Send + Sync {
         run_id: Uuid,
     ) -> Result<Option<TaskRunDetailRow>, sqlx::Error>;
 
-    async fn run_repositories(
-        &self,
-        run_id: Uuid,
-    ) -> Result<Vec<RunRepositoryRow>, sqlx::Error>;
+    async fn run_repositories(&self, run_id: Uuid) -> Result<Vec<RunRepositoryRow>, sqlx::Error>;
 
     /// 事件时间线可见性检查（同详情口径 → None）。
     async fn run_visible(

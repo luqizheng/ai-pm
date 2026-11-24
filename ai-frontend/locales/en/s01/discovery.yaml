@@ -16,7 +16,10 @@ discovery:
   reject: Reject
   questionsTitle: Blocking questions ({open} open / {total} total)
   questionsEmpty: This session has no question yet.
-  answerNote: The in-page answer entry is not open yet; answers and status appear here once submitted.
+  answerNote: Answers are consumed by the next orchestration round; status and answers appear here.
+  answerPlaceholder: Write your answer to this blocking question…
+  submitAnswer: Submit answer
+  answerFailed: Failed to submit the answer; please retry.
   sessionActionsTitle: Session actions
   reviewRequiredNotice: >-
     This session is awaiting human review: findings have all been decided and

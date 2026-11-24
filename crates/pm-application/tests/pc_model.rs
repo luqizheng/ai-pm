@@ -1187,9 +1187,7 @@ async fn publish_next_version_replaces_carried_revision(pool: PgPool) {
         &pool,
         project,
         &lead,
-        PublishVersionInput {
-            proposal_id: p1,
-        },
+        PublishVersionInput { proposal_id: p1 },
     )
     .await
     .unwrap();
@@ -1223,9 +1221,7 @@ async fn publish_next_version_replaces_carried_revision(pool: PgPool) {
         &pool,
         project,
         &lead,
-        PublishVersionInput {
-            proposal_id: p2,
-        },
+        PublishVersionInput { proposal_id: p2 },
     )
     .await
     .unwrap();

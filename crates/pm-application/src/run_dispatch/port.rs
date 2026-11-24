@@ -30,12 +30,11 @@ pub async fn insert_task_run(
     // 任务的实质变更只产生新快照，不追溯改写本 Run 的执行依据。调用方已按
     // 前置条件持有 task 行 FOR UPDATE，此处读到的是锁定行上的指针。
     // 指针为 NULL = 建任务路径漏接 Revision（接线缺口），fail-closed 拒建 Run。
-    let task_revision_id: Uuid = sqlx::query_scalar(
-        "SELECT current_task_revision_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(task_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let task_revision_id: Uuid =
+        sqlx::query_scalar("SELECT current_task_revision_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&mut **tx)
+            .await?;
 
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run \

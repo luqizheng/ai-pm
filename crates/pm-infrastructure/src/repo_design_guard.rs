@@ -24,12 +24,13 @@ impl DesignGuardRepo for PgDesignGuardRepo {
         tenant_id: Uuid,
         design_id: Uuid,
     ) -> Result<Option<Uuid>, sqlx::Error> {
-        let id: Option<Uuid> =
-            sqlx::query_scalar("SELECT project_id FROM design.design WHERE id = $1 AND tenant_id = $2")
-                .bind(design_id)
-                .bind(tenant_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT project_id FROM design.design WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(design_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(id)
     }
 
@@ -38,12 +39,13 @@ impl DesignGuardRepo for PgDesignGuardRepo {
         tenant_id: Uuid,
         adr_id: Uuid,
     ) -> Result<Option<Uuid>, sqlx::Error> {
-        let id: Option<Uuid> =
-            sqlx::query_scalar("SELECT project_id FROM design.adr WHERE id = $1 AND tenant_id = $2")
-                .bind(adr_id)
-                .bind(tenant_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT project_id FROM design.adr WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(adr_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(id)
     }
 

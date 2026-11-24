@@ -8,8 +8,10 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Card from "@/components/ui/card/Card.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import Textarea from "@/components/ui/textarea/Textarea.vue";
 import { PageFrame } from "@/components/shell";
 import {
+  answerDiscoveryQuestion,
   confirmDiscoveryFinding,
   getDiscoverySession,
   listDiscoverySessions,
@@ -155,6 +157,39 @@ const transitionError = ref("");
 const sessionStatus = computed(() => detail.value?.session.status ?? "");
 const awaitingReview = computed(() => sessionStatus.value === "REVIEW_REQUIRED");
 const needsUserInput = computed(() => sessionStatus.value === "NEEDS_USER_INPUT");
+
+// ── 阻塞问题答复（B02-01：页面内答复入口）────────────────────────
+// 编排器只在 chat 线程的答复被消费；此前页面只能看不能答（answerNote 明示
+// 「入口未开放」），闭环断在 UI。此处直连既有命令 answerDiscoveryQuestion，
+// 答复入库后由下一轮编排消费（与 chat 线程答复同一管线）。
+
+/** 每个未答复问题的草稿（按 question id 键控）。 */
+const answerDrafts = ref<Record<string, string>>({});
+/** 正在提交答复的问题 id（防重复提交）。 */
+const answeringId = ref<string | null>(null);
+const answerError = ref("");
+
+async function submitAnswer(question: DiscoveryQuestion) {
+  if (!selectedId.value || answeringId.value) return;
+  const answer = (answerDrafts.value[question.id] ?? "").trim();
+  if (!answer) return;
+  answeringId.value = question.id;
+  answerError.value = "";
+  try {
+    await answerDiscoveryQuestion(
+      projectId.value,
+      selectedId.value,
+      question.id,
+      answer
+    );
+    answerDrafts.value = { ...answerDrafts.value, [question.id]: "" };
+    await loadDetail();
+  } catch {
+    answerError.value = t("s01.discovery.answerFailed");
+  } finally {
+    answeringId.value = null;
+  }
+}
 
 /**
  * 人工处理会话：REVIEW_REQUIRED 退回 IN_PROGRESS（编排器恢复消费未处理
@@ -409,8 +444,38 @@ function verificationTone(
                   {{ answer.answer }}
                 </li>
               </ul>
+              <div
+                v-if="question.status === 'open'"
+                class="dc-answer-form"
+                :data-testid="`dc-answer-form-${question.id}`"
+              >
+                <Textarea
+                  v-model="answerDrafts[question.id]"
+                  size="sm"
+                  :placeholder="t('s01.discovery.answerPlaceholder')"
+                  :data-testid="`dc-answer-input-${question.id}`"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  :disabled="
+                    answeringId !== null ||
+                    !(answerDrafts[question.id] ?? '').trim()
+                  "
+                  :data-testid="`dc-answer-submit-${question.id}`"
+                  @click="submitAnswer(question)"
+                >
+                  {{ t("s01.discovery.submitAnswer") }}
+                </Button>
+              </div>
             </li>
           </ul>
+          <Alert
+            v-if="answerError"
+            variant="danger"
+            size="sm"
+            :title="answerError"
+          />
           <p class="dc-note">{{ t("s01.discovery.answerNote") }}</p>
         </Card>
 
@@ -525,6 +590,19 @@ function verificationTone(
   padding-left: var(--space-3);
   color: var(--ws-text-secondary);
   border-left: var(--border-1) solid var(--ws-border);
+}
+
+.dc-answer-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding-left: var(--space-3);
+  border-left: var(--border-1) solid var(--ws-border);
+}
+
+.dc-answer-form :deep(textarea) {
+  width: 100%;
 }
 
 .dc-empty,

@@ -986,6 +986,8 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
             implementation_baseline_id: Some(baseline.id),
             ai_role_version_id: None,
             acceptance_criteria: None,
+            goal: None,
+            deliverables: None,
         },
         &fx.human,
     )
@@ -1040,6 +1042,8 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
             implementation_baseline_id: Some(baseline.id),
             ai_role_version_id: None,
             acceptance_criteria: None,
+            goal: None,
+            deliverables: None,
         },
         &fx.human,
     )
@@ -1069,6 +1073,8 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
             implementation_baseline_id: Some(baseline2.id),
             ai_role_version_id: None,
             acceptance_criteria: None,
+            goal: None,
+            deliverables: None,
         },
         &fx.human,
     )

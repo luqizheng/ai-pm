@@ -173,7 +173,9 @@ async fn decide_item(
         .await
         .map_err(repo_err)?;
 
-    Ok(Json(json!({ "id": decision.item_id, "state": decision.next_state })))
+    Ok(Json(
+        json!({ "id": decision.item_id, "state": decision.next_state }),
+    ))
 }
 
 /// POST 确认基线（显式人类动作）：要求提案存在、无 proposed 条目

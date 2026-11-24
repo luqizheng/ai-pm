@@ -21,13 +21,12 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pc::{
     analysis_outcome_key, approve_proposal, canonical_proposal_hash, create_proposal,
     create_relationship_draft, decide_proposal, ensure_product_singletons, expire_proposal,
-    load_proposal,
-    propose_from_analysis, publish_version, register_evidence, register_source, reject_proposal,
-    submit_proposal, upsert_object_draft, withdraw_proposal, AnalysisProposalInput,
-    AnalysisProposalOutcome, CreateProposalInput, DecisionAction, DecisionInput, EvidenceInput,
-    EvidenceSubject, MemberKind, ObjectUpsertReceipt, PcEndpoint, PcError, ProposalDecisionInput,
-    ProposalMemberPin, PublishVersionInput, RelationshipDraftInput, SourceInput, UpsertObjectDraft,
-    VersionMemberPin,
+    load_proposal, propose_from_analysis, publish_version, register_evidence, register_source,
+    reject_proposal, submit_proposal, upsert_object_draft, withdraw_proposal,
+    AnalysisProposalInput, AnalysisProposalOutcome, CreateProposalInput, DecisionAction,
+    DecisionInput, EvidenceInput, EvidenceSubject, MemberKind, ObjectUpsertReceipt, PcEndpoint,
+    PcError, ProposalDecisionInput, ProposalMemberPin, PublishVersionInput, RelationshipDraftInput,
+    SourceInput, UpsertObjectDraft, VersionMemberPin,
 };
 
 const LEAD: Uuid = Uuid::from_u128(0x7272_0000_0000_0000_0000_0000_0000_0001);
@@ -576,12 +575,26 @@ async fn decision_gates_fail_closed(pool: PgPool) {
         (AuditActor::principal(OUTSIDER), "outsider"),
         (AuditActor::principal(MEMBER), "plain member"),
     ] {
-        let r = approve_proposal(&pool, project, &actor, p.proposal_id, decision(0, Some("决定理由"))).await;
+        let r = approve_proposal(
+            &pool,
+            project,
+            &actor,
+            p.proposal_id,
+            decision(0, Some("决定理由")),
+        )
+        .await;
         assert!(
             matches!(r, Err(PcError::Forbidden(_))),
             "{label} approve: {r:?}"
         );
-        let r = reject_proposal(&pool, project, &actor, p.proposal_id, decision(0, Some("决定理由"))).await;
+        let r = reject_proposal(
+            &pool,
+            project,
+            &actor,
+            p.proposal_id,
+            decision(0, Some("决定理由")),
+        )
+        .await;
         assert!(
             matches!(r, Err(PcError::Forbidden(_))),
             "{label} reject: {r:?}"
@@ -595,12 +608,26 @@ async fn decision_gates_fail_closed(pool: PgPool) {
     assert_eq!(proposal_status(&pool, p.proposal_id).await, "submitted");
 
     // 请求侧 CAS：调用方基线与提案锚定不符 → 409
-    let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(7, Some("决定理由"))).await;
+    let r = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        p.proposal_id,
+        decision(7, Some("决定理由")),
+    )
+    .await;
     assert!(matches!(r, Err(PcError::Conflict(_))), "stale CAS: {r:?}");
 
     // L3 冻结（approve 侧）→ 403；解冻后显式 Approver 同权通过（A3 / Q-PC-08）
     let conflict = conflict_on_object(&pool, tenant, project, a.object_id).await;
-    let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, Some("决定理由"))).await;
+    let r = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        p.proposal_id,
+        decision(0, Some("决定理由")),
+    )
+    .await;
     assert!(
         matches!(r, Err(PcError::Forbidden(_))),
         "frozen approve: {r:?}"
@@ -626,9 +653,23 @@ async fn decision_gates_fail_closed(pool: PgPool) {
     assert_eq!(approved.status, "approved");
 
     // 决定终局（Q-02b/Q-11，GAP-35）：同态重放幂等；跨态重决一律 409，提案保持终态
-    let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, Some("决定理由"))).await;
+    let r = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        p.proposal_id,
+        decision(0, Some("决定理由")),
+    )
+    .await;
     assert!(r.is_ok(), "idempotent re-approve: {r:?}");
-    let r = reject_proposal(&pool, project, &lead, p.proposal_id, decision(0, Some("决定理由"))).await;
+    let r = reject_proposal(
+        &pool,
+        project,
+        &lead,
+        p.proposal_id,
+        decision(0, Some("决定理由")),
+    )
+    .await;
     assert!(
         matches!(r, Err(PcError::Conflict(_))),
         "approved→reject 必须 409: {r:?}"
@@ -982,7 +1023,14 @@ async fn reject_and_withdraw_paths(pool: PgPool) {
     submit_proposal(&pool, project, &ai, p1.proposal_id, Some(0))
         .await
         .unwrap();
-    let r = approve_proposal(&pool, project, &ai, p1.proposal_id, decision(0, Some("决定理由"))).await;
+    let r = approve_proposal(
+        &pool,
+        project,
+        &ai,
+        p1.proposal_id,
+        decision(0, Some("决定理由")),
+    )
+    .await;
     assert!(matches!(r, Err(PcError::Forbidden(_))));
 
     // 驳回：终态 + 审批事实带理由
@@ -1006,7 +1054,14 @@ async fn reject_and_withdraw_paths(pool: PgPool) {
     assert_eq!(reason.as_deref(), Some("不符合产品定位"));
     assert_eq!(proposal_status(&pool, p1.proposal_id).await, "rejected");
     // 决定终局（Q-02b/Q-11，GAP-35）：rejected 同态重放幂等；跨态重决 409，提案保持 rejected
-    let r = reject_proposal(&pool, project, &lead, p1.proposal_id, decision(0, Some("决定理由"))).await;
+    let r = reject_proposal(
+        &pool,
+        project,
+        &lead,
+        p1.proposal_id,
+        decision(0, Some("决定理由")),
+    )
+    .await;
     assert!(r.is_ok(), "idempotent re-reject: {r:?}");
     let reapproved = decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0)).await;
     assert!(
@@ -1071,7 +1126,14 @@ async fn reject_and_withdraw_paths(pool: PgPool) {
             .unwrap();
     assert_eq!(pending, "pending");
     assert!(matches!(
-        approve_proposal(&pool, project, &lead, p3.proposal_id, decision(0, Some("决定理由"))).await,
+        approve_proposal(
+            &pool,
+            project,
+            &lead,
+            p3.proposal_id,
+            decision(0, Some("决定理由"))
+        )
+        .await,
         Err(PcError::Conflict(_))
     ));
     assert!(matches!(
@@ -1669,7 +1731,10 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
     // reason 契约（§D2.2）：None/空/纯空白 → Invalid；提案不受影响
     for bad in [None, Some(String::new()), Some("   ".to_string())].into_iter() {
         let r = expire_proposal(&pool, project, &lead, p.proposal_id, bad.clone()).await;
-        assert!(matches!(r, Err(PcError::Invalid(_))), "bad reason → Invalid: {r:?}");
+        assert!(
+            matches!(r, Err(PcError::Invalid(_))),
+            "bad reason → Invalid: {r:?}"
+        );
     }
     assert_eq!(proposal_status(&pool, p.proposal_id).await, "submitted");
 
@@ -1682,7 +1747,10 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
         Some("AI 不得触发".into()),
     )
     .await;
-    assert!(matches!(ai_attempt, Err(PcError::Forbidden(_))), "{ai_attempt:?}");
+    assert!(
+        matches!(ai_attempt, Err(PcError::Forbidden(_))),
+        "{ai_attempt:?}"
+    );
     let member_attempt = expire_proposal(
         &pool,
         project,
@@ -1691,7 +1759,10 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
         Some("无 A3".into()),
     )
     .await;
-    assert!(matches!(member_attempt, Err(PcError::Forbidden(_))), "{member_attempt:?}");
+    assert!(
+        matches!(member_attempt, Err(PcError::Forbidden(_))),
+        "{member_attempt:?}"
+    );
 
     // 正常路径：submitted → expired（同事务四写）；trim 规范化落列
     let receipt = expire_proposal(
@@ -1704,17 +1775,21 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(receipt.status, "expired");
-    let (status, expired_at, expired_reason): (String, Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>, Option<String>) =
-        sqlx::query_as(
-            "SELECT status, expired_at, expired_reason FROM pc.proposal WHERE id = $1",
-        )
+    let (status, expired_at, expired_reason): (
+        String,
+        Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
+        Option<String>,
+    ) = sqlx::query_as("SELECT status, expired_at, expired_reason FROM pc.proposal WHERE id = $1")
         .bind(p.proposal_id)
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(status, "expired");
     assert!(expired_at.is_some(), "expired_at=决策事实时间必须落列");
-    assert_eq!(expired_reason.as_deref(), Some("提案长期未决，按 Q-12 人工过期"));
+    assert_eq!(
+        expired_reason.as_deref(),
+        Some("提案长期未决，按 Q-12 人工过期")
+    );
 
     // 审计：同事务 pc_proposal.expire，reason 入 after_data
     assert_eq!(audit_count(&pool, project, "pc_proposal.expire").await, 1);
@@ -1730,10 +1805,17 @@ async fn expire_proposal_manual_terminal(pool: PgPool) {
     assert_eq!(pending, 1, "pending 审批行保留原状");
 
     // 终态收敛：同态再 expire 409；decide（approve/reject）一律 409（§D4.10 保证 5）
-    let re_expire = expire_proposal(&pool, project, &lead, p.proposal_id, Some("again".into())).await;
-    assert!(matches!(re_expire, Err(PcError::Conflict(_))), "{re_expire:?}");
+    let re_expire =
+        expire_proposal(&pool, project, &lead, p.proposal_id, Some("again".into())).await;
+    assert!(
+        matches!(re_expire, Err(PcError::Conflict(_))),
+        "{re_expire:?}"
+    );
     let decide_after = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0)).await;
-    assert!(matches!(decide_after, Err(PcError::Conflict(_))), "{decide_after:?}");
+    assert!(
+        matches!(decide_after, Err(PcError::Conflict(_))),
+        "{decide_after:?}"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -1768,7 +1850,10 @@ async fn decision_reason_is_mandatory(pool: PgPool) {
             },
         )
         .await;
-        assert!(matches!(r, Err(PcError::Invalid(_))), "reason 必填 → Invalid: {r:?}");
+        assert!(
+            matches!(r, Err(PcError::Invalid(_))),
+            "reason 必填 → Invalid: {r:?}"
+        );
         let r = decide_proposal(
             &pool,
             project,
@@ -1781,7 +1866,10 @@ async fn decision_reason_is_mandatory(pool: PgPool) {
             },
         )
         .await;
-        assert!(matches!(r, Err(PcError::Invalid(_))), "reason 必填 → Invalid: {r:?}");
+        assert!(
+            matches!(r, Err(PcError::Invalid(_))),
+            "reason 必填 → Invalid: {r:?}"
+        );
     }
 
     // 零残留：Invalid 不产生审批事实/审计；提案保持 submitted
@@ -1811,12 +1899,11 @@ async fn decision_reason_is_mandatory(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(approved.status, "approved");
-    let (reason,): (Option<String>,) = sqlx::query_as(
-        "SELECT decision_reason FROM pc.approval WHERE id = $1",
-    )
-    .bind(approved.approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (reason,): (Option<String>,) =
+        sqlx::query_as("SELECT decision_reason FROM pc.approval WHERE id = $1")
+            .bind(approved.approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(reason.as_deref(), Some("结论成立"), "trim 规范化落列");
 }

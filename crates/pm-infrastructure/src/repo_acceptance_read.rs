@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use pm_application::repo::acceptance_read::{
-    ApprovalRow, AcceptanceReadRepo, ArtifactRow, CriterionVerdictRow, Page, ReviewFindingRow,
+    AcceptanceReadRepo, ApprovalRow, ArtifactRow, CriterionVerdictRow, Page, ReviewFindingRow,
 };
 
 /// 无状态连接句柄（`PgPool` 内部是 Arc，clone 廉价）。

@@ -68,6 +68,8 @@ fn create_req(fx: &Fx, title: &str) -> CreateTaskRequest {
             text: "交付物路径可通过验收".to_string(),
             verification_kind: None,
         }]),
+        goal: None,
+        deliverables: None,
     }
 }
 
@@ -138,7 +140,10 @@ async fn create_task_freezes_initial_revision(pool: PgPool) {
     assert_eq!(criteria[0]["text"], "交付物路径可通过验收");
     assert_eq!(criteria[0]["verification_kind"], "manual");
     // 执行契约捕获创建时的契约列（deliverables 默认空数组等）。
-    assert_eq!(revs[0].execution_contract["deliverables"], serde_json::json!([]));
+    assert_eq!(
+        revs[0].execution_contract["deliverables"],
+        serde_json::json!([])
+    );
 }
 
 /// goal 变更 → 新快照（revision_no=2，change_reason=goal）；旧快照内容不变；
@@ -259,13 +264,12 @@ async fn run_pins_revision_and_survives_contract_change(pool: PgPool) {
         .unwrap();
     tx.commit().await.unwrap();
 
-    let pinned1: Uuid = sqlx::query_scalar(
-        "SELECT task_revision_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run1.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pinned1: Uuid =
+        sqlx::query_scalar("SELECT task_revision_id FROM delivery.task_run WHERE id = $1")
+            .bind(run1.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pinned1, rev1);
 
     update_task(
@@ -280,13 +284,12 @@ async fn run_pins_revision_and_survives_contract_change(pool: PgPool) {
     assert_ne!(rev1, rev2);
 
     // 旧 Run 仍固定 rev1；新 Run 固定 rev2。
-    let pinned_again: Uuid = sqlx::query_scalar(
-        "SELECT task_revision_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run1.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pinned_again: Uuid =
+        sqlx::query_scalar("SELECT task_revision_id FROM delivery.task_run WHERE id = $1")
+            .bind(run1.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pinned_again, rev1);
 
     // uq_task_run_active：每任务单活跃 Run——run2 创建前 run1 先到终态
@@ -294,10 +297,10 @@ async fn run_pins_revision_and_survives_contract_change(pool: PgPool) {
     sqlx::query(
         "UPDATE delivery.task_run SET status = 'succeeded', finished_at = now() WHERE id = $1",
     )
-        .bind(run1.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    .bind(run1.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let mut tx = pool.begin().await.unwrap();
     sqlx::query("SELECT id FROM delivery.task WHERE id = $1 FOR UPDATE")
@@ -309,13 +312,12 @@ async fn run_pins_revision_and_survives_contract_change(pool: PgPool) {
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let pinned2: Uuid = sqlx::query_scalar(
-        "SELECT task_revision_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run2.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pinned2: Uuid =
+        sqlx::query_scalar("SELECT task_revision_id FROM delivery.task_run WHERE id = $1")
+            .bind(run2.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pinned2, rev2);
 
     // rev1 内容仍可完整追溯（不可变性证据）。

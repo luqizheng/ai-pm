@@ -24,17 +24,14 @@ type RepoResult<T> = Result<T, IdentityRepoError>;
 
 #[async_trait]
 impl IdentityRepo for PgIdentityRepo {
-    async fn find_tenant(
-        &self,
-        provider: &str,
-        external_key: &str,
-    ) -> RepoResult<Option<Uuid>> {
-        let id: Option<Uuid> =
-            sqlx::query_scalar("SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2")
-                .bind(provider)
-                .bind(external_key)
-                .fetch_optional(&self.pool)
-                .await?;
+    async fn find_tenant(&self, provider: &str, external_key: &str) -> RepoResult<Option<Uuid>> {
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2",
+        )
+        .bind(provider)
+        .bind(external_key)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(id)
     }
 
@@ -85,12 +82,14 @@ impl IdentityRepo for PgIdentityRepo {
             .execute(&self.pool)
             .await?;
         }
-        Ok(row.map(|(identity_id, principal_id, is_active, display_name)| ResolvedIdentity {
-            identity_id,
-            principal_id,
-            is_active,
-            display_name,
-        }))
+        Ok(row.map(
+            |(identity_id, principal_id, is_active, display_name)| ResolvedIdentity {
+                identity_id,
+                principal_id,
+                is_active,
+                display_name,
+            },
+        ))
     }
 
     async fn provision_principal(
@@ -173,11 +172,7 @@ impl IdentityRepo for PgIdentityRepo {
         Ok(resolved)
     }
 
-    async fn tenant_role(
-        &self,
-        tenant_id: Uuid,
-        principal_id: Uuid,
-    ) -> RepoResult<Option<String>> {
+    async fn tenant_role(&self, tenant_id: Uuid, principal_id: Uuid) -> RepoResult<Option<String>> {
         // Team 面事实源 = core.team_member（P4-ORG Phase 2；tenant_member 只剩
         // provision 预登记行，不再承载授权）。
         let role: Option<String> = sqlx::query_scalar(

@@ -16,7 +16,10 @@ discovery:
   reject: 否决
   questionsTitle: 阻塞问题（未答 {open} / 共 {total}）
   questionsEmpty: 该会话暂无问题。
-  answerNote: 问题答复入口尚未在页面开放；答复后状态与回答会显示在此。
+  answerNote: 答复由下一轮编排消费；状态与回答会显示在此。
+  answerPlaceholder: 填写你对这个阻塞问题的答复…
+  submitAnswer: 提交答复
+  answerFailed: 答复提交失败，请重试。
   sessionActionsTitle: 会话处理
   reviewRequiredNotice: >-
     该会话已进入待人工复核：发现已全部裁决，等你确认结果。复核前 AI

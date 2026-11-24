@@ -27,21 +27,21 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ensure_trusted_context, paging, require_project_visible, ApiError, ApiResult};
+use crate::support::{
+    ensure_trusted_context, paging, require_project_visible, ApiError, ApiResult,
+};
 use pm_application::actor::AuditActor;
-use pm_application::visualization::live_graph::{
-    build_architecture_spec, build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT,
-};
-use pm_application::visualization::projection::{
-    project_spec, ReadStrategy,
-};
 use pm_application::repo::viz_read::VizReadRepo;
-use pm_application::visualization::queries::{
-    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries, ArtifactFilter,
-};
 use pm_application::visualization::artifact_service::{
     create_draft, decide_approval, get_artifact as svc_get_artifact, mark_stale, request_approval,
     CreateDraftInput, VizError,
+};
+use pm_application::visualization::live_graph::{
+    build_architecture_spec, build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT,
+};
+use pm_application::visualization::projection::{project_spec, ReadStrategy};
+use pm_application::visualization::queries::{
+    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries, ArtifactFilter,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -107,7 +107,13 @@ async fn slots(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let rows = list_slot_summaries(&state.pool, project_id, caller.tenant_id).await?;
 
@@ -122,7 +128,9 @@ async fn artifact_detail(
     Path(artifact_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // 跨属主 404 同形：先取产物 → 再验项目可见性
-    let artifact = svc_get_artifact(&state.pool, artifact_id).await.map_err(map_error)?;
+    let artifact = svc_get_artifact(&state.pool, artifact_id)
+        .await
+        .map_err(map_error)?;
     require_project_visible(
         &state.pool,
         artifact.project_id,
@@ -142,7 +150,13 @@ async fn list_artifacts(
     Path(project_id): Path<Uuid>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let page = paging(&params);
     let slot_key = params.get("slot_key").filter(|s| !s.trim().is_empty());
@@ -184,7 +198,13 @@ async fn create_artifact(
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateArtifactBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     ensure_trusted_context(&caller)?;
 
     let record = create_draft(
@@ -218,7 +238,9 @@ async fn approval_request(
     Path(artifact_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // artifact → project → 成员可见性
-    let artifact = svc_get_artifact(&state.pool, artifact_id).await.map_err(map_error)?;
+    let artifact = svc_get_artifact(&state.pool, artifact_id)
+        .await
+        .map_err(map_error)?;
     require_project_visible(
         &state.pool,
         artifact.project_id,
@@ -228,10 +250,9 @@ async fn approval_request(
     .await?;
     ensure_trusted_context(&caller)?;
 
-    let approval_id =
-        request_approval(&state.pool, artifact_id, &audit_actor(&caller))
-            .await
-            .map_err(map_error)?;
+    let approval_id = request_approval(&state.pool, artifact_id, &audit_actor(&caller))
+        .await
+        .map_err(map_error)?;
 
     Ok(Json(
         serde_json::json!({ "approvalId": approval_id, "status": 201 }),
@@ -255,7 +276,13 @@ async fn approval_decision(
     let project_id = approval_project(&state.pool, approval_id)
         .await?
         .ok_or(ApiError::NotFound("visualization approval not found"))?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     ensure_trusted_context(&caller)?;
 
     decide_approval(
@@ -278,7 +305,9 @@ async fn artifact_refresh(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(artifact_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let artifact = svc_get_artifact(&state.pool, artifact_id).await.map_err(map_error)?;
+    let artifact = svc_get_artifact(&state.pool, artifact_id)
+        .await
+        .map_err(map_error)?;
     require_project_visible(
         &state.pool,
         artifact.project_id,
@@ -296,7 +325,6 @@ async fn artifact_refresh(
     Ok(StatusCode::OK)
 }
 
-
 // ───────────────────────────────────────────── Live 图查询
 
 /// Live 图：实时聚合既有关系表 → 投影裁剪 → 返回。
@@ -308,7 +336,13 @@ async fn live_graph(
     Extension(caller): Extension<AuthedPrincipal>,
     Path((project_id, view_kind)): Path<(Uuid, String)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let repo = crate::support::repos::viz_read_repo(&state.pool);
     let (spec, truncated) = match view_kind.as_str() {
@@ -317,14 +351,20 @@ async fn live_graph(
                 .trace_edges(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
                 .await?;
             let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
-            (build_trace_spec(project_id, &state.viz_registry, &rows, truncated), truncated)
+            (
+                build_trace_spec(project_id, &state.viz_registry, &rows, truncated),
+                truncated,
+            )
         }
         "task-dag" => {
             let rows = repo
                 .task_dependencies(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
                 .await?;
             let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
-            (build_task_dag_spec(project_id, &state.viz_registry, &rows, truncated), truncated)
+            (
+                build_task_dag_spec(project_id, &state.viz_registry, &rows, truncated),
+                truncated,
+            )
         }
         "architecture-graph" => {
             let rows = repo

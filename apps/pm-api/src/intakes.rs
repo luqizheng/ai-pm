@@ -22,8 +22,8 @@ use pm_application::intake::{self, SubmitIntake, TaskSpec};
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::platform_ops_repo;
-use pm_application::repo::platform_ops::PlatformOpsRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

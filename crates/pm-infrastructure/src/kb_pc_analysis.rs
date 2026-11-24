@@ -962,7 +962,9 @@ pub async fn derive_projc_cognition(
             &actor,
             pm_application::projc::EvidenceInput {
                 source_id,
-                subject: pm_application::projc::EvidenceSubject::ObjectRevision(receipt.revision_id),
+                subject: pm_application::projc::EvidenceSubject::ObjectRevision(
+                    receipt.revision_id,
+                ),
                 evidence_type: "document_section".into(),
                 target_domain: Some("knowledge_base".into()),
                 target_type: Some("document".into()),

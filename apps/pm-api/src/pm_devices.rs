@@ -24,12 +24,12 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use pm_application::devenv::{
     bind_project, get_device, list_devices, register_device, report_checks, revoke_device,
     unbind_binding, BindingRow, DeviceChecks, DeviceDetail, DeviceError, DeviceRow,
     RegisterDeviceRequest,
 };
+use pm_application::repo::GuardQueryRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -206,12 +206,12 @@ async fn ensure_credential_manager(
         .device_owner(principal.tenant_id, device_id)
         .await
         .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "code": "internal", "message": e.to_string() })),
-        )
-            .into_response()
-    })?;
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "code": "internal", "message": e.to_string() })),
+            )
+                .into_response()
+        })?;
     let Some(owner) = owner else {
         return Err(not_found_response());
     };

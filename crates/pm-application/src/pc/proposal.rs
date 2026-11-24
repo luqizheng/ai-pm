@@ -525,7 +525,9 @@ async fn normalize_proposal_members(
     // ③ F-05 端点自动并入（§10.1-3）：缺失端点补 update_object 行；与既有成员冲突拒绝
     let mut merged = 0usize;
     for (relationship_id, object_id, revision_id) in endpoints {
-        let existing = normalized.iter().position(|m| m.object_id == Some(object_id));
+        let existing = normalized
+            .iter()
+            .position(|m| m.object_id == Some(object_id));
         match existing {
             Some(i) if normalized[i].change_kind == "deprecate_object" => {
                 return Err(PcError::Invalid(format!(
@@ -543,7 +545,8 @@ async fn normalize_proposal_members(
             }
             None => {
                 let (lifecycle, level) =
-                    resolve_object_member(tx, tenant_id, project_id, object_id, revision_id).await?;
+                    resolve_object_member(tx, tenant_id, project_id, object_id, revision_id)
+                        .await?;
                 check_lifecycle("object", "update_object", object_id, &lifecycle)?;
                 levels.push(level);
                 normalized.push(ProposalMemberPin {
@@ -1327,7 +1330,9 @@ pub async fn update_proposal_draft(
     members: Vec<ProposalMemberPin>,
 ) -> Result<ProposalReceipt, PcError> {
     if members.is_empty() {
-        return Err(PcError::Invalid("a proposal needs at least one member".into()));
+        return Err(PcError::Invalid(
+            "a proposal needs at least one member".into(),
+        ));
     }
     let tenant_id = project_tenant(pool, project_id).await?;
     let mut tx = pool.begin().await?;
@@ -1369,9 +1374,14 @@ pub async fn update_proposal_draft(
         }
     }
 
-    let (members, _governance, _merged) =
-        normalize_proposal_members(&mut tx, tenant_id, project_id, members, Some(&governance_level))
-            .await?;
+    let (members, _governance, _merged) = normalize_proposal_members(
+        &mut tx,
+        tenant_id,
+        project_id,
+        members,
+        Some(&governance_level),
+    )
+    .await?;
 
     // 重锚：内容锚定哈希重算（同 create 管线规范化）+ 落列；成员集整组替换
     let pins: Vec<VersionMemberPin> = members.iter().filter_map(|m| m.pin()).collect();
@@ -1660,13 +1670,9 @@ pub async fn propose_from_analysis(
     // ── 起草段账本（GAP-01/27，Q-01 方案 A：账本与业务同事务；D6.6 §4 分析链
     // op_id=`{{}}-analyze:{task_id}`；§5 唯一键等待互斥；场景 1/2/9）────
     let operation_id = format!("pc-analyze:{}", input.task_id);
-    let fingerprint =
-        analysis_request_fingerprint(input.source_id, &input.title, &input.rationale);
+    let fingerprint = analysis_request_fingerprint(input.source_id, &input.title, &input.rationale);
     // 短路先查（候选重推导之前）：completed → 严格指纹判定 → 幂等返回原提案
-    if let Some((op_status, stored_fp)) = sqlx::query_as::<
-        _,
-        (String, Option<String>),
-    >(
+    if let Some((op_status, stored_fp)) = sqlx::query_as::<_, (String, Option<String>)>(
         "SELECT status, request_fingerprint FROM pc.write_operation \
           WHERE tenant_id = $1 AND project_id = $2 AND operation_id = $3",
     )
@@ -1760,7 +1766,6 @@ pub async fn propose_from_analysis(
         tx.commit().await?;
         return Ok(AnalysisProposalOutcome::NoChange);
     }
-
 
     // 认领账本行（唯一键等待互斥；request_fingerprint=请求意图九要素投影，
     // 认领即锚定、完成前不可变——D6.6 §1）。

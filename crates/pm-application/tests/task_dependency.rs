@@ -885,7 +885,10 @@ async fn imp3_invalid_condition_inputs_are_rejected(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        matches!(
+            err,
+            pm_application::task_dependency::DependencyError::InvalidCondition(_)
+        ),
         "got {err:?}"
     );
 
@@ -902,7 +905,10 @@ async fn imp3_invalid_condition_inputs_are_rejected(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        matches!(
+            err,
+            pm_application::task_dependency::DependencyError::InvalidCondition(_)
+        ),
         "got {err:?}"
     );
 
@@ -919,7 +925,10 @@ async fn imp3_invalid_condition_inputs_are_rejected(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::task_dependency::DependencyError::InvalidCondition(_)),
+        matches!(
+            err,
+            pm_application::task_dependency::DependencyError::InvalidCondition(_)
+        ),
         "got {err:?}"
     );
 }
@@ -965,7 +974,10 @@ async fn imp3_accepted_requires_approval_then_unlocks(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(task_status(&pool, downstream2).await, "ready");
-    assert_eq!(task_ready_events(&pool, fx.project_id, downstream2).await, 1);
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream2).await,
+        1
+    );
 }
 
 /// 审查75/81 `deliverable_approved`：引用命中前置当前 Revision 冻结的
@@ -1016,7 +1028,9 @@ async fn imp3_deliverable_approved_matches_frozen_revision(pool: PgPool) {
 /// 与 dependencies_satisfied 同源谓词的行级求值，供「x/y met · AND」汇总。
 #[sqlx::test(migrations = "../../migrations")]
 async fn imp3_list_dependencies_reports_per_edge_satisfaction(pool: PgPool) {
-    use pm_application::task_dependency::{add_dependency_with, list_dependencies, AddDependencyOptions};
+    use pm_application::task_dependency::{
+        add_dependency_with, list_dependencies, AddDependencyOptions,
+    };
     let fx = seed_project(&pool, "TD-IMP3-E").await;
     let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
@@ -1031,16 +1045,31 @@ async fn imp3_list_dependencies_reports_per_edge_satisfaction(pool: PgPool) {
     )
     .await
     .unwrap();
-    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream)
+        .await
+        .unwrap();
     assert_eq!(graph.upstream.len(), 1);
     assert_eq!(graph.upstream[0].required_condition, "completed");
-    assert!(!graph.upstream[0].satisfied, "draft predecessor must not satisfy");
+    assert!(
+        !graph.upstream[0].satisfied,
+        "draft predecessor must not satisfy"
+    );
 
     // 前置 completed → satisfied 行级翻转（无需重算全量布尔）。
     transition(&pool, &fx, upstream, TaskStatus::Completed).await;
-    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
-    assert!(graph.upstream[0].satisfied, "completed predecessor must satisfy");
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream)
+        .await
+        .unwrap();
+    assert!(
+        graph.upstream[0].satisfied,
+        "completed predecessor must satisfy"
+    );
     // Blocks 视角（从前置看后继）：同一条边、同一个条件，satisfied 同源为真。
-    let graph = list_dependencies(&pool, SYSTEM_TENANT, upstream).await.unwrap();
-    assert!(graph.downstream[0].satisfied, "blocks-side edge shares the same satisfied value");
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, upstream)
+        .await
+        .unwrap();
+    assert!(
+        graph.downstream[0].satisfied,
+        "blocks-side edge shares the same satisfied value"
+    );
 }

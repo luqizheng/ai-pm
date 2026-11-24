@@ -55,7 +55,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/external-commits/{commit_id}/decision",
             post(decision_handler),
         )
-        .route("/v1/pm/external-commits/{commit_id}/close", post(close_handler))
+        .route(
+            "/v1/pm/external-commits/{commit_id}/close",
+            post(close_handler),
+        )
         .route(
             "/v1/pm/external-commits/{commit_id}/diff",
             get(diff_handler),
@@ -96,25 +99,26 @@ async fn commit_visible(
     tenant_id: Uuid,
     principal_id: Uuid,
 ) -> Result<Uuid, Response> {
-    let project_id: Uuid =
-        sqlx::query_scalar::<_, Uuid>("SELECT project_id FROM integration.external_commit WHERE id = $1")
-            .bind(commit_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_err| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "internal error" })),
-                )
-                    .into_response()
-            })?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(json!({ "message": "external commit not found" })),
-                )
-                    .into_response()
-            })?;
+    let project_id: Uuid = sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM integration.external_commit WHERE id = $1",
+    )
+    .bind(commit_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "internal error" })),
+        )
+            .into_response()
+    })?
+    .ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "message": "external commit not found" })),
+        )
+            .into_response()
+    })?;
     match crate::support::project_visible(pool, project_id, tenant_id, principal_id).await {
         Ok(true) => Ok(project_id),
         Ok(false) => Err((
@@ -142,8 +146,13 @@ async fn discover_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<DiscoverBody>>,
 ) -> Response {
-    match crate::support::project_visible(&state.pool, project_id, principal.tenant_id, principal.principal_id)
-        .await
+    match crate::support::project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         Ok(true) => {}
         Ok(false) => {
@@ -187,8 +196,13 @@ async fn list_handler(
     Path(project_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Response {
-    match crate::support::project_visible(&state.pool, project_id, principal.tenant_id, principal.principal_id)
-        .await
+    match crate::support::project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         Ok(true) => {}
         Ok(false) => {
@@ -209,7 +223,11 @@ async fn list_handler(
     match list_external_commits(&state.pool, project_id, query.status.as_deref()).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => external_commit_error(err),
     }
@@ -220,8 +238,13 @@ async fn detail_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(commit_id): Path<Uuid>,
 ) -> Response {
-    let project_id = match commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id)
-        .await
+    let project_id = match commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         Ok(project_id) => project_id,
         Err(resp) => return resp,
@@ -246,8 +269,13 @@ async fn analyze_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(commit_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) =
-        commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -277,8 +305,13 @@ async fn answer_handler(
     Path((commit_id, clarification_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<AnswerBody>,
 ) -> Response {
-    if let Err(resp) =
-        commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -287,7 +320,14 @@ async fn answer_handler(
         return err.into_response();
     }
     let actor = principal.audit_actor();
-    match answer_clarification(&state.pool, commit_id, clarification_id, &actor, &body.answer).await
+    match answer_clarification(
+        &state.pool,
+        commit_id,
+        clarification_id,
+        &actor,
+        &body.answer,
+    )
+    .await
     {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => external_commit_error(err),
@@ -307,8 +347,13 @@ async fn decision_handler(
     Path(commit_id): Path<Uuid>,
     Json(body): Json<DecisionBody>,
 ) -> Response {
-    if let Err(resp) =
-        commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -332,8 +377,13 @@ async fn close_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(commit_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) =
-        commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -352,8 +402,13 @@ async fn diff_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(commit_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) =
-        commit_visible(&state.pool, commit_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = commit_visible(
+        &state.pool,
+        commit_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }

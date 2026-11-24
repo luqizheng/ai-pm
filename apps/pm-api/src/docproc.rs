@@ -20,9 +20,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::platform_ops_repo;
-use pm_application::repo::platform_ops::PlatformOpsRepo;
 use pm_application::docproc_service as svc;
 use pm_application::docproc_service::{DocprocError, StoreError};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 /// 上传上限（file-service 100MiB 对齐，TD-02 §3.1）。
 const MAX_BODY_BYTES: usize = 100 * 1024 * 1024;
@@ -218,7 +218,7 @@ async fn lookup_document_id(
     platform_ops_repo(&state.pool)
         .document_id_of_version(caller.tenant_id, v.version_id)
         .await
-    .unwrap_or_else(|_| Uuid::nil())
+        .unwrap_or_else(|_| Uuid::nil())
 }
 
 fn bad_request(message: &str) -> Response {
@@ -281,9 +281,10 @@ async fn job_for_artifact(
     let view = svc::artifact_view(&state.pool, caller.tenant_id, artifact_id)
         .await
         .map_err(|e| err_resp(&e))?;
-    let version_id: Uuid = platform_ops_repo(&state.pool)
-        .version_id_of_job(view.processing_job_id)
-        .await
+    let version_id: Uuid =
+        platform_ops_repo(&state.pool)
+            .version_id_of_job(view.processing_job_id)
+            .await
             .map_err(|_| {
                 (
             StatusCode::NOT_FOUND,

@@ -381,7 +381,11 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(objects.len(), 4, "repository+tech_stack+2 repository_module");
+    assert_eq!(
+        objects.len(),
+        4,
+        "repository+tech_stack+2 repository_module"
+    );
     assert!(objects.iter().all(|(_, _, s)| s == "draft"));
     assert!(objects.iter().any(|(t, _, _)| t == "repository"));
     assert!(objects.iter().any(|(t, _, _)| t == "tech_stack"));

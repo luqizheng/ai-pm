@@ -23,7 +23,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 use pm_application::external_commit::{
     CommitAnalysis, CommitAnalysisInput, CommitAnalysisModel, CommitAnalysisOutput,
-    KnowledgeUpdateSuggestion, RelatedObject, DeviationJudgment,
+    DeviationJudgment, KnowledgeUpdateSuggestion, RelatedObject,
 };
 use pm_application::repo_facts::pm_ai_port::ModelError;
 use pm_application::team_llm::ResolvedProvider;
@@ -311,8 +311,16 @@ fn build_user_prompt(input: &CommitAnalysisInput<'_>) -> Result<String, ModelErr
             "branch": input.branch,
             "changed_files": input.changed_files,
         }),
-        if input.diff_truncated { " truncated=\"true\"" } else { "" },
-        if input.diff_truncated { " truncated=\"true\"" } else { "" },
+        if input.diff_truncated {
+            " truncated=\"true\""
+        } else {
+            ""
+        },
+        if input.diff_truncated {
+            " truncated=\"true\""
+        } else {
+            ""
+        },
     ))
 }
 
@@ -424,7 +432,12 @@ fn parse_response(content: &str) -> Result<CommitAnalysisOutput, String> {
             items
                 .iter()
                 .filter_map(|q| q.as_str())
-                .map(|q| q.trim().chars().take(MAX_QUESTION_CHARS).collect::<String>())
+                .map(|q| {
+                    q.trim()
+                        .chars()
+                        .take(MAX_QUESTION_CHARS)
+                        .collect::<String>()
+                })
                 .filter(|q| !q.is_empty())
                 .take(MAX_QUESTIONS)
                 .collect::<Vec<_>>()

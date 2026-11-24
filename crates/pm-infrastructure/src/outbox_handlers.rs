@@ -459,14 +459,8 @@ pub fn register_all_handlers(
                 "RunCompleted",
                 Arc::new(RunCompletedHandler::new(pool.clone())),
             )
-            .with_handler(
-                "DocprocJobCompleted",
-                Arc::new(DocprocSettleHandler),
-            )
-            .with_handler(
-                "DocprocJobFailed",
-                Arc::new(DocprocSettleHandler),
-            ),
+            .with_handler("DocprocJobCompleted", Arc::new(DocprocSettleHandler))
+            .with_handler("DocprocJobFailed", Arc::new(DocprocSettleHandler)),
         pool,
         snapshot_model,
         discovery_orchestrator_enabled,

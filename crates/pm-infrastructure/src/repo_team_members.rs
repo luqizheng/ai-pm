@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use pm_application::project_member::revoke_principal_memberships;
 use pm_application::repo::team_members::{
-    ChangeSnapshot, MemberAuditActor, MemberRepo, MemberRepoError, MemberWrite,
-    MemberWriteOutcome, PlanFn, TeamMemberRow,
+    ChangeSnapshot, MemberAuditActor, MemberRepo, MemberRepoError, MemberWrite, MemberWriteOutcome,
+    PlanFn, TeamMemberRow,
 };
 
 /// 无状态连接句柄（`PgPool` 内部是 Arc，clone 廉价）。
@@ -124,7 +124,8 @@ impl MemberRepo for PgMemberRepo {
         };
 
         // 4) 规则裁决（HTTP 层纯函数，锁内同步执行；Err = 整体回滚）。
-        let (writes, audits) = plan(snapshot).map_err(|(c, m)| MemberRepoError::RuleRejected(c, m))?;
+        let (writes, audits) =
+            plan(snapshot).map_err(|(c, m)| MemberRepoError::RuleRejected(c, m))?;
 
         // 5) S01-W13：移除 Team 成员前，若该人是某项目的 owner，则**拒绝移除**——
         //    否则级联撤权会静默产生「无主项目」。

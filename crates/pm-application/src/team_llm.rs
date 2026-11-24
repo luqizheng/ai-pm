@@ -1225,7 +1225,6 @@ pub struct ResolvedProvider {
     pub model_ref: Option<Uuid>,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

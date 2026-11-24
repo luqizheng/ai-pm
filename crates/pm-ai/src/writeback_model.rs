@@ -68,12 +68,13 @@ pub const DECOMPOSE_TASKS_SYSTEM_PROMPT: &str = r#"你是 AI-PM 平台的任务�
 - prerequisite：主任务开始前必须先完成的前置任务（如选型、配置、基础设施建设）。
 - main：交付需求本身的任务。
 - 每条任务都必须给出至少一条**验收口径**（acceptance_criteria）：可判定完成的句子。缺验收口径的任务会被系统整批丢弃，所以不要留空。
+- 每条任务都必须给出 **goal**（一句话目标）与 **deliverables**（交付物条目列表）：执行准备度检查要求两者非空；交付物写"完成后存在什么"（如文档、模块、接口、测试），不要写空话。
 - 依赖用 key 表达：depends_on 只能引用**本批中更早出现**的任务的 key，不能引用自己、不能引用后面才出现的 key，也不能用标题字符串。
 - role_ref 只能从 <context> 的角色候选 role_key 里选；不确定就省略该字段，不要编造角色。
 - 不要输出需求正文之外的新功能。
 
 只输出一个 JSON 对象（不要 markdown 代码块、不要额外文字）：
-{"prerequisite":[{"key":"<批内唯一短键>","title":"<任务标题>","description":"<可选描述>","acceptance_criteria":["<验收口径>"],"depends_on":["<更早任务的 key>"],"role_ref":"<可选，候选 role_key>"}],"main":[{"key":"...","title":"...","description":"...","acceptance_criteria":["..."],"depends_on":["..."],"role_ref":"..."}]}"#;
+{"prerequisite":[{"key":"<批内唯一短键>","title":"<任务标题>","description":"<可选描述>","goal":"<一句话目标>","deliverables":["<交付物条目>"],"acceptance_criteria":["<验收口径>"],"depends_on":["<更早任务的 key>"],"role_ref":"<可选，候选 role_key>"}],"main":[{"key":"...","title":"...","description":"...","goal":"...","deliverables":["..."],"acceptance_criteria":["..."],"depends_on":["..."],"role_ref":"..."}]}"#;
 
 /// Upper bound for the findings block handed to the drafting call.
 const MAX_FINDING_CHARS: usize = 8_000;

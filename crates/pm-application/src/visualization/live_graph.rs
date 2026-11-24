@@ -37,7 +37,13 @@ pub fn build_trace_spec(
     let mut edges: Vec<VizEdge> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
 
-    let push_node = |nodes: &mut Vec<VizNode>, seen: &mut Vec<String>, id: Uuid, title: &str, revision: Uuid, domain: &str, kind: &str| {
+    let push_node = |nodes: &mut Vec<VizNode>,
+                     seen: &mut Vec<String>,
+                     id: Uuid,
+                     title: &str,
+                     revision: Uuid,
+                     domain: &str,
+                     kind: &str| {
         let key = id.to_string();
         if seen.contains(&key) {
             return;
@@ -54,8 +60,7 @@ pub fn build_trace_spec(
             status: None,
             nature: Some(Nature::Business),
             source_ref: Some(
-                SourceRef::new(domain, kind, id.to_string())
-                    .with_revision(revision.to_string()),
+                SourceRef::new(domain, kind, id.to_string()).with_revision(revision.to_string()),
             ),
             derived: None,
         });
@@ -149,32 +154,33 @@ pub fn build_task_dag_spec(
     let mut edges: Vec<VizEdge> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
 
-    let push_node = |nodes: &mut Vec<VizNode>, seen: &mut Vec<String>, id: Uuid, title: &str, status: &str| {
-        let key = id.to_string();
-        if seen.contains(&key) {
-            return;
-        }
-        seen.push(key.clone());
-        nodes.push(VizNode {
-            id: key,
-            label: if title.is_empty() {
-                "（无标题）".to_string()
-            } else {
-                title.to_string()
-            },
-            kind: "task".to_string(),
-            status: if status.is_empty() {
-                None
-            } else {
-                Some(status.to_string())
-            },
-            nature: Some(Nature::Business),
-            // task 无内容版本——source_ref 不带 revision_id（不伪造内容版本，
-            // 0019 迁移头注的同类纪律）
-            source_ref: Some(SourceRef::new("delivery", "task", id.to_string())),
-            derived: None,
-        });
-    };
+    let push_node =
+        |nodes: &mut Vec<VizNode>, seen: &mut Vec<String>, id: Uuid, title: &str, status: &str| {
+            let key = id.to_string();
+            if seen.contains(&key) {
+                return;
+            }
+            seen.push(key.clone());
+            nodes.push(VizNode {
+                id: key,
+                label: if title.is_empty() {
+                    "（无标题）".to_string()
+                } else {
+                    title.to_string()
+                },
+                kind: "task".to_string(),
+                status: if status.is_empty() {
+                    None
+                } else {
+                    Some(status.to_string())
+                },
+                nature: Some(Nature::Business),
+                // task 无内容版本——source_ref 不带 revision_id（不伪造内容版本，
+                // 0019 迁移头注的同类纪律）
+                source_ref: Some(SourceRef::new("delivery", "task", id.to_string())),
+                derived: None,
+            });
+        };
 
     for row in rows {
         // 注册表闸（同上）：`task.depends_on_task` 未 active 则不出边
@@ -267,23 +273,24 @@ pub fn build_architecture_spec(
     let mut seen: Vec<String> = Vec::new();
     let mut seen_edges: Vec<String> = Vec::new();
 
-    let push_node = |nodes: &mut Vec<VizNode>, seen: &mut Vec<String>, id: Uuid, label: &str, kind: &str| {
-        let key = id.to_string();
-        if seen.contains(&key) {
-            return;
-        }
-        seen.push(key.clone());
-        nodes.push(VizNode {
-            id: key,
-            label: truncate_label(label),
-            kind: kind.to_string(),
-            status: None,
-            nature: Some(Nature::Business),
-            // cognition/baseline 条目无内容版本表——不伪造 revision_id
-            source_ref: Some(SourceRef::new("ai", kind, id.to_string())),
-            derived: None,
-        });
-    };
+    let push_node =
+        |nodes: &mut Vec<VizNode>, seen: &mut Vec<String>, id: Uuid, label: &str, kind: &str| {
+            let key = id.to_string();
+            if seen.contains(&key) {
+                return;
+            }
+            seen.push(key.clone());
+            nodes.push(VizNode {
+                id: key,
+                label: truncate_label(label),
+                kind: kind.to_string(),
+                status: None,
+                nature: Some(Nature::Business),
+                // cognition/baseline 条目无内容版本表——不伪造 revision_id
+                source_ref: Some(SourceRef::new("ai", kind, id.to_string())),
+                derived: None,
+            });
+        };
 
     for row in rows {
         // 注册表闸：derived_trace 未 active 即不出边（未会签 ≠ 默认允许）
@@ -386,8 +393,16 @@ mod tests {
         RelationRegistry {
             version: "1".to_string(),
             relations: vec![
-                active("design.covers_requirement", "design_revision", "requirement_revision"),
-                active("task.implements_requirement", "task", "requirement_revision"),
+                active(
+                    "design.covers_requirement",
+                    "design_revision",
+                    "requirement_revision",
+                ),
+                active(
+                    "task.implements_requirement",
+                    "task",
+                    "requirement_revision",
+                ),
                 active("task.depends_on_task", "task", "task"),
             ],
             node_kinds: vec![],
@@ -428,7 +443,12 @@ mod tests {
 
     #[test]
     fn trace_spec_nodes_are_deduped_and_sourced() {
-        let spec = build_trace_spec(Uuid::nil(), &active_registry(), &[trace_row(), trace_row()], false);
+        let spec = build_trace_spec(
+            Uuid::nil(),
+            &active_registry(),
+            &[trace_row(), trace_row()],
+            false,
+        );
         assert_eq!(spec.nodes.len(), 2, "重复边不应产生重复节点");
         assert_eq!(spec.edges.len(), 2);
         for node in &spec.nodes {
@@ -472,21 +492,11 @@ mod tests {
     #[test]
     fn draft_relations_are_not_projected() {
         // 专家裁决的落地：未 active 的关系不得出边（未会签 ≠ 默认允许）
-        let trace = build_trace_spec(
-            Uuid::nil(),
-            &draft_registry(),
-            &[trace_row()],
-            false,
-        );
+        let trace = build_trace_spec(Uuid::nil(), &draft_registry(), &[trace_row()], false);
         assert_eq!(trace.edges.len(), 0, "draft 关系不得投影出边");
         assert_eq!(trace.nodes.len(), 0, "无边即无节点");
 
-        let dag = build_task_dag_spec(
-            Uuid::nil(),
-            &draft_registry(),
-            &[dep_row()],
-            false,
-        );
+        let dag = build_task_dag_spec(Uuid::nil(), &draft_registry(), &[dep_row()], false);
         assert_eq!(dag.edges.len(), 0, "draft 的 task.depends_on_task 不得投影");
     }
 
@@ -511,7 +521,8 @@ mod tests {
         CognitionEdgeRow {
             from_id: Uuid::parse_str("77777777-7777-7777-7777-777777777777").unwrap(),
             to_id: Uuid::parse_str("88888888-8888-8888-8888-888888888888").unwrap(),
-            from_content: "系统采用 Rust 多租户后端与 Vue 前端，模块按领域划分，含可视化引擎…".to_string(),
+            from_content: "系统采用 Rust 多租户后端与 Vue 前端，模块按领域划分，含可视化引擎…"
+                .to_string(),
             to_content: "技术基线：PostgreSQL + Git 双存储架构".to_string(),
             from_kind: "architecture".to_string(),
         }
@@ -529,7 +540,11 @@ mod tests {
         assert_eq!(spec.nodes.len(), 2);
         assert_eq!(spec.edges.len(), 1);
 
-        let from = spec.nodes.iter().find(|n| n.kind == "architecture").unwrap();
+        let from = spec
+            .nodes
+            .iter()
+            .find(|n| n.kind == "architecture")
+            .unwrap();
         assert!(from.label.starts_with("系统采用"));
         assert!(from.label.chars().count() <= 41, "长正文应截断");
         assert_eq!(from.source_ref.as_ref().unwrap().domain, "ai");
@@ -543,7 +558,10 @@ mod tests {
         assert!(!derived.direct);
         assert_eq!(
             derived.via,
-            vec!["ai.cognition_run".to_string(), "ai.baseline_proposal".to_string()]
+            vec![
+                "ai.cognition_run".to_string(),
+                "ai.baseline_proposal".to_string()
+            ]
         );
         assert_eq!(derived.semantic_confidence, "structurally_supported");
         // 认知/基线条目无内容版本表，不得伪造 revision
@@ -554,12 +572,8 @@ mod tests {
 
     #[test]
     fn architecture_spec_blocked_when_derived_trace_not_active() {
-        let spec = build_architecture_spec(
-            Uuid::nil(),
-            &draft_registry(),
-            &[cognition_row()],
-            false,
-        );
+        let spec =
+            build_architecture_spec(Uuid::nil(), &draft_registry(), &[cognition_row()], false);
         assert_eq!(spec.edges.len(), 0, "derived_trace 未 active 不得出边");
         assert_eq!(spec.nodes.len(), 0);
     }

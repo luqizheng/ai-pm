@@ -106,9 +106,9 @@ pub async fn run_sandboxed(
 
     apply_env_whitelist(&mut cmd, workdir, &config.extra_env);
 
-    let mut child = cmd.spawn().map_err(|e| {
-        SandboxError::Internal(format!("spawn {} failed: {e}", config.program))
-    })?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| SandboxError::Internal(format!("spawn {} failed: {e}", config.program)))?;
 
     // §3.1：输入经 stdin；写完即关闭（子进程读到 EOF 才继续）
     if let Some(mut stdin) = child.stdin.take() {
@@ -172,8 +172,11 @@ fn apply_env_whitelist(
     for (key, value) in extra {
         // 调用方追加项同样受控：拒绝看起来像凭据的键名（防御性）
         let lower = key.to_ascii_lowercase();
-        if lower.contains("token") || lower.contains("secret") || lower.contains("password")
-            || lower.contains("database_url") || lower.contains("api_key")
+        if lower.contains("token")
+            || lower.contains("secret")
+            || lower.contains("password")
+            || lower.contains("database_url")
+            || lower.contains("api_key")
         {
             continue;
         }
@@ -234,10 +237,7 @@ pub fn platform_command(script: &str) -> (String, Vec<String>) {
     }
     #[cfg(not(windows))]
     {
-        (
-            "sh".to_string(),
-            vec!["-c".to_string(), script.to_string()],
-        )
+        ("sh".to_string(), vec!["-c".to_string(), script.to_string()])
     }
 }
 
@@ -282,10 +282,7 @@ mod tests {
             .await
             .expect("应成功");
         let text = String::from_utf8_lossy(&output);
-        assert!(
-            text.contains("hello"),
-            "stdin 内容应到达子进程：{text}"
-        );
+        assert!(text.contains("hello"), "stdin 内容应到达子进程：{text}");
     }
 
     #[tokio::test]
@@ -306,16 +303,15 @@ mod tests {
         // 父进程里的凭据类变量不得出现在子进程环境中（§3.2）
         std::env::set_var("AI_PM_TEST_SECRET_TOKEN", "must-not-leak");
         std::env::set_var("DATABASE_URL", "postgres://leak");
-        let output = run_sandboxed(&config(PRINT_ENV), b"").await.expect("应成功");
+        let output = run_sandboxed(&config(PRINT_ENV), b"")
+            .await
+            .expect("应成功");
         let env_text = String::from_utf8_lossy(&output).to_ascii_lowercase();
         assert!(
             !env_text.contains("must-not-leak"),
             "凭据不得继承到渲染子进程"
         );
-        assert!(
-            !env_text.contains("postgres://leak"),
-            "数据库 DSN 不得继承"
-        );
+        assert!(!env_text.contains("postgres://leak"), "数据库 DSN 不得继承");
         std::env::remove_var("AI_PM_TEST_SECRET_TOKEN");
         std::env::remove_var("DATABASE_URL");
     }

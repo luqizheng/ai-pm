@@ -189,7 +189,11 @@ async fn world(pool: PgPool) -> World {
         Some(json!({ "role": "owner" })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "owner may appoint another owner: {body}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "owner may appoint another owner: {body}"
+    );
 
     World {
         app,

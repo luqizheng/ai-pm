@@ -271,8 +271,8 @@ async fn check_non_kb_refs_tx(
             ))
         })?;
         // SEC-P2-1 口径是「同租户」；逻辑检索锚允许同租户跨项目（V1 §5.1）。
-        let probe = crate::reference_targets::probe(&mut **tx, target.table, id, tenant_id, None)
-            .await?;
+        let probe =
+            crate::reference_targets::probe(&mut **tx, target.table, id, tenant_id, None).await?;
         if !target.allows(probe) {
             return Err(KbServiceError::Invalid(format!(
                 "reference target {}:{}/{} is missing or out of tenant scope (SEC-P2-1)",

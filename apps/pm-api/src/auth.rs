@@ -37,7 +37,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
-use pm_application::repo::identity::{IdentityRepo, IdentityRepoError, ProvisionIdentity, ResolvedIdentity};
+use pm_application::repo::identity::{
+    IdentityRepo, IdentityRepoError, ProvisionIdentity, ResolvedIdentity,
+};
 use pm_domain::TeamRole;
 
 /// The `off`-mode principal (fixed id so tests and dev seeds are stable).
@@ -520,12 +522,19 @@ async fn ensure_tenant(
     identity: &AuthenticatedIdentity,
 ) -> Result<Uuid, IdentityRepoError> {
     let repo = crate::support::repos::identity_repo(&auth.pool);
-    if let Some(id) = repo.find_tenant(identity.provider, &identity.claims_tenant_key).await? {
+    if let Some(id) = repo
+        .find_tenant(identity.provider, &identity.claims_tenant_key)
+        .await?
+    {
         return Ok(id);
     }
     let display_name = format!("{}:{}", identity.provider, identity.claims_tenant_key);
     match repo
-        .insert_tenant(identity.provider, &identity.claims_tenant_key, &display_name)
+        .insert_tenant(
+            identity.provider,
+            &identity.claims_tenant_key,
+            &display_name,
+        )
         .await?
     {
         Some(id) => Ok(id),

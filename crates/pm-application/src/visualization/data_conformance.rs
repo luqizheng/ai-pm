@@ -114,7 +114,10 @@ pub fn summary(rows: &[ConformanceViolation]) -> String {
         .map(|row| format!("{}/{}={}", row.check_id, row.table_name, row.violations))
         .collect();
     if offending.is_empty() {
-        format!("关系数据符合性核查通过（{} 项检查，全部 0 违规）", rows.len())
+        format!(
+            "关系数据符合性核查通过（{} 项检查，全部 0 违规）",
+            rows.len()
+        )
     } else {
         format!("关系数据符合性核查失败：{}", offending.join(", "))
     }

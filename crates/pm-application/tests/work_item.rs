@@ -46,11 +46,13 @@ async fn seed_world(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
     .await
     .unwrap();
     let principal_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Alex Morgan')")
-        .bind(principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Alex Morgan')",
+    )
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
     (tenant_id, project_id, principal_id)
 }
 
@@ -106,6 +108,8 @@ fn task_request(project_id: Uuid, title: &str) -> CreateTaskRequest {
         ai_role_version_id: None,
         implementation_baseline_id: None,
         acceptance_criteria: None,
+        goal: None,
+        deliverables: None,
     }
 }
 
@@ -114,11 +118,16 @@ fn task_request(project_id: Uuid, title: &str) -> CreateTaskRequest {
 #[sqlx::test(migrations = "../../migrations")]
 async fn task_create_registers_work_item_and_activity(pool: PgPool) {
     let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
-    let created = create_task(&pool, task_request(project_id, "Implement sign-in"), &actor(principal_id))
+    let created = create_task(
+        &pool,
+        task_request(project_id, "Implement sign-in"),
+        &actor(principal_id),
+    )
+    .await
+    .expect("create task");
+    let (item_id, title, status) = work_item_row(&pool, tenant_id, "task", created.id)
         .await
-        .expect("create task");
-    let (item_id, title, status) =
-        work_item_row(&pool, tenant_id, "task", created.id).await.expect("work item registered");
+        .expect("work item registered");
     assert_eq!(title, "Implement sign-in");
     assert_eq!(status, "open"); // draft → open
     assert_eq!(activity_count(&pool, item_id, "created").await, 1);
@@ -161,8 +170,9 @@ async fn ensure_is_idempotent_and_does_not_clobber_status(pool: PgPool) {
     .unwrap();
     tx.commit().await.unwrap();
     assert_eq!(first, second);
-    let (_, title, status) =
-        work_item_row(&pool, tenant_id, "task", target_id).await.expect("row");
+    let (_, title, status) = work_item_row(&pool, tenant_id, "task", target_id)
+        .await
+        .expect("row");
     assert_eq!(title, "Updated title");
     assert_eq!(status, "in_progress");
 }
@@ -197,8 +207,9 @@ async fn transition_records_activity_only_on_semantic_change(pool: PgPool) {
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    let (item_id, _, status) =
-        work_item_row(&pool, tenant_id, "task", target_id).await.expect("registered");
+    let (item_id, _, status) = work_item_row(&pool, tenant_id, "task", target_id)
+        .await
+        .expect("registered");
     assert_eq!(status, "in_progress");
     assert_eq!(activity_count(&pool, item_id, "status_changed").await, 1);
 
@@ -261,10 +272,12 @@ async fn pinned_requirement_creates_implements_relation(pool: PgPool) {
             .expect("link"),
         "first link inserts"
     );
-    let (task_item, _, _) =
-        work_item_row(&pool, tenant_id, "task", created.id).await.expect("task item");
-    let (req_item, _, _) =
-        work_item_row(&pool, tenant_id, "requirement", requirement_id).await.expect("req item");
+    let (task_item, _, _) = work_item_row(&pool, tenant_id, "task", created.id)
+        .await
+        .expect("task item");
+    let (req_item, _, _) = work_item_row(&pool, tenant_id, "requirement", requirement_id)
+        .await
+        .expect("req item");
     let relation_type: String = sqlx::query_scalar(
         "SELECT relation_type FROM core.work_item_relation \
           WHERE source_item_id = $1 AND target_item_id = $2",
@@ -275,13 +288,21 @@ async fn pinned_requirement_creates_implements_relation(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(relation_type, "implements");
-    assert_eq!(activity_count(&pool, task_item, "relation_changed").await, 1);
+    assert_eq!(
+        activity_count(&pool, task_item, "relation_changed").await,
+        1
+    );
 
     // 幂等：同修订再次 link（rows_affected=0 早退）→ 关系不重复。
-    assert!(!link_task_requirement(&pool, created.id, requirement_id, revision_id, &actor)
-        .await
-        .expect("second link"));
-    assert_eq!(activity_count(&pool, task_item, "relation_changed").await, 1);
+    assert!(
+        !link_task_requirement(&pool, created.id, requirement_id, revision_id, &actor)
+            .await
+            .expect("second link")
+    );
+    assert_eq!(
+        activity_count(&pool, task_item, "relation_changed").await,
+        1
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -331,12 +352,17 @@ async fn list_activity_supports_item_and_project_dimensions(pool: PgPool) {
         tx.commit().await.unwrap();
     }
     // Project 维度：两个事项的活动都可见。
-    let project_feed =
-        list_activity(&pool, tenant_id, None, Some(project_id), None, 50, 0).await.unwrap();
+    let project_feed = list_activity(&pool, tenant_id, None, Some(project_id), None, 50, 0)
+        .await
+        .unwrap();
     assert_eq!(project_feed.len(), 2);
     // Item 维度：单事项。
-    let (item_a, _, _) = work_item_row(&pool, tenant_id, "task", target_a).await.unwrap();
-    let item_feed = list_activity(&pool, tenant_id, Some(item_a), None, None, 50, 0).await.unwrap();
+    let (item_a, _, _) = work_item_row(&pool, tenant_id, "task", target_a)
+        .await
+        .unwrap();
+    let item_feed = list_activity(&pool, tenant_id, Some(item_a), None, None, 50, 0)
+        .await
+        .unwrap();
     assert_eq!(item_feed.len(), 1);
     // 无过滤条件 → Validation（PA-05-05 至少一个维度）。
     assert!(matches!(
@@ -387,8 +413,17 @@ async fn relation_validation_and_removal(pool: PgPool) {
     .unwrap();
     // self 关系与未知类型拒绝。
     assert!(matches!(
-        add_relation(&mut tx, tenant_id, item_a, item_a, "references", "human", None, None)
-            .await,
+        add_relation(
+            &mut tx,
+            tenant_id,
+            item_a,
+            item_a,
+            "references",
+            "human",
+            None,
+            None
+        )
+        .await,
         Err(WorkItemError::Validation(_))
     ));
     assert!(
@@ -404,14 +439,7 @@ async fn relation_validation_and_removal(pool: PgPool) {
     // 同关联幂等（不产生第二行）。
     let mut tx = pool.begin().await.unwrap();
     let again = add_relation(
-        &mut tx,
-        tenant_id,
-        item_a,
-        item_b,
-        "blocks",
-        "human",
-        None,
-        None,
+        &mut tx, tenant_id, item_a, item_b, "blocks", "human", None, None,
     )
     .await
     .unwrap();
@@ -432,13 +460,12 @@ async fn relation_validation_and_removal(pool: PgPool) {
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let remaining: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.work_item_relation WHERE id = $1",
-    )
-    .bind(again)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.work_item_relation WHERE id = $1")
+            .bind(again)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(remaining, 0);
     assert_eq!(activity_count(&pool, item_a, "relation_changed").await, 2);
 }
@@ -511,7 +538,9 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let empty = my_feed(&pool, tenant_id, outsider, None, 50, 0).await.unwrap();
+    let empty = my_feed(&pool, tenant_id, outsider, None, 50, 0)
+        .await
+        .unwrap();
     assert!(empty.is_empty());
 
     // 项目成员视角：可见。
@@ -525,7 +554,9 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0)
+        .await
+        .unwrap();
     assert_eq!(feed.len(), 1);
     assert!(feed[0].read_at.is_none());
 
@@ -534,12 +565,16 @@ async fn my_feed_routes_by_memberships_and_reads_state(pool: PgPool) {
     mark_read_state(&pool, tenant_id, principal_id, &[item_id], true)
         .await
         .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0)
+        .await
+        .unwrap();
     assert!(feed[0].read_at.is_some());
     mark_read_state(&pool, tenant_id, principal_id, &[item_id], false)
         .await
         .unwrap();
-    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0).await.unwrap();
+    let feed = my_feed(&pool, tenant_id, principal_id, None, 50, 0)
+        .await
+        .unwrap();
     assert!(feed[0].read_at.is_none());
 }
 
@@ -548,21 +583,20 @@ async fn project_and_product_feeds_scope_correctly(pool: PgPool) {
     let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
     seed_task_with_activity(&pool, tenant_id, project_id, principal_id, "P Task").await;
 
-    let project_rows =
-        project_feed(&pool, tenant_id, principal_id, project_id, 50, 0).await.unwrap();
+    let project_rows = project_feed(&pool, tenant_id, principal_id, project_id, 50, 0)
+        .await
+        .unwrap();
     assert_eq!(project_rows.len(), 1);
     assert_eq!(project_rows[0].target_type, "task");
 
     // Product Feed：活动未挂产品 → 空；挂上后可见（team 先建满足外键）。
     let team_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO core.team (id, tenant_id, name) VALUES ($1, $2, 'Feed Team')",
-    )
-    .bind(team_id)
-    .bind(tenant_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("INSERT INTO core.team (id, tenant_id, name) VALUES ($1, $2, 'Feed Team')")
+        .bind(team_id)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let product_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO core.product (id, team_id, tenant_id, key, name) \
@@ -658,7 +692,6 @@ async fn task_product_link_lands_on_product_feed(pool: PgPool) {
     assert_eq!(rows.len(), 2);
 }
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn my_feed_views_counts_and_mark_all(pool: PgPool) {
     let (tenant_id, project_id, principal_id) = seed_world(&pool).await;
@@ -672,7 +705,9 @@ async fn my_feed_views_counts_and_mark_all(pool: PgPool) {
     .await
     .unwrap();
     seed_task_with_activity(&pool, tenant_id, project_id, principal_id, "Feed V").await;
-    let counts = my_feed_counts(&pool, tenant_id, principal_id).await.unwrap();
+    let counts = my_feed_counts(&pool, tenant_id, principal_id)
+        .await
+        .unwrap();
     assert_eq!(counts.total, 1);
     assert_eq!(counts.unread, 1);
 
@@ -696,7 +731,9 @@ async fn my_feed_views_counts_and_mark_all(pool: PgPool) {
     pm_application::work_item::mark_all_my_feed_read(&pool, tenant_id, principal_id)
         .await
         .unwrap();
-    let counts = my_feed_counts(&pool, tenant_id, principal_id).await.unwrap();
+    let counts = my_feed_counts(&pool, tenant_id, principal_id)
+        .await
+        .unwrap();
     assert_eq!(counts.total, 1);
     assert_eq!(counts.unread, 0);
     assert_eq!(counts.attention, 0);
@@ -757,9 +794,11 @@ async fn work_item_detail_relations_and_execution_logs(pool: PgPool) {
     )
     .await
     .unwrap();
-    add_relation(&mut tx, tenant_id, item_a, item_b, "blocks", "human", None, None)
-        .await
-        .unwrap();
+    add_relation(
+        &mut tx, tenant_id, item_a, item_b, "blocks", "human", None, None,
+    )
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
 
     // 详情：注册行 + 双向关联 + 活动。
@@ -786,27 +825,16 @@ async fn work_item_detail_relations_and_execution_logs(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let logs = pm_application::work_item::item_execution_logs(
-        &pool,
-        tenant_id,
-        created.id,
-        50,
-        0,
-    )
-    .await
-    .unwrap();
+    let logs = pm_application::work_item::item_execution_logs(&pool, tenant_id, created.id, 50, 0)
+        .await
+        .unwrap();
     assert_eq!(logs.len(), 1);
     assert_eq!(logs[0].event_type, "run_started");
 
     // 单活动：未读 → 读取（read_at 为调用者状态）。
     let activity = activities.last().unwrap();
-    let row = pm_application::work_item::get_activity(
-        &pool,
-        tenant_id,
-        principal_id,
-        activity.id,
-    )
-    .await
-    .unwrap();
+    let row = pm_application::work_item::get_activity(&pool, tenant_id, principal_id, activity.id)
+        .await
+        .unwrap();
     assert_eq!(row.summary, activity.summary);
 }

@@ -13,8 +13,8 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiResult};
+use pm_application::repo::GuardQueryRepo;
 use pm_application::requirement_read;
 
 pub(crate) fn router() -> Router<AppState> {

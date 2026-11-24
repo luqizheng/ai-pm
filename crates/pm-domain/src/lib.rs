@@ -24,9 +24,7 @@ pub use command::{ProjectCommand, Reversibility};
 pub use error::CommandError;
 pub use ids::*;
 pub use policy::PolicyDecision;
-pub use project_member::{
-    ProjectMemberRole, PROJECT_MEMBER_ROLES,
-};
+pub use project_member::{ProjectMemberRole, PROJECT_MEMBER_ROLES};
 pub use proposal::{AnalysisResult, Confidence, Finding, Proposal, RiskLevel};
 pub use repo_access::{parse_access_levels, RepoAccess};
 pub use task::{LegacyMapping, TaskStatus};
@@ -38,7 +36,7 @@ pub use task_transition::{
 };
 pub use team::{TeamRole, SYSTEM_TENANT};
 pub use visualization::{
-    validate, DerivedTrace, Nature, RelationRegistry, RelationStatus, Severity, SourceRef, VizSpec,
-    VizProblem, ValidationReport,
+    validate, DerivedTrace, Nature, RelationRegistry, RelationStatus, Severity, SourceRef,
+    ValidationReport, VizProblem, VizSpec,
 };
 pub use waiting::{WaitingContext, WaitingReason};

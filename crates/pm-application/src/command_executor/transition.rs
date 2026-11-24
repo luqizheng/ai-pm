@@ -194,12 +194,10 @@ pub(crate) async fn apply_task_transition(
     .await
     .map_err(|err| match err {
         crate::work_item::WorkItemError::Db(e) => CommandError::Db(e),
-        crate::work_item::WorkItemError::NotFound => CommandError::Validation(format!(
-            "task {task_id} work item target not found"
-        )),
-        crate::work_item::WorkItemError::Validation(m) => {
-            CommandError::Validation(m.to_string())
+        crate::work_item::WorkItemError::NotFound => {
+            CommandError::Validation(format!("task {task_id} work item target not found"))
         }
+        crate::work_item::WorkItemError::Validation(m) => CommandError::Validation(m.to_string()),
     })?;
     // D4（T-024）：上游进入终态时，在**同一事务**里解锁满足依赖的 blocked 下游。
     // `unlock_downstream` 会反过来调用本函数（`blocked → ready`），因此必须用

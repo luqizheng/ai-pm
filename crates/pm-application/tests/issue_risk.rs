@@ -97,12 +97,24 @@ async fn issue_lifecycle_registers_and_transitions(pool: PgPool) {
     )
     .await
     .expect("create issue");
-    assert_eq!(work_item_status(&pool, issue_id).await.as_deref(), Some("open"));
+    assert_eq!(
+        work_item_status(&pool, issue_id).await.as_deref(),
+        Some("open")
+    );
     assert_eq!(activity_count(&pool, issue_id, "created").await, 1);
 
     // 非法 severity / 空标题 / cancel 缺理由拒绝。
     assert!(matches!(
-        create_issue(&pool, tenant_id, project_id, "x", None, Some("urgent"), &actor).await,
+        create_issue(
+            &pool,
+            tenant_id,
+            project_id,
+            "x",
+            None,
+            Some("urgent"),
+            &actor
+        )
+        .await,
         Err(WorkDomainError::Validation(_))
     ));
     assert!(matches!(
@@ -125,17 +137,40 @@ async fn issue_lifecycle_registers_and_transitions(pool: PgPool) {
     assert_eq!(activity_count(&pool, issue_id, "status_changed").await, 1);
     // 终态后再迁移拒绝。
     assert!(matches!(
-        transition_issue(&pool, tenant_id, issue_id, "cancelled", Some("late"), &actor).await,
+        transition_issue(
+            &pool,
+            tenant_id,
+            issue_id,
+            "cancelled",
+            Some("late"),
+            &actor
+        )
+        .await,
         Err(WorkDomainError::Validation(_))
     ));
 
     // cancel 必填理由路径（新 issue）。
-    let issue2 = create_issue(&pool, tenant_id, project_id, "Duplicate report", None, None, &actor)
-        .await
-        .expect("create issue 2");
-    transition_issue(&pool, tenant_id, issue2, "cancelled", Some("duplicate"), &actor)
-        .await
-        .expect("cancel");
+    let issue2 = create_issue(
+        &pool,
+        tenant_id,
+        project_id,
+        "Duplicate report",
+        None,
+        None,
+        &actor,
+    )
+    .await
+    .expect("create issue 2");
+    transition_issue(
+        &pool,
+        tenant_id,
+        issue2,
+        "cancelled",
+        Some("duplicate"),
+        &actor,
+    )
+    .await
+    .expect("cancel");
     assert_eq!(
         work_item_status(&pool, issue2).await.as_deref(),
         Some("cancelled")
@@ -288,23 +323,59 @@ async fn agent_principal_is_rejected_on_human_rest_face(pool: PgPool) {
     let agent = actor(agent_id);
 
     assert!(matches!(
-        create_issue(&pool, tenant_id, project_id, "agent issue", None, None, &agent).await,
+        create_issue(
+            &pool,
+            tenant_id,
+            project_id,
+            "agent issue",
+            None,
+            None,
+            &agent
+        )
+        .await,
         Err(WorkDomainError::Forbidden(_))
     ));
     assert!(matches!(
-        create_risk(&pool, tenant_id, project_id, "agent risk", None, None, None, &agent).await,
+        create_risk(
+            &pool,
+            tenant_id,
+            project_id,
+            "agent risk",
+            None,
+            None,
+            None,
+            &agent
+        )
+        .await,
         Err(WorkDomainError::Forbidden(_))
     ));
     assert!(matches!(
-        create_blocker(&pool, tenant_id, project_id, "agent blocker", None, None, &agent).await,
+        create_blocker(
+            &pool,
+            tenant_id,
+            project_id,
+            "agent blocker",
+            None,
+            None,
+            &agent
+        )
+        .await,
         Err(WorkDomainError::Forbidden(_))
     ));
 
     // 人类创建后，agent 也不得迁移（resolve/clear 同为人类面动作）。
     let actor = actor(human_id);
-    let issue_id = create_issue(&pool, tenant_id, project_id, "human issue", None, None, &actor)
-        .await
-        .unwrap();
+    let issue_id = create_issue(
+        &pool,
+        tenant_id,
+        project_id,
+        "human issue",
+        None,
+        None,
+        &actor,
+    )
+    .await
+    .unwrap();
     assert!(matches!(
         transition_issue(&pool, tenant_id, issue_id, "resolved", Some("done"), &agent).await,
         Err(WorkDomainError::Forbidden(_))

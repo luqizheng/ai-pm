@@ -198,11 +198,7 @@ async fn create_team_claims_tenant_and_creator_becomes_owner(pool: PgPool) {
     let me_body = me(&app, &t).await;
     assert_eq!(me_body["onboarding_required"], json!(false));
     assert_eq!(me_body["is_active"], json!(true));
-    assert_eq!(
-        me_body["team_role"],
-        json!("owner"),
-        "Q2：创建者自动 Owner"
-    );
+    assert_eq!(me_body["team_role"], json!("owner"), "Q2：创建者自动 Owner");
     assert_eq!(me_body["is_admin"], json!(true));
     assert_eq!(me_body["team"]["id"], json!(team_id.to_string()));
     assert_eq!(me_body["team"]["name"], json!("Acme R&D"));
@@ -653,8 +649,7 @@ async fn member_is_readonly_on_team_admin_surface(pool: PgPool) {
     let base = format!("/v1/pm/teams/{team_id}");
 
     // member 经两步加团激活（POST members → PATCH principals）。
-    let (member_token, _member_id) =
-        add_active_member(&app, team_id, &owner_token, "usr-m").await;
+    let (member_token, _member_id) = add_active_member(&app, team_id, &owner_token, "usr-m").await;
 
     // member 读档案/名册 OK，写 403（Owner 独占）。
     let (status, _) = call(&app, "GET", &base, &member_token, None).await;
@@ -766,12 +761,11 @@ async fn team_profile_update_and_audit_rows(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(name, "Acme Renamed");
-    let (slug,): (Option<String>,) =
-        sqlx::query_as("SELECT slug FROM core.tenant WHERE id = $1")
-            .bind(tenant_id)
-            .fetch_one(&db)
-            .await
-            .unwrap();
+    let (slug,): (Option<String>,) = sqlx::query_as("SELECT slug FROM core.tenant WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(slug.as_deref(), Some("acme"));
 
     // 审计四列口径：team.created / team.updated 的 target = team 行
@@ -870,7 +864,14 @@ async fn member_admin_surface_contract(pool: PgPool) {
 
     // 目标非成员 → 404 member not found（读/写皆然）。
     let stranger = Uuid::new_v4();
-    let (status, body) = call(&app, "GET", &format!("{base}/{stranger}"), &owner_token, None).await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("{base}/{stranger}"),
+        &owner_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(body["message"], json!("member not found"));
     let (status, body) = call(

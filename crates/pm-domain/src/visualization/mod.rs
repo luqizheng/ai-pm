@@ -22,8 +22,8 @@ pub mod validation;
 
 pub use nature::Nature;
 pub use registry::{
-    validate_registry, NodeKindDefinition, RelationDefinition, RelationRegistry, RelationStatus,
-    RegistryError,
+    validate_registry, NodeKindDefinition, RegistryError, RelationDefinition, RelationRegistry,
+    RelationStatus,
 };
 pub use source_ref::{DerivedTrace, SourceRef};
 pub use spec::{

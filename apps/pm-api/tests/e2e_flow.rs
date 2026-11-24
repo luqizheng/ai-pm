@@ -1122,13 +1122,12 @@ async fn flow_15_archive_and_no_key_leak(pool: PgPool) {
 
     // P4-ORG Phase 5：close 守卫 = 关联 Products 的 Product Owner——fixture 直
     // 接种 Team/Product/Link（首位 Owner = 调用者 dev-off principal）。
-    let tenant_id: uuid::Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let tenant_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     // project.tenant_id 无 FK（identity 域镜像键），fixture 先补租户行。
     sqlx::query(
         "INSERT INTO core.tenant (id, provider, external_key, display_name)          VALUES ($1, 'lmms', 'e2e-flow-15', 'E2E Flow') ON CONFLICT (id) DO NOTHING",

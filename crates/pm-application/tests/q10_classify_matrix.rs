@@ -44,8 +44,9 @@ use pm_application::projc::{
     approve_proposal as projc_approve, create_proposal as projc_create,
     publish_version as projc_publish, register_source as projc_source,
     submit_proposal as projc_submit, upsert_object_draft as projc_upsert,
-    CreateProposalInput as ProjcCreate, DecisionInput as ProjcDecision, ProposalMemberPin as ProjcPin,
-    PublishVersionInput as ProjcPub, SourceInput as ProjcSrc, UpsertObjectDraft as ProjcDraft,
+    CreateProposalInput as ProjcCreate, DecisionInput as ProjcDecision,
+    ProposalMemberPin as ProjcPin, PublishVersionInput as ProjcPub, SourceInput as ProjcSrc,
+    UpsertObjectDraft as ProjcDraft,
 };
 
 const LEAD: Uuid = Uuid::from_u128(0x7172_0000_0000_0000_0000_0000_0000_0031);
@@ -267,15 +268,24 @@ async fn approved_proposal(
     )
     .await
     .unwrap();
-    submit_proposal(pool, project, &AuditActor::principal(LEAD), drafted.proposal_id, Some(expected))
-        .await
-        .unwrap();
+    submit_proposal(
+        pool,
+        project,
+        &AuditActor::principal(LEAD),
+        drafted.proposal_id,
+        Some(expected),
+    )
+    .await
+    .unwrap();
     approve_proposal(
         pool,
         project,
         &AuditActor::principal(LEAD),
         drafted.proposal_id,
-        DecisionInput { reason: Some("q10c".into()), expected_version_no: expected },
+        DecisionInput {
+            reason: Some("q10c".into()),
+            expected_version_no: expected,
+        },
     )
     .await
     .unwrap();
@@ -323,15 +333,24 @@ async fn projc_approved_proposal(pool: &PgPool, project: Uuid, source: Uuid, key
     )
     .await
     .unwrap();
-    projc_submit(pool, project, &AuditActor::principal(LEAD), drafted.proposal_id, Some(0))
-        .await
-        .unwrap();
+    projc_submit(
+        pool,
+        project,
+        &AuditActor::principal(LEAD),
+        drafted.proposal_id,
+        Some(0),
+    )
+    .await
+    .unwrap();
     projc_approve(
         pool,
         project,
         &AuditActor::principal(LEAD),
         drafted.proposal_id,
-        ProjcDecision { reason: Some("q10c".into()), expected_version_no: 0 },
+        ProjcDecision {
+            reason: Some("q10c".into()),
+            expected_version_no: 0,
+        },
     )
     .await
     .unwrap();
@@ -399,7 +418,10 @@ async fn wait_advisory_waiters(pool: &PgPool, at_least: i64, label: &str) {
 
 /// 测试侧持有 pc 发布 advisory（显式事务——pg_advisory_xact_lock 必须在事务内
 /// 才能跨语句持有）。drop = 释放。
-async fn hold_publish_advisory(pool: &PgPool, project: Uuid) -> sqlx::Transaction<'static, Postgres> {
+async fn hold_publish_advisory(
+    pool: &PgPool,
+    project: Uuid,
+) -> sqlx::Transaction<'static, Postgres> {
     let mut tx = pool.begin().await.unwrap();
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('pc_publish:' || $1::text)::bigint)")
         .bind(project.to_string())
@@ -416,10 +438,11 @@ async fn probe_advisory_free(pool: &PgPool, project: Uuid) -> bool {
         .execute(&mut *probe)
         .await
         .unwrap();
-    let r = sqlx::query("SELECT pg_advisory_xact_lock(hashtext('pc_publish:' || $1::text)::bigint)")
-        .bind(project.to_string())
-        .execute(&mut *probe)
-        .await;
+    let r =
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtext('pc_publish:' || $1::text)::bigint)")
+            .bind(project.to_string())
+            .execute(&mut *probe)
+            .await;
     probe.rollback().await.ok();
     r.is_ok()
 }
@@ -492,17 +515,36 @@ async fn op_status(pool: &PgPool, proposal: Uuid) -> Option<String> {
     .unwrap()
 }
 
-fn assert_counts(outcome: &pm_application::analysis_report::CloseOutcome, applied: u64, replayed: u64, failed: u64) {
+fn assert_counts(
+    outcome: &pm_application::analysis_report::CloseOutcome,
+    applied: u64,
+    replayed: u64,
+    failed: u64,
+) {
     assert_eq!(outcome.applied_proposals, applied, "applied: {outcome:?}");
-    assert_eq!(outcome.replayed_proposals, replayed, "replayed: {outcome:?}");
-    assert_eq!(outcome.publish_failed_proposals, failed, "failed: {outcome:?}");
+    assert_eq!(
+        outcome.replayed_proposals, replayed,
+        "replayed: {outcome:?}"
+    );
+    assert_eq!(
+        outcome.publish_failed_proposals, failed,
+        "failed: {outcome:?}"
+    );
 }
 
 fn expect_kind(outcome: ClassifyOutcome, kind: &str, cleanup_is_none: bool) {
     match outcome {
-        ClassifyOutcome::FailedTech { kind: k, cleanup_error, .. } => {
+        ClassifyOutcome::FailedTech {
+            kind: k,
+            cleanup_error,
+            ..
+        } => {
             assert_eq!(k, kind, "kind 不符");
-            assert_eq!(cleanup_error.is_none(), cleanup_is_none, "cleanup_error 形态不符");
+            assert_eq!(
+                cleanup_error.is_none(),
+                cleanup_is_none,
+                "cleanup_error 形态不符"
+            );
         }
         other => panic!("预期 FailedTech{{{kind}}}，实得 {other:?}"),
     }
@@ -516,13 +558,18 @@ async fn t1_normal_publish_applied(pool: PgPool) {
     let (report, source) = seed_analyzed_report(&pool, project, tenant).await;
     let (proposal, _) = approved_proposal(&pool, project, source, "t1-p", 0).await;
 
-    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD)).await.unwrap();
+    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD))
+        .await
+        .unwrap();
 
     assert_counts(&outcome, 1, 0, 0);
     assert_eq!(outcome.withdrawn_proposals, 0);
     assert_eq!(report_status(&pool, report).await, "closed");
     assert_eq!(proposal_status(&pool, proposal).await, "applied");
-    assert_eq!(op_status(&pool, proposal).await.as_deref(), Some("completed"));
+    assert_eq!(
+        op_status(&pool, proposal).await.as_deref(),
+        Some("completed")
+    );
     assert_eq!(version_count(&pool, project).await, 1);
 }
 
@@ -538,7 +585,15 @@ async fn t2_competitor_publish_close_short_circuit_replayed(pool: PgPool) {
     let holder = hold_publish_advisory(&pool, project).await;
     let p2 = pool.clone();
     let competitor = tokio::spawn(async move {
-        publish_version(&p2, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: proposal }).await
+        publish_version(
+            &p2,
+            project,
+            &AuditActor::principal(LEAD),
+            PublishVersionInput {
+                proposal_id: proposal,
+            },
+        )
+        .await
     });
     wait_advisory_waiters(&pool, 1, "竞争腿入队").await;
 
@@ -558,7 +613,10 @@ async fn t2_competitor_publish_close_short_circuit_replayed(pool: PgPool) {
     assert_counts(&outcome, 0, 1, 0);
     assert_eq!(report_status(&pool, report).await, "closed");
     assert_eq!(proposal_status(&pool, proposal).await, "applied");
-    assert_eq!(op_status(&pool, proposal).await.as_deref(), Some("completed"));
+    assert_eq!(
+        op_status(&pool, proposal).await.as_deref(),
+        Some("completed")
+    );
     assert_eq!(version_count(&pool, project).await, 1, "同提案至多一版本");
 }
 
@@ -571,18 +629,31 @@ async fn t3_cas_commit_err_classifies_failed(pool: PgPool) {
     // 版本载体（发布后 applied，不进 close 清单）+ 基线 0 的目标提案
     let (vehicle, _) = approved_proposal(&pool, project, source, "t3-veh", 0).await;
     let (target, _) = approved_proposal(&pool, project, source, "t3-cas", 0).await;
-    publish_version(&pool, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: vehicle })
+    publish_version(
+        &pool,
+        project,
+        &AuditActor::principal(LEAD),
+        PublishVersionInput {
+            proposal_id: vehicle,
+        },
+    )
+    .await
+    .unwrap();
+
+    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD))
         .await
         .unwrap();
-
-    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD)).await.unwrap();
 
     // 提交型 Err：CAS 同事务内置 (failed,failed) → 分类 Failed（业务）
     assert_counts(&outcome, 0, 0, 1);
     assert_eq!(report_status(&pool, report).await, "closed");
     assert_eq!(proposal_status(&pool, target).await, "failed");
     assert_eq!(op_status(&pool, target).await.as_deref(), Some("failed"));
-    assert_eq!(version_count(&pool, project).await, 1, "目标提案不得产生新版本");
+    assert_eq!(
+        version_count(&pool, project).await,
+        1,
+        "目标提案不得产生新版本"
+    );
 }
 
 // ── T4：回滚型 Err（E9 L3 Forbidden）→ 分类 (approved,None) → Failed（L3）─
@@ -594,13 +665,23 @@ async fn t4_l3_forbidden_rollback_err_classifies_failed(pool: PgPool) {
     let (target, object_id) = approved_proposal(&pool, project, source, "t4-l3", 0).await;
     insert_unresolved_conflict(&pool, tenant, project, object_id).await;
 
-    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD)).await.unwrap();
+    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD))
+        .await
+        .unwrap();
 
     // 回滚型 Err：提案态保持 approved → 分类时点未确认先行完成 → Failed
     assert_counts(&outcome, 0, 0, 1);
     assert_eq!(report_status(&pool, report).await, "closed");
-    assert_eq!(proposal_status(&pool, target).await, "approved", "回滚型 Err 不得改提案态");
-    assert_eq!(op_status(&pool, target).await, None, "回滚型 Err 不得落账本行");
+    assert_eq!(
+        proposal_status(&pool, target).await,
+        "approved",
+        "回滚型 Err 不得改提案态"
+    );
+    assert_eq!(
+        op_status(&pool, target).await,
+        None,
+        "回滚型 Err 不得落账本行"
+    );
     assert_eq!(version_count(&pool, project).await, 0);
 }
 
@@ -624,7 +705,15 @@ async fn t5_err_then_competitor_publish_classifies_replay(pool: PgPool) {
     let holder = hold_publish_advisory(&pool, project).await;
     let p2 = pool.clone();
     let competitor = tokio::spawn(async move {
-        publish_version(&p2, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: target }).await
+        publish_version(
+            &p2,
+            project,
+            &AuditActor::principal(LEAD),
+            PublishVersionInput {
+                proposal_id: target,
+            },
+        )
+        .await
     });
     wait_advisory_waiters(&pool, 1, "竞争腿入队").await;
 
@@ -656,9 +745,16 @@ async fn t6_classify_advisory_mutual_exclusion_protocol(pool: PgPool) {
     let (report, source) = seed_analyzed_report(&pool, project, tenant).await;
     let (target, _) = approved_proposal(&pool, project, source, "t6-p", 0).await;
     // 预发布（applied+completed）→ 后续 publish 为幂等重放
-    publish_version(&pool, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: target })
-        .await
-        .unwrap();
+    publish_version(
+        &pool,
+        project,
+        &AuditActor::principal(LEAD),
+        PublishVersionInput {
+            proposal_id: target,
+        },
+    )
+    .await
+    .unwrap();
 
     // 测试自建协议同款事务：BEGIN + P + 同款 JOIN，保持打开
     let mut holder = pool.begin().await.unwrap();
@@ -681,7 +777,15 @@ async fn t6_classify_advisory_mutual_exclusion_protocol(pool: PgPool) {
 
     let p2 = pool.clone();
     let competitor = tokio::spawn(async move {
-        publish_version(&p2, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: target }).await
+        publish_version(
+            &p2,
+            project,
+            &AuditActor::principal(LEAD),
+            PublishVersionInput {
+                proposal_id: target,
+            },
+        )
+        .await
     });
     wait_advisory_waiters(&pool, 1, "发布者被协议事务阻塞").await;
 
@@ -707,11 +811,18 @@ async fn t7_mixed_counts_two_closes(pool: PgPool) {
     let (report_a, source_a) = seed_analyzed_report(&pool, project_a, tenant_a).await;
     let (veh_a, _) = approved_proposal(&pool, project_a, source_a, "t7a-veh", 0).await;
     let (cas_a, _) = approved_proposal(&pool, project_a, source_a, "t7a-cas", 0).await;
-    publish_version(&pool, project_a, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: veh_a })
+    publish_version(
+        &pool,
+        project_a,
+        &AuditActor::principal(LEAD),
+        PublishVersionInput { proposal_id: veh_a },
+    )
+    .await
+    .unwrap();
+    let (first_a, _) = approved_proposal(&pool, project_a, source_a, "t7a-first", 1).await;
+    let outcome_a = close_report(&pool, project_a, report_a, &AuditActor::principal(LEAD))
         .await
         .unwrap();
-    let (first_a, _) = approved_proposal(&pool, project_a, source_a, "t7a-first", 1).await;
-    let outcome_a = close_report(&pool, project_a, report_a, &AuditActor::principal(LEAD)).await.unwrap();
     assert_counts(&outcome_a, 1, 0, 1);
     assert_eq!(proposal_status(&pool, first_a).await, "applied");
     assert_eq!(proposal_status(&pool, cas_a).await, "failed");
@@ -726,7 +837,15 @@ async fn t7_mixed_counts_two_closes(pool: PgPool) {
     let holder = hold_publish_advisory(&pool, project_b).await;
     let p2 = pool.clone();
     let competitor = tokio::spawn(async move {
-        publish_version(&p2, project_b, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: replay_b }).await
+        publish_version(
+            &p2,
+            project_b,
+            &AuditActor::principal(LEAD),
+            PublishVersionInput {
+                proposal_id: replay_b,
+            },
+        )
+        .await
     });
     wait_advisory_waiters(&pool, 1, "T7b 竞争腿入队").await;
     let p1 = pool.clone();
@@ -743,7 +862,11 @@ async fn t7_mixed_counts_two_closes(pool: PgPool) {
     assert_counts(&outcome_b, 0, 1, 1);
     assert_eq!(proposal_status(&pool, replay_b).await, "applied");
     assert_eq!(proposal_status(&pool, first_b).await, "failed");
-    assert_eq!(version_count(&pool, project_b).await, 1, "项目 B 无载体：replay_b 发布即 v1");
+    assert_eq!(
+        version_count(&pool, project_b).await,
+        1,
+        "项目 B 无载体：replay_b 发布即 v1"
+    );
 
     // 两 close 合计 = (1,1,2)：三计数路径全覆盖；字面 (1,1,1) 见文件头不可满足证明
 }
@@ -773,12 +896,18 @@ async fn t8a2_l3_small_pool_exhaustion_fault_tolerated(pool: PgPool) {
     let (target, _) = approved_proposal(&pool, project, source, "t8a2-p", 0).await;
 
     let small = small_pool(&pool, 1, 300).await;
-    let outcome = close_report(&small, project, report, &AuditActor::principal(LEAD)).await.unwrap();
+    let outcome = close_report(&small, project, report, &AuditActor::principal(LEAD))
+        .await
+        .unwrap();
 
     // publish（池饿死）与分类（begin 饿死 → FailedTech）均容错；报告照常关闭
     assert_counts(&outcome, 0, 0, 1);
     assert_eq!(report_status(&pool, report).await, "closed");
-    assert_eq!(proposal_status(&pool, target).await, "approved", "技术故障不改提案态");
+    assert_eq!(
+        proposal_status(&pool, target).await,
+        "approved",
+        "技术故障不改提案态"
+    );
     small.close().await;
 }
 
@@ -796,9 +925,15 @@ async fn t8bcd_l1_terminate_at_statement_boundaries(pool: PgPool) {
 
     // F2 边界：BEGIN 成功后、advisory 语句前终止 → advisory 语句报错
     let mut tx = pool.begin().await.unwrap();
-    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *tx).await.unwrap();
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
     assert!(terminate_backend(&pool, pid).await);
-    let adv = sqlx::query(advisory_sql).bind(project.to_string()).execute(&mut *tx).await;
+    let adv = sqlx::query(advisory_sql)
+        .bind(project.to_string())
+        .execute(&mut *tx)
+        .await;
     assert!(adv.is_err(), "F2 边界：终止后 advisory 语句必须报错");
     drop(tx);
     let gone: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE pid = $1")
@@ -806,13 +941,23 @@ async fn t8bcd_l1_terminate_at_statement_boundaries(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(gone, 0, "被终止 backend 须自 pg_stat_activity 消失（会话回滚）");
+    assert_eq!(
+        gone, 0,
+        "被终止 backend 须自 pg_stat_activity 消失（会话回滚）"
+    );
 
     // F3 边界：advisory 已获 → 终止 → JOIN 报错 + 显式 rollback 亦报错（F5 的
     // 数据库形态）——且 advisory 由服务端会话中断释放（正确性兜底事实）
     let mut tx = pool.begin().await.unwrap();
-    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *tx).await.unwrap();
-    sqlx::query(advisory_sql).bind(project.to_string()).execute(&mut *tx).await.unwrap();
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(advisory_sql)
+        .bind(project.to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
     assert!(terminate_backend(&pool, pid).await);
     let join = sqlx::query_as::<_, (String, Option<String>)>(join_sql)
         .bind(Uuid::new_v4())
@@ -821,19 +966,35 @@ async fn t8bcd_l1_terminate_at_statement_boundaries(pool: PgPool) {
     assert!(join.is_err(), "F3 边界：终止后 JOIN 必须报错");
     let rb = tx.rollback().await;
     assert!(rb.is_err(), "F5 数据库形态：死连接上显式回滚亦须报错");
-    assert!(probe_advisory_free(&pool, project).await, "advisory 须已被服务端释放");
+    assert!(
+        probe_advisory_free(&pool, project).await,
+        "advisory 须已被服务端释放"
+    );
 
     // F4 边界：JOIN 成功后、COMMIT 前终止 → COMMIT 报错（服务端已回滚）
     let mut tx = pool.begin().await.unwrap();
-    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *tx).await.unwrap();
-    sqlx::query(advisory_sql).bind(project.to_string()).execute(&mut *tx).await.unwrap();
-    let row: Option<(String, Option<String>)> =
-        sqlx::query_as(join_sql).bind(Uuid::new_v4()).fetch_optional(&mut *tx).await.unwrap();
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(advisory_sql)
+        .bind(project.to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let row: Option<(String, Option<String>)> = sqlx::query_as(join_sql)
+        .bind(Uuid::new_v4())
+        .fetch_optional(&mut *tx)
+        .await
+        .unwrap();
     assert_eq!(row, None);
     assert!(terminate_backend(&pool, pid).await);
     let commit = tx.commit().await;
     assert!(commit.is_err(), "F4 边界：终止后 COMMIT 必须报错");
-    assert!(probe_advisory_free(&pool, project).await, "COMMIT 失败后 advisory 须释放");
+    assert!(
+        probe_advisory_free(&pool, project).await,
+        "COMMIT 失败后 advisory 须释放"
+    );
     let _ = tenant;
 }
 
@@ -843,19 +1004,24 @@ async fn t8bcd_l1_terminate_at_statement_boundaries(pool: PgPool) {
 async fn t8e_l1_pool_recovery_five_steps(pool: PgPool) {
     // 步骤 1：从被测 Pool 获取连接 C，记录 PID
     let mut c = pool.acquire().await.unwrap();
-    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *c).await.unwrap();
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
     // 步骤 2：经独立（管理）连接终止该 backend
     assert!(terminate_backend(&pool, pid).await);
     // 步骤 3：在 C 上走真实事务结束路径——语句失败证明连接已死，drop 归还坏句柄
-    let dead: Result<i32, sqlx::Error> =
-        sqlx::query_scalar("SELECT 1").fetch_one(&mut *c).await;
+    let dead: Result<i32, sqlx::Error> = sqlx::query_scalar("SELECT 1").fetch_one(&mut *c).await;
     assert!(dead.is_err(), "被终止连接上的语句必须报错");
     drop(c);
     // 步骤 4：再次从同一 Pool 获取（循环重取，不得命中已终止句柄）
     // 步骤 5：断言查询成功且 PID ≠ 已终止 PID——Pool 归还路径确实剔除坏连接
     for _ in 0..10 {
         let mut conn = pool.acquire().await.unwrap();
-        let fresh: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(&mut *conn).await.unwrap();
+        let fresh: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
         assert_ne!(fresh, pid, "Pool 不得再交付已终止 backend 的连接");
         drop(conn);
     }
@@ -877,7 +1043,10 @@ async fn t8_l2_advisory_and_join_timeout_mapping(pool: PgPool) {
     let outcome = classify_pc_after_publish_err(&small, project, target).await;
     expect_kind(outcome, "advisory", true);
     drop(holder);
-    assert!(probe_advisory_free(&pool, project).await, "holder 释放后 advisory 须空闲");
+    assert!(
+        probe_advisory_free(&pool, project).await,
+        "holder 释放后 advisory 须空闲"
+    );
     small.close().await;
 
     // F3：advisory 获取成功 → JOIN 被 ACCESS EXCLUSIVE 表锁阻塞 →
@@ -893,7 +1062,10 @@ async fn t8_l2_advisory_and_join_timeout_mapping(pool: PgPool) {
     let outcome = classify_pc_after_publish_err(&small2, project, target).await;
     expect_kind(outcome, "join", true);
     drop(blocker);
-    assert!(probe_advisory_free(&pool, project).await, "I-3：F3 显式回滚必须释放 advisory");
+    assert!(
+        probe_advisory_free(&pool, project).await,
+        "I-3：F3 显式回滚必须释放 advisory"
+    );
     small2.close().await;
     let _ = report;
 }
@@ -910,9 +1082,16 @@ async fn l2_classify_semantic_mapping_pc_projc(pool: PgPool) {
     let o1 = classify_pc_after_publish_err(&pool, project, target).await;
     assert!(matches!(o1, ClassifyOutcome::Failed), "{o1:?}");
     // 发布后：持锁 JOIN 确认 applied∧completed → Replay（I-1 唯一来源）
-    publish_version(&pool, project, &AuditActor::principal(LEAD), PublishVersionInput { proposal_id: target })
-        .await
-        .unwrap();
+    publish_version(
+        &pool,
+        project,
+        &AuditActor::principal(LEAD),
+        PublishVersionInput {
+            proposal_id: target,
+        },
+    )
+    .await
+    .unwrap();
     let o2 = classify_pc_after_publish_err(&pool, project, target).await;
     assert!(matches!(o2, ClassifyOutcome::Replay), "{o2:?}");
 
@@ -921,9 +1100,16 @@ async fn l2_classify_semantic_mapping_pc_projc(pool: PgPool) {
     let target_pj = projc_approved_proposal(&pool, project, projc_src, "l2map-pj").await;
     let o3 = classify_projc_after_publish_err(&pool, project, target_pj).await;
     assert!(matches!(o3, ClassifyOutcome::Failed), "{o3:?}");
-    projc_publish(&pool, project, &AuditActor::principal(LEAD), ProjcPub { proposal_id: target_pj })
-        .await
-        .unwrap();
+    projc_publish(
+        &pool,
+        project,
+        &AuditActor::principal(LEAD),
+        ProjcPub {
+            proposal_id: target_pj,
+        },
+    )
+    .await
+    .unwrap();
     let o4 = classify_projc_after_publish_err(&pool, project, target_pj).await;
     assert!(matches!(o4, ClassifyOutcome::Replay), "{o4:?}");
 }
@@ -936,7 +1122,9 @@ async fn t1_projc_close_applied(pool: PgPool) {
     let (report, projc_src) = seed_analyzed_report_projc(&pool, project, tenant).await;
     let target = projc_approved_proposal(&pool, project, projc_src, "t1pj-p").await;
 
-    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD)).await.unwrap();
+    let outcome = close_report(&pool, project, report, &AuditActor::principal(LEAD))
+        .await
+        .unwrap();
 
     assert_eq!(outcome.applied_proposals, 0);
     assert_eq!(outcome.replayed_proposals, 0);

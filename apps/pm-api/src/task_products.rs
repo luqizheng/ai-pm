@@ -23,8 +23,8 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
+use pm_application::repo::GuardQueryRepo;
 
 impl From<TaskProductError> for ApiError {
     fn from(e: TaskProductError) -> Self {
@@ -68,7 +68,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tasks/{task_id}/product-acceptances",
             get(list_acceptances_handler).post(record_acceptance_handler),
         )
-        .route("/v1/pm/tasks/{task_id}/traceability", get(traceability_handler))
+        .route(
+            "/v1/pm/tasks/{task_id}/traceability",
+            get(traceability_handler),
+        )
 }
 
 /// 任务的项目边界：不存在 / 跨租户 / 非成员 → 404。
@@ -97,8 +100,8 @@ async fn list_handler(
     Path(task_id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<task_products::TaskProductLink>>> {
     require_task_project(&state, task_id, &principal).await?;
-    let links = task_products::list_task_products(&state.pool, principal.tenant_id, task_id)
-        .await?;
+    let links =
+        task_products::list_task_products(&state.pool, principal.tenant_id, task_id).await?;
     Ok(Json(links))
 }
 
@@ -177,12 +180,8 @@ async fn list_acceptances_handler(
     Path(task_id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<task_products::ProductAcceptanceRow>>> {
     require_task_project(&state, task_id, &principal).await?;
-    let rows = task_products::list_product_acceptances(
-        &state.pool,
-        principal.tenant_id,
-        task_id,
-    )
-    .await?;
+    let rows =
+        task_products::list_product_acceptances(&state.pool, principal.tenant_id, task_id).await?;
     Ok(Json(rows))
 }
 
@@ -219,7 +218,6 @@ async fn record_acceptance_handler(
     )
         .into_response())
 }
-
 
 // ───────────────────── 全链追溯（PA07-IMP-007）
 

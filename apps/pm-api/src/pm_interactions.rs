@@ -14,8 +14,8 @@ use serde_json::Value;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
+use pm_application::repo::GuardQueryRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route(

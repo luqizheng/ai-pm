@@ -78,8 +78,12 @@ impl LlmIdentitySynthesis {
             .unwrap_or_else(|| "（暂无仓库分析报告）".to_string());
         let mut objects = String::new();
         for (name, kind, no, content) in &input.pc_objects {
-            let body: String =
-                content.as_deref().unwrap_or("").chars().take(1_200).collect();
+            let body: String = content
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(1_200)
+                .collect();
             objects.push_str(&format!("\n## {name}（{kind} · v{no}）\n{body}\n"));
         }
         if objects.is_empty() {
@@ -222,10 +226,7 @@ mod tests {
         .await;
 
         let input = IdentitySynthesisInput {
-            interview_answers: vec![(
-                "这个项目是做什么的？".into(),
-                "图书管理系统".into(),
-            )],
+            interview_answers: vec![("这个项目是做什么的？".into(), "图书管理系统".into())],
             repo_digest: None,
             pc_objects: vec![],
         };

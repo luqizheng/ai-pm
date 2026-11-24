@@ -97,10 +97,7 @@ pub struct ContractCheck {
 ///
 /// `spec_samples`：合法 Spec 样例（至少覆盖每个已交付 kind 一条）。
 /// 返回逐项断言结果；任何一项失败 = 该 Adapter 不得接入（AC-2）。
-pub fn verify(
-    adapter: &dyn RenderAdapter,
-    spec_samples: &[VizSpec],
-) -> Vec<ContractCheck> {
+pub fn verify(adapter: &dyn RenderAdapter, spec_samples: &[VizSpec]) -> Vec<ContractCheck> {
     let checks = vec![
         check_identity(adapter),
         check_formats(adapter),
@@ -147,10 +144,7 @@ fn check_formats(adapter: &dyn RenderAdapter) -> ContractCheck {
 }
 
 /// 断言 1：合法产物输出。
-fn check_output_validity(
-    adapter: &dyn RenderAdapter,
-    samples: &[VizSpec],
-) -> ContractCheck {
+fn check_output_validity(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> ContractCheck {
     for spec in samples {
         for format in adapter.supported_formats() {
             match adapter.render(spec, *format) {
@@ -159,11 +153,7 @@ fn check_output_validity(
                         return ContractCheck {
                             name: "output_validity",
                             passed: false,
-                            detail: format!(
-                                "{} 产物为空（{}）",
-                                format.as_str(),
-                                spec.slot_key
-                            ),
+                            detail: format!("{} 产物为空（{}）", format.as_str(), spec.slot_key),
                         };
                     }
                 }
@@ -188,14 +178,8 @@ fn check_output_validity(
 }
 
 /// 断言 2：零意外外部请求（SVG 产物经静态化检查）。
-fn check_no_external_requests(
-    adapter: &dyn RenderAdapter,
-    samples: &[VizSpec],
-) -> ContractCheck {
-    if !adapter
-        .supported_formats()
-        .contains(&OutputFormat::Svg)
-    {
+fn check_no_external_requests(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> ContractCheck {
+    if !adapter.supported_formats().contains(&OutputFormat::Svg) {
         return ContractCheck {
             name: "no_external_requests",
             passed: true,
@@ -228,10 +212,7 @@ fn check_no_external_requests(
 /// 那正是正确转义的结果（实测 SeeCode 产物即含此形态）。
 fn check_no_injection(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> ContractCheck {
     const PAYLOAD: &str = "<script>alert('viz-contract')</script>";
-    let mut probe = samples
-        .first()
-        .cloned()
-        .expect("注入检查需要至少一份样例");
+    let mut probe = samples.first().cloned().expect("注入检查需要至少一份样例");
     // 给首节点换上注入向量（标签渲染为纯文本，不应进入可执行上下文）
     if let Some(node) = probe.nodes.first_mut() {
         node.label = PAYLOAD.to_string();
@@ -244,10 +225,7 @@ fn check_no_injection(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> Contr
             return ContractCheck {
                 name: "no_injection",
                 passed: false,
-                detail: format!(
-                    "{} 产物中出现未转义的注入字面——转义缺失",
-                    format.as_str()
-                ),
+                detail: format!("{} 产物中出现未转义的注入字面——转义缺失", format.as_str()),
             };
         }
     }
@@ -262,10 +240,7 @@ fn check_no_injection(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> Contr
 ///
 /// 约定：产物中必须出现每个节点的 label（身份锚点）；SVG/HTML 是渲染产物，
 /// 不直接承载 source_ref 结构，但 label + 数量必须一致——否则图与 Spec 脱钩。
-fn check_identity_retention(
-    adapter: &dyn RenderAdapter,
-    samples: &[VizSpec],
-) -> ContractCheck {
+fn check_identity_retention(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> ContractCheck {
     for spec in samples {
         for format in adapter.supported_formats() {
             let Ok(output) = adapter.render(spec, *format) else {
@@ -283,10 +258,7 @@ fn check_identity_retention(
                 return ContractCheck {
                     name: "identity_retention",
                     passed: false,
-                    detail: format!(
-                        "{} 产物丢失节点标识：{:?}",
-                        spec.slot_key, missing
-                    ),
+                    detail: format!("{} 产物丢失节点标识：{:?}", spec.slot_key, missing),
                 };
             }
         }
@@ -325,10 +297,7 @@ fn check_determinism(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> Contra
 }
 
 /// 断言 6：渲染失败可处理——超预算输入必须被显式拒绝或降级，不得产出半成品。
-fn check_failure_is_explicit(
-    adapter: &dyn RenderAdapter,
-    samples: &[VizSpec],
-) -> ContractCheck {
+fn check_failure_is_explicit(adapter: &dyn RenderAdapter, samples: &[VizSpec]) -> ContractCheck {
     // 构造一个超预算输入（空 spec 无法校验预算，改用"节点数远超 strict 档"探测）
     let mut oversized = samples
         .first()
@@ -359,10 +328,7 @@ fn check_failure_is_explicit(
                 return ContractCheck {
                     name: "failure_is_explicit",
                     passed: false,
-                    detail: format!(
-                        "超预算输入产出了空产物（{}）——应显式拒绝",
-                        format.as_str()
-                    ),
+                    detail: format!("超预算输入产出了空产物（{}）——应显式拒绝", format.as_str()),
                 };
             }
             _ => continue,
@@ -398,7 +364,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            spec: &VizSpec,
+            format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             // 合规渲染器必须转义 label（与 SeeCode 的 esc() 同款：& < > "）
             let nodes = spec
                 .nodes
@@ -434,7 +404,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            spec: &VizSpec,
+            format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             let nodes = spec
                 .nodes
                 .iter()
@@ -443,9 +417,7 @@ mod tests {
                 .join(";");
             Ok(RenderOutput {
                 format,
-                content: format!(
-                    r#"<svg><a href="https://cdn.example.com/x">{nodes}</a></svg>"#
-                ),
+                content: format!(r#"<svg><a href="https://cdn.example.com/x">{nodes}</a></svg>"#),
             })
         }
     }
@@ -462,7 +434,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            spec: &VizSpec,
+            format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             use std::sync::atomic::{AtomicUsize, Ordering};
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let n = COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -551,12 +527,20 @@ mod tests {
             fn supported_formats(&self) -> &'static [OutputFormat] {
                 &[OutputFormat::Svg]
             }
-            fn render(&self, spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+            fn render(
+                &self,
+                spec: &VizSpec,
+                format: OutputFormat,
+            ) -> Result<RenderOutput, RenderError> {
                 Ok(RenderOutput {
                     format,
                     content: format!(
                         "<svg>{}</svg>",
-                        spec.nodes.iter().map(|n| n.label.as_str()).collect::<Vec<_>>().join("")
+                        spec.nodes
+                            .iter()
+                            .map(|n| n.label.as_str())
+                            .collect::<Vec<_>>()
+                            .join("")
                     ),
                 })
             }

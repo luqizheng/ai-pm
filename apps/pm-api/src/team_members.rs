@@ -99,7 +99,10 @@ async fn detail_handler(
     if !caller.is_admin {
         return err_forbidden("team owner required");
     }
-    match member_repo(&state.pool).find_member(team_id, principal_id).await {
+    match member_repo(&state.pool)
+        .find_member(team_id, principal_id)
+        .await
+    {
         Ok(Some(r)) => Json(json!({
             "principal_id": r.principal_id,
             "display_name": r.display_name,
@@ -257,16 +260,11 @@ async fn run_change(
     let outcome_cell = std::sync::Mutex::new(None::<Value>);
     // 事务管线（锁序/级联/审计）在仓储；authorize 纯函数在锁内回调裁决。
     let result = member_repo(pool)
-        .apply_change(
-            team_id,
-            &actor,
-            op.target(),
-            &|snap: ChangeSnapshot| {
-                let (outcome, writes, audits) = authorize(snap, &op, caller.principal_id)?;
-                *outcome_cell.lock().unwrap() = Some(outcome);
-                Ok((writes, audits))
-            },
-        )
+        .apply_change(team_id, &actor, op.target(), &|snap: ChangeSnapshot| {
+            let (outcome, writes, audits) = authorize(snap, &op, caller.principal_id)?;
+            *outcome_cell.lock().unwrap() = Some(outcome);
+            Ok((writes, audits))
+        })
         .await;
     match result {
         Ok(_) => {
@@ -307,8 +305,7 @@ fn db_error_repo(err: MemberRepoError) -> Response {
 }
 
 /// authorize 的裁决产物：响应体 + DML + 审计行；Err = (错误码, 消息)。
-type DecisionResult =
-    Result<(Value, Vec<MemberWrite>, Vec<MemberAuditLine>), (String, String)>;
+type DecisionResult = Result<(Value, Vec<MemberWrite>, Vec<MemberAuditLine>), (String, String)>;
 
 /// 纯规则判定：能力矩阵 + 最后 owner 保护（锁内回调，Err 经
 /// MemberRepoError::RuleRejected 回滚后由 run_change 映射 409/403/404）。
@@ -370,7 +367,10 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
                 ));
             }
             let current = target_role.ok_or_else(|| {
-                ("MEMBER_NOT_FOUND".to_string(), "member not found".to_string())
+                (
+                    "MEMBER_NOT_FOUND".to_string(),
+                    "member not found".to_string(),
+                )
             })?;
             // 任命（member→owner）/ 降级（owner→member）都允许作用于任何成员；
             // 对自己：升 owner 无意义（已是 owner），降级 = 放弃 Owner（多 Owner
@@ -418,7 +418,10 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
                 ));
             }
             let current = target_role.ok_or_else(|| {
-                ("MEMBER_NOT_FOUND".to_string(), "member not found".to_string())
+                (
+                    "MEMBER_NOT_FOUND".to_string(),
+                    "member not found".to_string(),
+                )
             })?;
             if current == TeamRole::Owner && snap.owner_count <= 1 {
                 return Err((
@@ -428,7 +431,9 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
             }
             Ok((
                 json!({ "principal_id": principal_id, "removed": true }),
-                vec![MemberWrite::Remove { principal_id: *principal_id }],
+                vec![MemberWrite::Remove {
+                    principal_id: *principal_id,
+                }],
                 vec![MemberAuditLine {
                     action: "team_member.removed",
                     target: *principal_id,
@@ -441,7 +446,10 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
 
         MemberOp::Leave { principal_id } => {
             let current = target_role.ok_or_else(|| {
-                ("MEMBER_NOT_FOUND".to_string(), "member not found".to_string())
+                (
+                    "MEMBER_NOT_FOUND".to_string(),
+                    "member not found".to_string(),
+                )
             })?;
             if *principal_id != actor_id {
                 return Err((
@@ -458,7 +466,9 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
             }
             Ok((
                 json!({ "principal_id": principal_id, "left": true }),
-                vec![MemberWrite::Remove { principal_id: *principal_id }],
+                vec![MemberWrite::Remove {
+                    principal_id: *principal_id,
+                }],
                 vec![MemberAuditLine {
                     action: "team_member.left",
                     target: *principal_id,
@@ -474,11 +484,7 @@ fn authorize(snap: ChangeSnapshot, op: &MemberOp, actor_id: Uuid) -> DecisionRes
 use crate::team_llm_guard::{err_forbidden, err_not_found};
 
 fn bad_request(message: &str) -> Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(json!({ "message": message })),
-    )
-        .into_response()
+    (StatusCode::BAD_REQUEST, Json(json!({ "message": message }))).into_response()
 }
 
 fn conflict(code: &str, message: &str) -> Response {

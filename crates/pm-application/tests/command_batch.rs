@@ -188,11 +188,13 @@ async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
     let fx = seed(&pool, "BATCH-T").await;
     // "未解析角色" 需要真的没有对应成员：bootstrap 默认会编制 architect，
     // 所以先移除其项目授权行，才能覆盖 findings 里的 assignee_unresolved 分支。
-    sqlx::query("DELETE FROM ai.project_agent_member WHERE project_id = $1 AND role_kind = 'architect'")
-        .bind(fx.project_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "DELETE FROM ai.project_agent_member WHERE project_id = $1 AND role_kind = 'architect'",
+    )
+    .bind(fx.project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let executor = executor(&pool);
     executor
         .execute(

@@ -17,7 +17,6 @@ use pm_application::outbox_ops::{self, ReplayOutcome};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     common::bootstrap_system_project(pool, code).await.0
 }

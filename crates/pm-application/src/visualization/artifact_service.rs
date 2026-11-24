@@ -96,13 +96,11 @@ pub async fn create_draft(
     let mut tx = pool.begin().await?;
 
     // 项目归属校验（同一租户内；非成员/跨租户一律 404 同形）
-    let tenant_id: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(VizError::NotFound)?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(VizError::NotFound)?;
 
     let next_version: i32 = sqlx::query_scalar(
         "SELECT COALESCE(max(version_no), 0) + 1 FROM viz.artifact \
@@ -285,19 +283,20 @@ pub async fn decide_approval(
     }
 
     // 哈希 / 版本漂移检测（与被审 artifact 当前值比对）
-    let current: (String, i32) = sqlx::query_as(
-        "SELECT spec_hash, version_no FROM viz.artifact WHERE id = $1",
-    )
-    .bind(artifact_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let current: (String, i32) =
+        sqlx::query_as("SELECT spec_hash, version_no FROM viz.artifact WHERE id = $1")
+            .bind(artifact_id)
+            .fetch_one(&mut *tx)
+            .await?;
     if current.0 != target_hash {
         return Err(VizError::Conflict(
             "artifact 已在审批请求后变更（哈希漂移），请重新发起".to_string(),
         ));
     }
     if current.1 != expected_version {
-        return Err(VizError::Conflict("artifact 版本号已漂移，请重新发起".to_string()));
+        return Err(VizError::Conflict(
+            "artifact 版本号已漂移，请重新发起".to_string(),
+        ));
     }
 
     let new_status = match action {
@@ -360,16 +359,18 @@ pub async fn decide_approval(
 /// 标记 stale（source_hash 失配时由 stale 检测调用）。
 ///
 /// 只对 published 生效；不自动重渲染（ADR-VIZ-006）。
-pub async fn mark_stale(pool: &PgPool, artifact_id: Uuid, actor: &AuditActor) -> Result<(), VizError> {
+pub async fn mark_stale(
+    pool: &PgPool,
+    artifact_id: Uuid,
+    actor: &AuditActor,
+) -> Result<(), VizError> {
     let mut tx = pool.begin().await?;
 
-    let project_id: Uuid = sqlx::query_scalar(
-        "SELECT project_id FROM viz.artifact WHERE id = $1",
-    )
-    .bind(artifact_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(VizError::NotFound)?;
+    let project_id: Uuid = sqlx::query_scalar("SELECT project_id FROM viz.artifact WHERE id = $1")
+        .bind(artifact_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(VizError::NotFound)?;
     let state: String = sqlx::query_scalar("SELECT state FROM viz.artifact WHERE id = $1")
         .bind(artifact_id)
         .fetch_one(&mut *tx)
@@ -383,8 +384,15 @@ pub async fn mark_stale(pool: &PgPool, artifact_id: Uuid, actor: &AuditActor) ->
         .execute(&mut *tx)
         .await?;
 
-    append_audit(&mut tx, project_id, actor, "viz.artifact.stale", "viz_artifact", Some(artifact_id))
-        .await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "viz.artifact.stale",
+        "viz_artifact",
+        Some(artifact_id),
+    )
+    .await?;
 
     tx.commit().await?;
     Ok(())

@@ -15,11 +15,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::visualization::nature::Nature;
 use crate::visualization::registry::RelationRegistry;
-use crate::visualization::spec::{Budget, SpecLimits, VizSpec, SPEC_VERSION};
 use crate::visualization::source_ref::DerivedTrace;
+use crate::visualization::spec::{Budget, SpecLimits, VizSpec, SPEC_VERSION};
 
 /// 校验严重级别。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     /// 提示。
@@ -54,7 +56,9 @@ pub struct ValidationReport {
 impl ValidationReport {
     /// 是否存在阻断级问题。
     pub fn has_blockers(&self) -> bool {
-        self.problems.iter().any(|p| p.severity() == Severity::Blocker)
+        self.problems
+            .iter()
+            .any(|p| p.severity() == Severity::Blocker)
     }
 
     /// 阻断级问题。
@@ -125,7 +129,11 @@ pub fn collect_visibility_refs(spec: &VizSpec) -> Vec<(String, String, String)> 
     let mut refs: Vec<(String, String, String)> = Vec::new();
     for node in &spec.nodes {
         if let Some(source) = &node.source_ref {
-            refs.push((source.domain.clone(), source.r#type.clone(), source.id.clone()));
+            refs.push((
+                source.domain.clone(),
+                source.r#type.clone(),
+                source.id.clone(),
+            ));
         }
     }
     for edge in &spec.edges {
@@ -177,7 +185,10 @@ fn validate_version(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Va
             report,
             codes::blocker::SPEC_VERSION_UNSUPPORTED,
             "spec_version",
-            format!("major 版本不兼容：{}（当前支持 {SPEC_VERSION}）", spec.spec_version),
+            format!(
+                "major 版本不兼容：{}（当前支持 {SPEC_VERSION}）",
+                spec.spec_version
+            ),
             None,
         );
     } else if minor > cur_minor {
@@ -260,8 +271,14 @@ fn validate_budget(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Val
     let _ = ctx;
 }
 
-fn validate_payload_size(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut ValidationReport) {
-    let bytes = serde_json::to_vec(spec).map(|b| b.len()).unwrap_or(usize::MAX);
+fn validate_payload_size(
+    spec: &VizSpec,
+    ctx: &ValidationContext<'_>,
+    report: &mut ValidationReport,
+) {
+    let bytes = serde_json::to_vec(spec)
+        .map(|b| b.len())
+        .unwrap_or(usize::MAX);
     if bytes > ctx.limits.max_payload_bytes {
         push(
             report,
@@ -295,14 +312,17 @@ fn validate_nodes(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Vali
 
         validate_label(&node.label, &format!("{at}.label"), ctx, report);
 
-        let text_len = node.label.chars().count()
-            + node.status.as_deref().map(str::len).unwrap_or(0);
+        let text_len =
+            node.label.chars().count() + node.status.as_deref().map(str::len).unwrap_or(0);
         if text_len > ctx.limits.max_node_text_len {
             push(
                 report,
                 codes::blocker::SPEC_LABEL_TOO_LONG,
                 &format!("{at}.label"),
-                format!("节点文本总长 {text_len} 超出上限 {}", ctx.limits.max_node_text_len),
+                format!(
+                    "节点文本总长 {text_len} 超出上限 {}",
+                    ctx.limits.max_node_text_len
+                ),
                 Some("精简标签".to_string()),
             );
         }
@@ -336,16 +356,16 @@ fn validate_nodes(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Vali
                 &source_ref.r#type,
                 &source_ref.id,
             ) {
-            push(
-                report,
-                codes::blocker::SPEC_UNKNOWN_OBJECT_REF,
-                &format!("{at}.source_ref"),
-                format!(
-                    "来源对象不存在或不可见：{}/{}/{}",
-                    source_ref.domain, source_ref.r#type, source_ref.id
-                ),
-                Some("移除该节点或改用可见对象".to_string()),
-            );
+                push(
+                    report,
+                    codes::blocker::SPEC_UNKNOWN_OBJECT_REF,
+                    &format!("{at}.source_ref"),
+                    format!(
+                        "来源对象不存在或不可见：{}/{}/{}",
+                        source_ref.domain, source_ref.r#type, source_ref.id
+                    ),
+                    Some("移除该节点或改用可见对象".to_string()),
+                );
             }
         }
 
@@ -464,10 +484,7 @@ fn validate_edges(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Vali
                         report,
                         codes::blocker::SPEC_RELATION_NOT_REGISTERED,
                         &format!("{at}.relation"),
-                        format!(
-                            "关系 {} 是反向视图别名，不得作为独立边投影",
-                            edge.relation
-                        ),
+                        format!("关系 {} 是反向视图别名，不得作为独立边投影", edge.relation),
                         Some("改用其 reverse_view_of 指向的关系键".to_string()),
                     );
                 }
@@ -478,7 +495,10 @@ fn validate_edges(spec: &VizSpec, ctx: &ValidationContext<'_>, report: &mut Vali
         if let Some(derived) = &edge.derived {
             validate_derived(derived, &format!("{at}.derived"), report);
             for via in &derived.via {
-                if !ctx.resolver.relation_exists(&edge.from, via, &edge.relation) {
+                if !ctx
+                    .resolver
+                    .relation_exists(&edge.from, via, &edge.relation)
+                {
                     push(
                         report,
                         codes::blocker::SPEC_DERIVED_TRACE_INVALID,
@@ -513,7 +533,12 @@ fn validate_endpoint_types(
     at: &str,
     report: &mut ValidationReport,
 ) {
-    let find_kind = |id: &str| spec.nodes.iter().find(|n| n.id == id).map(|n| n.kind.clone());
+    let find_kind = |id: &str| {
+        spec.nodes
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| n.kind.clone())
+    };
     if let Some(kind) = find_kind(&edge.from) {
         if !relation.accepts_endpoint(&kind, true) {
             push(
@@ -664,13 +689,7 @@ fn parse_version(value: &str) -> Option<(u32, u32)> {
     Some((major.parse().ok()?, minor.parse().ok()?))
 }
 
-fn push(
-    report: &mut ValidationReport,
-    code: &str,
-    at: &str,
-    message: String,
-    fix: Option<String>,
-) {
+fn push(report: &mut ValidationReport, code: &str, at: &str, message: String, fix: Option<String>) {
     report.problems.push(VizProblem {
         code: code.to_string(),
         at: at.to_string(),
@@ -711,34 +730,32 @@ mod tests {
     fn registry() -> RelationRegistry {
         RelationRegistry {
             version: "1".to_string(),
-            relations: vec![
-                RelationDefinition {
-                    key: "design.covers_requirement".to_string(),
-                    status: RelationStatus::Active,
-                    domain: "design".to_string(),
-                    owner_role: "design-owner".to_string(),
-                    source: "design.design_requirement".to_string(),
-                    source_type: "design_revision".to_string(),
-                    target_type: "requirement_revision".to_string(),
-                    direction: "directed".to_string(),
-                    semantics: "设计覆盖需求".to_string(),
-                    governance_level: Some("L2".to_string()),
-                    introduced_in: Some("1.0".to_string()),
-                    signoff_by: None,
-            signoff_at: None,
-            registry_version: None,
-            semantic_version: None,
-            activated_at: None,
-                    signoff_record: None,
-                    view_alias: false,
-                    reverse_view_of: None,
-                    synthetic: false,
-                    business_fact: true,
-                    type_key_source: None,
-                    ref_role_filter: None,
-                    cardinality: None,
-                },
-            ],
+            relations: vec![RelationDefinition {
+                key: "design.covers_requirement".to_string(),
+                status: RelationStatus::Active,
+                domain: "design".to_string(),
+                owner_role: "design-owner".to_string(),
+                source: "design.design_requirement".to_string(),
+                source_type: "design_revision".to_string(),
+                target_type: "requirement_revision".to_string(),
+                direction: "directed".to_string(),
+                semantics: "设计覆盖需求".to_string(),
+                governance_level: Some("L2".to_string()),
+                introduced_in: Some("1.0".to_string()),
+                signoff_by: None,
+                signoff_at: None,
+                registry_version: None,
+                semantic_version: None,
+                activated_at: None,
+                signoff_record: None,
+                view_alias: false,
+                reverse_view_of: None,
+                synthetic: false,
+                business_fact: true,
+                type_key_source: None,
+                ref_role_filter: None,
+                cardinality: None,
+            }],
             node_kinds: vec![
                 NodeKindDefinition {
                     key: "requirement_revision".to_string(),
@@ -812,7 +829,10 @@ mod tests {
         }
     }
 
-    fn ctx<'a>(registry: &'a RelationRegistry, resolver: &'a dyn ObjectResolver) -> ValidationContext<'a> {
+    fn ctx<'a>(
+        registry: &'a RelationRegistry,
+        resolver: &'a dyn ObjectResolver,
+    ) -> ValidationContext<'a> {
         ValidationContext {
             registry,
             resolver,
@@ -903,7 +923,8 @@ mod tests {
         let mut s = spec();
         s.meta.budget = Budget::Strict;
         for i in 0..40 {
-            s.nodes.push(node(&format!("X-{i}"), "requirement_revision"));
+            s.nodes
+                .push(node(&format!("X-{i}"), "requirement_revision"));
         }
         let report = validate(&s, &ctx(&registry, &resolver));
         assert!(codes_of(&report).contains(&codes::blocker::SPEC_BUDGET_EXCEEDED));

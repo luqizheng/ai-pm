@@ -63,7 +63,6 @@ impl From<WorkItemError> for WorkDomainError {
     }
 }
 
-
 const SEVERITY: [&str; 3] = ["low", "medium", "high"];
 
 fn severity_ok(v: &str) -> bool {
@@ -143,7 +142,9 @@ pub async fn transition_issue(
 ) -> Result<(), WorkDomainError> {
     require_human(pool, actor).await?;
     if !matches!(to, "resolved" | "cancelled") {
-        return Err(WorkDomainError::Validation("target must be resolved|cancelled"));
+        return Err(WorkDomainError::Validation(
+            "target must be resolved|cancelled",
+        ));
     }
     if to == "cancelled" && reason.map(str::trim).unwrap_or_default().is_empty() {
         return Err(WorkDomainError::Validation("reason is required"));
@@ -161,7 +162,9 @@ pub async fn transition_issue(
         return Err(WorkDomainError::NotFound);
     };
     if status_before != "open" {
-        return Err(WorkDomainError::Validation("only open issues can transition"));
+        return Err(WorkDomainError::Validation(
+            "only open issues can transition",
+        ));
     }
     let sql = if to == "resolved" {
         "UPDATE delivery.issue SET status = 'resolved', resolved_at = now(), \
@@ -317,10 +320,7 @@ pub async fn transition_risk(
     } else {
         "UPDATE delivery.risk SET status = 'mitigating', updated_at = now() WHERE id = $1"
     };
-    sqlx::query(sql)
-        .bind(risk_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(sql).bind(risk_id).execute(&mut *tx).await?;
     semantic_transition(
         &mut tx,
         tenant_id,

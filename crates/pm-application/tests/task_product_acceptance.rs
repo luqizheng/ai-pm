@@ -281,7 +281,10 @@ async fn acceptance_requires_active_link(pool: PgPool) {
     // PA06-IMP-001 A1：授权（Product Membership）先于资源语义——非成员在
     // 关联存在性检查之前即被拒（不向非成员泄露关联状态）。
     assert!(
-        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
+        matches!(
+            err,
+            pm_application::task_products::TaskProductError::Forbidden(_)
+        ),
         "got {err:?}"
     );
 }
@@ -298,11 +301,13 @@ async fn acceptance_requires_target_product_membership(pool: PgPool) {
 
     // 同项目人类成员但未加入该 Product → 拒。
     let outsider = Uuid::new_v4();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Outsider')")
-        .bind(outsider)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Outsider')",
+    )
+    .bind(outsider)
+    .execute(&pool)
+    .await
+    .unwrap();
     let outsider_actor = pm_application::actor::AuditActor {
         principal_id: outsider,
         identity_id: None,
@@ -329,7 +334,10 @@ async fn acceptance_requires_target_product_membership(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
+        matches!(
+            err,
+            pm_application::task_products::TaskProductError::Forbidden(_)
+        ),
         "got {err:?}"
     );
 
@@ -377,7 +385,10 @@ async fn acceptance_requires_target_product_membership(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::task_products::TaskProductError::Forbidden(_)),
+        matches!(
+            err,
+            pm_application::task_products::TaskProductError::Forbidden(_)
+        ),
         "got {err:?}"
     );
 }

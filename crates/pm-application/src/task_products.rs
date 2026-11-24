@@ -69,17 +69,24 @@ pub async fn list_task_products(
     tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<Vec<TaskProductLink>, TaskProductError> {
-    let exists: Option<i32> = sqlx::query_scalar(
-        "SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await?;
+    let exists: Option<i32> =
+        sqlx::query_scalar("SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
     if exists.is_none() {
         return Err(TaskProductError::TaskNotFound);
     }
-    let rows: Vec<(Uuid, String, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+    let rows: Vec<(
+        Uuid,
+        String,
+        String,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        chrono::DateTime<chrono::Utc>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    )> = sqlx::query_as(
         "SELECT p.id, p.name, p.status, tp.scope, tp.withdrawn_at, tp.created_at, tp.withdrawn_at \
            FROM delivery.task_product tp \
            JOIN core.product p ON p.id = tp.product_id \
@@ -118,14 +125,13 @@ pub async fn add_task_product(
     actor: &AuditActor,
 ) -> Result<(), TaskProductError> {
     let mut tx = pool.begin().await?;
-    let (project_id,): (Uuid,) = sqlx::query_as(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(TaskProductError::TaskNotFound)?;
+    let (project_id,): (Uuid,) =
+        sqlx::query_as("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(TaskProductError::TaskNotFound)?;
 
     // Product 必须存在且在业务活跃态（含 FOR UPDATE，闸内已锁行）。
     crate::product::assert_product_active(&mut tx, product_id).await?;
@@ -160,7 +166,17 @@ pub async fn add_task_product(
     .await?;
     // PA-05-05/08：业务归属建立 → Timeline 活动（挂 product_id，Product Feed
     // 数据源）；与审计同事务。
-    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(product_id), "relation_changed", "Task linked to product", actor.principal_id).await?;
+    wire_product_activity(
+        &mut tx,
+        tenant_id,
+        project_id,
+        task_id,
+        Some(product_id),
+        "relation_changed",
+        "Task linked to product",
+        actor.principal_id,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -176,14 +192,13 @@ pub async fn withdraw_task_product(
     actor: &AuditActor,
 ) -> Result<bool, TaskProductError> {
     let mut tx = pool.begin().await?;
-    let (project_id,): (Uuid,) = sqlx::query_as(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(TaskProductError::TaskNotFound)?;
+    let (project_id,): (Uuid,) =
+        sqlx::query_as("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(TaskProductError::TaskNotFound)?;
 
     let updated = sqlx::query(
         "UPDATE delivery.task_product \
@@ -211,7 +226,17 @@ pub async fn withdraw_task_product(
     )
     .await?;
     // PA-05-05/08：撤回也挂 product_id（Product Feed 可见撤回历史活动）。
-    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(product_id), "relation_changed", "Task product withdrawn", actor.principal_id).await?;
+    wire_product_activity(
+        &mut tx,
+        tenant_id,
+        project_id,
+        task_id,
+        Some(product_id),
+        "relation_changed",
+        "Task product withdrawn",
+        actor.principal_id,
+    )
+    .await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -360,7 +385,9 @@ pub async fn record_product_acceptance(
         return Err(TaskProductError::ProductNotActive("invalid_result"));
     }
     if !["common", "product_specific"].contains(&input.condition_scope.as_str()) {
-        return Err(TaskProductError::ProductNotActive("invalid_condition_scope"));
+        return Err(TaskProductError::ProductNotActive(
+            "invalid_condition_scope",
+        ));
     }
     let source = if input.source.is_empty() {
         "human".to_string()
@@ -378,12 +405,14 @@ pub async fn record_product_acceptance(
     // （第一轮资格项=Product Membership；「有效业务访问资格」维持台账号 6
     // OPEN 留接口）。唯一调用方为 REST 人类面（拓扑上 agent 不可达），
     // 本守卫把「拓扑排除」升级为显式执法。
-    crate::requirement::require_human(pool, actor).await.map_err(|e| match e {
-        PmWriteError::Forbidden(m) => TaskProductError::Forbidden(m),
-        PmWriteError::NotFound(m) => TaskProductError::Forbidden(m),
-        PmWriteError::Db(err) => TaskProductError::Db(err),
-        _ => TaskProductError::Forbidden("human principal required"),
-    })?;
+    crate::requirement::require_human(pool, actor)
+        .await
+        .map_err(|e| match e {
+            PmWriteError::Forbidden(m) => TaskProductError::Forbidden(m),
+            PmWriteError::NotFound(m) => TaskProductError::Forbidden(m),
+            PmWriteError::Db(err) => TaskProductError::Db(err),
+            _ => TaskProductError::Forbidden("human principal required"),
+        })?;
     let member: Option<i32> = sqlx::query_scalar(
         "SELECT 1 FROM core.product_member pm \
          JOIN core.product p ON p.id = pm.product_id \
@@ -401,14 +430,13 @@ pub async fn record_product_acceptance(
     }
 
     let mut tx = pool.begin().await?;
-    let (project_id,): (Uuid,) = sqlx::query_as(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(TaskProductError::TaskNotFound)?;
+    let (project_id,): (Uuid,) =
+        sqlx::query_as("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(TaskProductError::TaskNotFound)?;
 
     let linked: Option<i32> = sqlx::query_scalar(
         "SELECT 1 FROM delivery.task_product \
@@ -460,7 +488,17 @@ pub async fn record_product_acceptance(
     )
     .await?;
     // PA-05-05/07 §8.1：验收是 Timeline 必录活动（挂 product_id）。
-    wire_product_activity(&mut tx, tenant_id, project_id, task_id, Some(input.product_id), "acceptance_recorded", "Product acceptance recorded", actor.principal_id).await?;
+    wire_product_activity(
+        &mut tx,
+        tenant_id,
+        project_id,
+        task_id,
+        Some(input.product_id),
+        "acceptance_recorded",
+        "Product acceptance recorded",
+        actor.principal_id,
+    )
+    .await?;
     tx.commit().await?;
     Ok(acceptance_id)
 }
@@ -511,9 +549,9 @@ fn work_item_err(err: crate::work_item::WorkItemError) -> TaskProductError {
     match err {
         crate::work_item::WorkItemError::Db(e) => TaskProductError::Db(e),
         crate::work_item::WorkItemError::NotFound => TaskProductError::TaskNotFound,
-        crate::work_item::WorkItemError::Validation(m) => TaskProductError::Db(
-            sqlx::Error::Configuration(m.into()),
-        ),
+        crate::work_item::WorkItemError::Validation(m) => {
+            TaskProductError::Db(sqlx::Error::Configuration(m.into()))
+        }
     }
 }
 
@@ -573,13 +611,12 @@ pub async fn list_product_acceptances(
     tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<Vec<ProductAcceptanceRow>, TaskProductError> {
-    let exists: Option<i32> = sqlx::query_scalar(
-        "SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await?;
+    let exists: Option<i32> =
+        sqlx::query_scalar("SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
     if exists.is_none() {
         return Err(TaskProductError::TaskNotFound);
     }

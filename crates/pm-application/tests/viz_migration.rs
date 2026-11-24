@@ -90,14 +90,12 @@ async fn published_spec_is_immutable(pool: PgPool) {
     .execute(&pool)
     .await
     .expect("先发布");
-    let result = sqlx::query("UPDATE viz.artifact SET spec = '{\"hacked\":true}'::jsonb WHERE id = $1")
-        .bind(id)
-        .execute(&pool)
-        .await;
-    assert!(
-        result.is_err(),
-        "发布版 spec 不可改写（不可变守卫触发器）"
-    );
+    let result =
+        sqlx::query("UPDATE viz.artifact SET spec = '{\"hacked\":true}'::jsonb WHERE id = $1")
+            .bind(id)
+            .execute(&pool)
+            .await;
+    assert!(result.is_err(), "发布版 spec 不可改写（不可变守卫触发器）");
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -147,10 +145,7 @@ async fn only_one_pending_approval_per_slot(pool: PgPool) {
     let another = insert_artifact(&pool, "draft", "business")
         .await
         .expect("插入第二个 draft");
-    let result = sqlx::query(insert)
-        .bind(another)
-        .execute(&pool)
-        .await;
+    let result = sqlx::query(insert).bind(another).execute(&pool).await;
     assert!(
         result.is_err(),
         "同槽位第二条 pending 必须被部分唯一索引拒绝（R-04）"
