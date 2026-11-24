@@ -18,7 +18,7 @@ flowchart LR
 
 ---
 
-## Phase 0：执行安全修复
+## Phase 0：执行安全修复与凭据边界收敛
 
 | 项 | 内容 |
 |---|---|
@@ -26,7 +26,7 @@ flowchart LR
 | **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现） |
 | **预计修改文件** | `crates/pm-application/src/run_dispatch/claim.rs`（④ 段证据前置）、`crates/pm-application/src/run_dispatch/lease.rs`（`recover_lost_run` 增加 `TerminationEvidence` 参数）、`crates/pm-application/src/run_executor.rs`（poll 集合纳入「租约过期未确认」；B06-D3 加 runner 排除与证据前置）、`crates/pm-application/src/run_dispatch/port.rs`（RunExecutor 增 `confirm_termination`）、`crates/pm-infrastructure/src/codex_executor.rs`（三证据确认实现）、runner cancel ACK 通道（`apps/ai-pm-runner/src/*` 轻量） |
 | **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；runner cancel ACK 通道改动触到 runner 主循环（需单独测试；可先落 SEM 侧证据前置，E3 通道 Phase 4 补齐——期间 runner 形态全部走 E4 挂起 + 人工） |
-| **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据挂起；②B06-D3：runner 项目排除、E4 不回收、E1/E2 正常回收；③Uncertain 保留（T1 回归）；④generation fencing 回归（旧 token 拒绝）；⑤q10 系列单独跑（AGENTS.md 第 6 条） |
+| **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据挂起；②B06-D3：runner 项目排除、E4 不回收、E1/E2 正常回收；③Uncertain 保留（T1 回归）；④generation fencing 回归（旧 token 拒绝）；⑤凭据最小权限、撤销和日志脱敏；⑥q10 系列单独跑（AGENTS.md 第 6 条） |
 | **验收标准** | 构造「进程活着 + 租约过期」场景：任何路径都不产生第二个进程；构造「进程死了 + 证据在」场景：下一轮回收成功；全新库迁移链可完整初始化 |
 | **回滚方式** | 还原上述文件（无 Schema 变更，纯代码语义回退） |
 
@@ -42,16 +42,16 @@ flowchart LR
 | **验收标准** | `role=platform` 无任何 spawn/FS 执行行为；`role=execution` 不装配 outbox；单机 `all` 与改造前行为逐循环等价 |
 | **回滚方式** | 还原 main.rs（单文件） |
 
-## Phase 2：独立 Docker 部署
+## Phase 2：独立 Docker 部署（运行期持久卷，不做 Workspace 备份）
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0/1 合并；workspace 卷规划完成 |
+| **前置条件** | Phase 0/1 合并；workspace 运行期持久卷规划完成；明确不建设 Workspace/Worktree/Git Mirror 备份 |
 | **涉及模块** | Dockerfile、infrastructure compose |
 | **预计修改文件** | `Dockerfile`（新 execution target：含 codex CLI 的 runtime 层）、`infrastructure/full-dev/docker-compose.ai-pm.yml` 或新 compose 文件（`ai-pm-execution-worker` 服务：`AI_PM_WORKER_ROLE=execution`、`AI_PM_RUN_EXECUTOR=codex`、`AI_PM_WORKSPACE_ROOT` 持久卷、`AI_PM_RUN_DISPATCH=on`；Platform 侧服务设 `AI_PM_WORKER_ROLE=platform` + `AI_PM_RUN_DISPATCH=off`）、部署清单文档 |
 | **风险** | SEM 主机与 DB 网络不通（预检项）；卷权限/UID 错配；跨主机 `DATABASE_URL` 误用 `localhost`（AGENTS.md 第 3 条：本机 Docker 映射用 `127.0.0.1`，远程用 IP） |
 | **测试** | 全新环境空库初始化 → Platform + SEM 起服务 → 端到端跑一条 delivery Run（spawn/poll/收尾）；SEM 容器强杀重启 → 在途 Run 按证据分类处置；workspace 卷内容在重启后完好 |
-| **验收标准** | 独立主机上真实执行一条任务全链路成功；Platform 主机上无任何执行进程残留；凭据不落卷（审计抽查卷内文件无 token/密钥） |
+| **验收标准** | 独立主机上真实执行一条任务全链路成功；Platform 主机上无任何执行进程残留；凭据不落卷（审计抽查卷内文件无 token/密钥）；Workspace/Worktree/Git Mirror 无备份依赖，卷丢失进入 E4/E5 安全隔离 |
 | **回滚方式** | compose 退回单机 `role=all` 形态（默认形态始终保留） |
 
 ## Phase 3：Session Manager
@@ -71,9 +71,9 @@ flowchart LR
 | 项 | 内容 |
 |---|---|
 | **前置条件** | Phase 0 证据模型 + Phase 3 Session 投影 |
-| **涉及模块** | 一次迁移、`pm-application`（HIR 域服务）、`pm-api`（HIR 查询/处置 REST）、runner（通知/选择交互） |
-| **预计修改文件** | 迁移 `00XX_human_intervention_request.sql`（方案甲表结构，见 `decision-record.md` 待裁 HIR-1）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
-| **风险** | runner 交互改动（有人监督模式）影响现有自动领取路径（需模式开关：有人监督 = 领取前确认，无人监督 = 失败建 HIR，二选一按部署配置） |
+| **涉及模块** | 一次迁移（`governance.human_intervention_request`）、`pm-application`（HIR 域服务）、`pm-api`（HIR 查询/处置 REST）、runner（通知/选择交互） |
+| **预计修改文件** | 迁移 `00XX_human_intervention_request.sql`（独立 HIR 实体，字段/索引/唯一活动请求约束按 `domain-model.md` 定稿）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
+| **风险** | runner 交互改动（有人监督模式）影响现有自动领取路径（需模式开关：supervised = 领取前确认；unattended（默认）= 自动领取、失败建 HIR，二选一按部署配置） |
 | **测试** | HIR 状态机全迁移路径；接管七不变式逐条集成测试（重点：② token 失效、⑤ 单执行权、⑧ 审计完整）；E4 挂起 → HIR → 授权重派端到端 |
 | **验收标准** | 构造双 Runner 接管场景：全程无双重执行、无身份校验放宽、审计链完整可回放；Q3 高频只提示不改策略 |
 | **回滚方式** | 关闭 HIR 触发开关（E4 行为退化为「永久挂起 + 告警」，安全但需人工 DB 介入）→ 删迁移 |
