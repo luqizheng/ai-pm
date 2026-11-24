@@ -234,3 +234,19 @@ A separate proposed design package has been added at `sem-02d-closure-design-pro
 本轮一致性处理要求：Interaction scheduling shield 与 Run execution barrier 分开建模；前者处理业务交互等待，后者处理执行进程不确定性。两者共同参与 Platform dispatchability predicate。WSS 协议必须包含资源报告消息 `runner.resource.report`，但它不承担 Heartbeat、Lease Renewal 或终止证据职责。
 
 D-12 设计边界已完成；当前 Harness 启动链路的实际凭据注入/继承/泄漏面仍须在 Phase 0 代码变更前完成只读盘点。当前结论：**Design In Progress / Review Pending；Phase 0 Not Started**。
+
+
+## 11. 2026-11-25 新增十项 P0/P1/P2 评审问题
+
+用户追加十项具体问题后，对当前 master 代码与相关设计文档进行只读复核。结论：十项问题整体成立，且改变了 Phase 0–5 的依赖关系。详见 [评审问题核验与修正设计](./sem-02d-review-findings-corrective-design.md)。
+
+本次尤其确认：
+- `interaction.rs` 创建 terminate command，但现有 Runner 是 terminate/continue 的命令消费者；SEM-local `CodexExecutor` 没有等价的回复注入闭环。
+- Runner 自然退出和 lease-loss cleanup 缺少独立 E3 证据上报；租约丢失时命令轮询不构成替代。
+- Runner restart recovery 只覆盖 start_wait + responded Interaction；必须增加 Detached → Reconciling → Active/Terminated/Quarantined。
+- started Run 的 PID/logs/Workspace 同时缺失必须是 E5；`Lost` 不能作为终止证据。
+- E6 Human Risk Acceptance 必须与 E1/E2/E3 终止证据分离。
+- HIR + recipient/notification 必须在 Phase 0 可操作；Phase 4 只能扩展高级 handoff。
+- Detached 不扩展 scheduling_shield；B06-D3、queued claim 和所有自动重派入口必须统一检查 Interaction shield + Execution Barrier。
+
+因此此前“SEM-02D 完整设计包”的判断正式撤回。当前结论为 **Design In Progress — Corrective Design Review Pending**。本轮仅提交修正设计，不改代码/Migration/API/WSS/部署；Phase 0 未启动。旧报告中与 corrective-design 冲突的阶段或状态描述以该修正设计为准。
