@@ -48,10 +48,10 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-15 Runtime/data ownership mapping | Every existing PgPool/SQL operation in run_executor, claim, lease, worker_command, run_events and cleanup is assigned to Platform API or SEM-local process state; SEM has no Platform DB pool |
 | G-16 Runner control-channel exclusivity | Integration-level operation inventory proves Runner cannot Claim, renew Lease, poll/ACK commands or perform recovery through Platform MCP; each control operation has exactly one WSS→SEM→Platform API path; Harness business MCP remains available |
 | G-17 Target Runner authorization | Platform Claim API validates the target Runner identity against device registration, tenant/project binding, authorization and supervision policy; SEM cannot claim for an arbitrary/self-reported device |
-| G-18 Lease renewal separation | User ratifies one path; tests prove WSS liveness and Harness Agent Activity cannot renew, and only the selected dedicated request renews the exact current generation |
-| G-19 Service identity and scope | Platform↔SEM JWT issuer/audience/scope/key rotation/revocation and idempotency are specified; service identities never map to human principals |
-| G-20 Runner ticket and revocation | WSS connect ticket is device-bound, short-lived, single-use; revocation events plus bounded revalidation close active connections; authorization outage fails closed |
-| G-21 SEM persistence and dispatch idempotency | Inbox, connection, ticket-use, dispatch, command-delivery, outbound-delivery and process-observation schemas have single ownership; lost Claim response recovers by same idempotency key without duplicate Claim or plaintext token persistence |
+| G-18 Lease renewal separation | **Design closed by ADR-SEM-21**: Runner Supervisor WSS → SEM → Platform HTTPS is the only path; implementation tests must prove Heartbeat/Agent Activity cannot renew and only the exact current generation is renewed |
+| G-19 Service identity and scope | **Design closed by ADR-SEM-22**: Platform↔SEM independent service identities, JWT issuer/audience/scope/key rotation/revocation and idempotency; implementation tests must prove service identities never map to human principals |
+| G-20 Runner ticket and revocation | **Design closed by ADR-SEM-23**: device-bound, short-lived, single-use WSS ticket; revocation events plus bounded revalidation close active connections; implementation tests must prove fail-closed behavior |
+| G-21 SEM persistence and dispatch idempotency | **Design closed by ADR-SEM-24/25**: seven SEM-private tables and single ownership; lost Claim response recovers by same idempotency key without duplicate Claim or plaintext token persistence; implementation/fault-injection evidence remains required |
 
 ## 3. Initial SEM-02C code findings
 
@@ -96,4 +96,4 @@ SEM-02C may mark the architecture Design Complete only after:
 - every Phase has bounded scope, test plan, acceptance and rollback;
 - no unresolved product-level choice remains.
 
-Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership. The proposed protocol/security/persistence baseline addresses G-18–G-21 for review, but those gates remain open until user ratification and later implementation/acceptance evidence.
+Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership. User has now ratified ADR-SEM-21–25, closing the design decisions for G-18–G-21. Their implementation and acceptance evidence remains outstanding; design approval does not mean the code gates have passed.
