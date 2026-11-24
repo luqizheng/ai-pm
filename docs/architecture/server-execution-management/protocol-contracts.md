@@ -58,7 +58,7 @@ User selection of a Runner is not a claim and grants no execution ownership. The
 
 ## 5. Heartbeat
 
-Heartbeat proves only that the Runner supervisor loop is alive:
+Runner sends Heartbeat to SEM over WSS; SEM forwards the authenticated heartbeat/renewal request to Platform API. Platform alone validates and commits lease renewal. Heartbeat proves only that the Runner supervisor loop is alive:
 - renew only for exact current owner, token proof and generation;
 - never clear Scheduling Shield;
 - stale heartbeat cannot resurrect an old generation;
@@ -80,7 +80,7 @@ HTTP 2xx, successful polling, command receipt or request acceptance is never pro
 
 ## 7. Result and error contract
 
-Results are accepted by Platform only after checking current lease verifier, generation and client identity. SEM forwards evidence through the authenticated service API; it does not write Run state directly. Stale results may be retained as diagnostic evidence but cannot mutate authoritative task state. Secrets are redacted before persistence.
+Results are accepted by Platform only after checking current lease verifier, generation and client identity. SEM forwards evidence through the authenticated service API; it does not write Run state directly. Runner never writes Platform PostgreSQL or calls Platform database endpoints directly. Stale results may be retained as diagnostic evidence but cannot mutate authoritative task state. Secrets are redacted before persistence.
 
 Distinct error categories include stale_generation, lease_owner_mismatch, lease_expired, scheduling_shield_active, run_not_claimable, process_identity_mismatch, termination_not_observed and authorization_denied. Map them to existing API conventions rather than inventing a parallel error system.
 
