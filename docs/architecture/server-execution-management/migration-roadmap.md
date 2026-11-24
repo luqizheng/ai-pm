@@ -70,9 +70,9 @@ flowchart LR
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0 证据模型 + Phase 3 Session 投影 |
-| **涉及模块** | 一次迁移（`governance.human_intervention_request`）、`pm-application`（HIR 域服务）、`pm-api`（HIR 查询/处置 REST）、runner（通知/选择交互） |
-| **预计修改文件** | 迁移 `00XX_human_intervention_request.sql`（独立 HIR 实体，字段/索引/唯一活动请求约束按 `domain-model.md` 定稿）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
+| **前置条件** | Phase 0 最小 HIR 实体/安全屏障已落地 + Phase 3 Session 投影 |
+| **涉及模块** | Phase 0 已创建的 `governance.human_intervention_request` 的扩展（不重复建表）、`pm-application`（HIR 域服务）、`pm-api`（HIR 查询/处置 REST）、runner（通知/选择交互） |
+| **预计修改文件** | 扩展 Phase 0 的 HIR migration（完整状态字段、索引、通知/处置字段和唯一活动请求约束按 SEM-02D 定稿）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
 | **风险** | runner 交互改动（有人监督模式）影响现有自动领取路径（需模式开关：supervised = 领取前确认；unattended（默认）= 自动领取、失败建 HIR，二选一按部署配置） |
 | **测试** | HIR 状态机全迁移路径；接管七不变式逐条集成测试（重点：② token 失效、⑤ 单执行权、⑧ 审计完整）；E4 挂起 → HIR → 授权重派端到端 |
 | **验收标准** | 构造双 Runner 接管场景：全程无双重执行、无身份校验放宽、审计链完整可回放；Q3 高频只提示不改策略 |
