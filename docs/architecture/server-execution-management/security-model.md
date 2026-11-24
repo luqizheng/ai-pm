@@ -5,8 +5,8 @@ Status: security design baseline.
 ## 1. Principals
 
 - Human user: may view/resolve HIR and select Runner within authorized tenant/project scope.
-- Platform services: act under service identity and explicit DB permissions.
-- SEM worker: manages execution lifecycle only within authorized scope.
+- Platform services: act under service identity and explicit permissions to Platform PostgreSQL.
+- SEM service: authenticates to Platform only through its scoped service API identity; it has no Platform PostgreSQL credentials.
 - Client Runner: device identity plus current lease proof; scoped to claimed Run/generation.
 - Harness process: receives only execution-scoped credentials.
 - Git remote: one authoritative origin per Repository.
@@ -17,7 +17,8 @@ Status: security design baseline.
 - Every mutation checks tenant/project scope, Run identity, generation and current lease proof.
 - HIR operations require user authorization and audit.
 - Runner supervision changes require authorized user/admin action.
-- SEM DB credentials are least-privilege; no runtime superuser.
+- SEM DB credentials are least-privilege and scoped only to SEM-owned tables; no runtime superuser.
+- Platform DB credentials are never mounted into SEM containers; Platform APIs are the only route for Run/Lease/Generation mutations.
 
 ## 3. Lease and fencing
 
