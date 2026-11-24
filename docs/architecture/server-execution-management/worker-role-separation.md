@@ -23,14 +23,14 @@
 | 子步 | 归属 | 理由 |
 |---|---|---|
 | `claim_and_start` 的执行半边（向 Platform API 请求 claim；成功后 spawn 本机进程） | **SEM** | spawn 与工作区/pid 必须**同主机**（SEM-01 结论 10） |
-| `poll_active_runs`（三证据 poll + 终止确认） | **SEM** | 同上 |
-| `run_cleanup_round`（收尾/失败落库编排） | **SEM** | 需访问本地进程证据 |
+| `poll_active_runs`（本机进程三证据 poll；Run 状态/Lease 查询与结果写入经 Platform API） | **SEM** | 本机进程事实必须在 SEM 主机采集；业务状态仍由 Platform 权威维护 |
+| `run_cleanup_round`（收尾/失败处理；业务状态变更经 Platform API） | **SEM** | 需访问本地进程证据；不直接写 Platform DB |
 | `cleanup_finished_processes`（终态僵尸兜底 terminate） | **SEM** | terminate 必须在本机 |
 | workspace reclamation 物理执行 | **SEM** | 删文件必须在工作区卷所在主机 |
 | `interaction_timeout_sweep`（会话超时扫描） | **Platform** | 纯 DB |
 | `comm_overview`（统计） | **Platform** | 纯 DB |
 | `stage_candidates`（候选整理） | **Platform** | 纯 DB |
-| `reconcile_orphans` | **SEM**（执行证据半边）+ **Platform**（B06-D3 DB-only 判定的审计半边可留任一处，定 SEM 单点） | 证据 poll 在 SEM 主机才有意义；见 `execution-safety.md` §3.2 |
+| `reconcile_orphans` | **SEM** | 通过 Platform API 获取待核对 Run、在 SEM 主机验证进程证据，再经 API 提交证据/恢复请求；见 `execution-safety.md` §3.2 |
 
 ### 1.3 其他进程
 
@@ -75,8 +75,9 @@ sequenceDiagram
     P->>S: Outbox → HTTPS dispatch event
     S->>P: HTTPS claim request
     P->>DB: 原子授权 + lease/generation + audit
-    S->>S: spawn / poll / cleanup
-    S->>P: HTTPS execution update / evidence
+    P-->>S: Lease + Generation
+    S->>S: spawn / poll / cleanup（本机进程事实）
+    S->>P: HTTPS heartbeat / status / result / evidence
     Note over P,S: Platform 是 Run/Lease/Generation 唯一权威；SEM 不访问 Platform DB
 ```
 
@@ -89,7 +90,7 @@ sequenceDiagram
 | 风险 | 缓解 |
 |---|---|
 | 两个角色同时跑 outbox | §3 单消费者约束 + SEM fail-fast |
-| 两个 execution 实例领同一 Run | 现有 `FOR UPDATE SKIP LOCKED` + 租约互斥，天然安全 |
+| 两个 execution 实例领同一 Run | Platform claim API 内的事务锁/并发仲裁 + Generation fencing |
 | Platform 与 SEM 对 Run 状态形成双写 | Platform API 是唯一写入口；SEM 无 Platform DB 凭据 |
 | B06-D3 被 Platform/Execution 双跑 | 定 SEM 单点；audit `run.orphan_reclaimed` 去重保留为第二道防线（现状已有 NOT EXISTS 去重） |
 | workspace reclamation 双跑 | 只装配在 Execution；三重开关不变 |
