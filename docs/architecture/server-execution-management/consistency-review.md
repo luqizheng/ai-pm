@@ -63,7 +63,9 @@ These are implementation-design/verification gates, not reasons to retain compat
 
 ## 4. ADR-SEM-20 decisions now frozen
 
-The following former open questions are closed: (a) Claim is requested by SEM for a specific target Runner; (b) Runner control operations use WSS, while Harness business operations retain Platform MCP; (c) Lease Renewal is initiated only by Runner Supervisor over WSS and forwarded by SEM to Platform API; Agent Activity and WSS liveness do not renew; (d) Runner does not poll Platform MCP for Claim, commands, ACK or recovery. Platform remains the only Lease/Generation authority. These decisions require implementation and acceptance evidence; they are not current-code facts.
+The following decisions are closed: (a) Claim is requested by SEM for a specific target Runner; (b) Runner control operations use WSS, while Harness business operations retain Platform MCP; (c) Runner does not poll Platform MCP for Claim, commands, ACK or recovery. Platform remains the only Lease/Generation authority. These decisions require implementation and acceptance evidence; they are not current-code facts.
+
+Lease Renewal via Runner Supervisor WSS → SEM → Platform HTTPS is a proposed baseline, not yet a user-ratified decision. Service JWT authentication, WSS connect-ticket/revocation and SEM DB schema are likewise proposals pending review.
 
 ## 5. Known design details still requiring code-level reconciliation
 
