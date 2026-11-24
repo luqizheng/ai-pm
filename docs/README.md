@@ -1,6 +1,6 @@
 # AI-PM 文档总索引
 
-> 本索引对应 `master` 分支，整理基准：2026-11-21。当前统计为本次整理前后的目录快照；新增或移动文件后应重新核对。
+> 本索引对应 `master` 分支，整理基准：2026-11-24。当前统计为本次整理前后的目录快照；新增或移动文件后应重新核对。
 
 本目录包含产品定义、架构决策、实施设计、场景规格、审查证据、验收记录、运维手册及 UI 设计。**目录归属不等于文档权威级别**：判断某项规则是否有效，必须先看文档状态和对应决策索引，不能仅凭文件名或版本号。
 
@@ -66,7 +66,7 @@
 
 场景目录按 `scenarios/s01/` 至 `scenarios/s05/` 组织。场景内部可以包含 `docs/`、`ui/`、`qa/`、`figures/` 等子目录。场景索引优先放在对应场景目录，不把场景细节重复堆到本文件。
 
-### 3.3 历史设计与当前基线
+### 3.3 Artifact Service 与 Visualization\n\n- `architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md`：通用 Artifact Service 的独立部署、数据存储、版本和 Generator 架构基线。\n- `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分、迁移边界和 ART-00 审计清单。\n\n通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 为准；原 Visualization 文档中被 ADR-ART-001 明确修订的部署/存储条款不再作为现行决策。\n\n### 3.4 历史设计与当前基线
 
 `project-ai-team-v2/`、`slice-d/`、部分早期 `audit/` 与 `superpowers/` 文件可能描述旧架构或已完成阶段。它们用于解释演进、提供代码/验收证据，不应覆盖当前 PA-06 / PA-07 基线。
 
