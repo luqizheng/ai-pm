@@ -2,7 +2,7 @@
 
 - 日期：2026-11-24
 - 依据：SEM-01 只读审计（`docs/architecture/sem-01-deployment-audit/`，基于 master `4f047f12`）
-- 本文档基于 master `50804ca7` 复核后定稿
+- 本文档基于 SEM-01 / SEM-02A 代码审计基线整理；后续架构决策与文档修订以当前 master 为准
 - 性质：**架构设计与迁移方案定稿**。本阶段只读代码、只写文档，未修改任何业务代码 / 迁移 / Dockerfile / Compose / Worker 主循环。
 - 工程政策：Greenfield（`docs/architecture/engineering-lifecycle-policy.md`，AGENTS.md 第 7 条引用；
   政策文件与 AGENTS.md 引用均已进入 master；以当前 master 文件内容为准）。
@@ -119,7 +119,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | security-model.md | 身份、凭据、租约、E3 和审计安全 |
 | operational-runbook.md | 启停、监控、排障和卷丢失处置 |
 | testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
-| migration-roadmap.md | Phase 0–5 实施路线图 |
+| migration-roadmap.md | Phase 0–5 实施路线图 |\n| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
 
 ## 原始交付索引
 
