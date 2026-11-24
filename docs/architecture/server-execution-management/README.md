@@ -15,38 +15,37 @@
 AI-PM 拆分为三类部署单元：**Platform**（业务状态与 DB-only 循环）、
 **Server Execution Management（SEM）**（服务端进程 spawn/poll/terminate + 工作区 + 执行证据，
 独立 Docker 主机）、**Client Runner**（用户设备上的进程载体）。
-三者共享同一个 PostgreSQL 作为**唯一**权威事实源；不引入任何消息中间件；
-Session Manager 是 `pm-application` 内的**逻辑模块**，不是微服务。
+Platform 与 SEM 是独立服务，通过版本化 HTTPS API 通信、各自管理数据库；AI-PM 是业务 Run/Lease/Generation 的权威方，SEM 管理执行侧持久状态。Runner 与 SEM 通过 WSS 通信。初期使用 HTTP API + Transactional Outbox，不引入消息中间件。Session Manager 是 SEM 执行运行时内的逻辑模块，不因本决策强制拆成微服务。
 
 ## 部署边界总图
 
 ```mermaid
 flowchart LR
     subgraph Platform["AI-PM Platform（现有主机）"]
-        API[pm-api<br/>REST / MCP / audit SSE]
-        PW[pm-worker<br/>repo-import + mcp-inbox]
-        W[ai-pm-worker<br/>role=platform<br/>循环 1/2/3/5/6/7/8<br/>+ 循环4 DB-only 子步]
+        API[pm-api : HTTPS]
+        PW[pm-worker]
+        W[ai-pm-worker role=platform]
         PG[(Platform PostgreSQL<br/>业务 / Run / Lease 权威)]
     end
     subgraph SEM["Server Execution Management（独立 Docker 主机）"]
-        EW[ai-pm-worker<br/>role=execution<br/>循环4 执行子步<br/>Session Manager]
+        EW[ai-pm-worker role=execution<br/>Session Manager / Scheduler]
+        SDB[(SEM DB<br/>执行侧私有状态)]
         EX[CodexExecutor<br/>spawn/poll/terminate]
-        SDB[(SEM DB<br/>执行侧状态 / 命令投递)]
-        WS[workspace 卷<br/>AI_PM_WORKSPACE_ROOT<br/>worktrees / pid / logs / events / git-mirror]
+        WS[workspace 卷<br/>AI_PM_WORKSPACE_ROOT]
     end
     subgraph Client["用户设备"]
-        R[ai-pm-runner<br/>进程载体 + 心跳 + 命令处理]
-        H1[Codex / Z-Code / DSH / Claude Code]
+        R[ai-pm-runner]
+        H[Codex / Z-Code / DSH / Claude Code]
     end
     API --> PG
     PW --> PG
     W --> PG
-    EW <-->|HTTPS API| API
+    W -->|Transactional Outbox / HTTPS| EW
+    EW -->|claim / status / evidence API| API
     EW --> SDB
     EW --- EX --- WS
-    R --- H1
-    R -->|claim / heartbeat / poll / result| PG
-    API -.->|HIR 通知 / Runner 选择| R
+    R <-->|WSS| EW
+    R --- H
 ```
 
 ## 核心决策摘要（D1–D9）
@@ -60,7 +59,8 @@ flowchart LR
 | D5 | 工作区唯一所有权 | 一个工作区同一时刻至多一个活进程；新 Attempt 不得复用未确认死亡的旧工作区（新建或等确认后按 reclamation 策略处置） | `execution-safety.md` §5 |
 | D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；新增 `task_run.harness_session_id` 与 `harness_kind` 两列；HIR 使用独立表；Resume 默认关闭，实测通过后按 Harness 版本启用 | `session-manager-design.md` |
 | D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
-| D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |\n| D9 | Platform–SEM 服务边界 | 版本化 HTTPS API + Platform Transactional Outbox；双方数据库独立；Platform 保持 Run/Lease/Generation 权威；SEM 不直连 Platform DB；Runner–SEM 使用 WSS | `protocol-contracts.md`、`deployment-topology.md` |
+| D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |
+| D9 | Platform–SEM 服务边界 | 版本化 HTTPS API + Platform Transactional Outbox；双方数据库独立；Platform 保持 Run/Lease/Generation 权威；SEM 不直连 Platform DB；Runner–SEM 使用 WSS | `protocol-contracts.md`、`deployment-topology.md` |
 
 ## 用户确认的 V1 产品决策
 
