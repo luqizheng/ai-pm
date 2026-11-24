@@ -131,7 +131,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 用户于 2026-11-24 确认：SEM 是 Runner 任务派发与接管的唯一协调入口。Runner 不再主动轮询 Platform MCP 领取任务。SEM 选择/确认目标 Runner 后，通过 Platform 服务 API 请求 Claim；Platform 仍在自身数据库事务中校验设备身份、项目绑定、资格、Scheduling Shield、并发互斥并签发 Lease/Generation。SEM 只有在成功 Claim 后才可通过 WSS 派发执行授权。Harness 继续通过 Platform MCP 使用业务工具。
 
-控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 唯一路径尚未冻结：必须明确 Runner liveness、Lease Renewal 与 Agent Activity 的区别，禁止形成双重续租。
+控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 建议采用 Runner Supervisor 专用 WSS 消息 → SEM → Platform HTTPS API；WSS Heartbeat 和 Harness Agent Activity 均不续租。该方案待用户确认后登记为正式 ADR。
 
 ## 原始交付索引
 
@@ -150,5 +150,5 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
 - **SEM-02C：代码契约映射初审已完成；本轮新增服务协议/安全/持久化建议基线，仍需用户确认关键方案并完成全量一致性审查。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。新增 `service-protocol-security-and-persistence.md` 是设计建议，不代表已实现或已获用户最终批准。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
-- 本轮仅新增 `code-contract-mapping.md` 并更新架构索引；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
+- 本轮新增 `service-protocol-security-and-persistence.md`，并同步更新 README、决策登记、协议、安全、一致性、代码映射、故障恢复和验收文档；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
