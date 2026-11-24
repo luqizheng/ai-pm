@@ -89,3 +89,10 @@ ART-01 是目标实施契约，不代表独立服务、SDK、数据库或迁移�
 - [ART-02 实施前置核验报告](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 pm-api JWT/JWKS、项目授权、file-service、viz.*、SeeCode/Mermaid 和当前 CI；明确区分代码事实、历史快照和运行态待核验项。
 
 ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，但 Artifact 专用 project/action 委托凭证和 file-service upload-intent/checksum/finalize 能力尚未得到证实。两个 P0 项关闭前，不进入生产实现或迁移。
+
+
+### ART-02A 上游源码核验
+
+- [ART-02A（并入 ART-02 报告第 11 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：基于 `luqizheng/lmms` Tag `v1.8.1` 核验 token-service、file-service、Rust SDK、OpenAPI 与 audience/tenant scope 实现。
+
+**ART-02A 发现两个明确的 P0：** 当前 `POST /tokens/resource` 路由未挂载身份验证中间件，且签发 claims 缺少 `aud` / `tid`，不得作为 Artifact delegation 使用；File Service 虽有 multipart 和 presign，但当前上传路径未计算 hash（`hash=None`），未发现 upload-intent/finalize/checksum-attestation 协议。File Service 的 `aud=file-service` 与 TenantScope 租户边界已有代码依据。以上均为 v1.8.1 静态源码结论，不代表运行环境验证。
