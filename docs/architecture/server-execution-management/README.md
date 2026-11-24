@@ -192,3 +192,12 @@ Runner Supervisor 通过 WSS 上报 CPU、内存和 Workspace 所在磁盘卷容
 - 专题细节仍以 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md) 及其引用的协议、安全、状态机、数据库、执行安全和验收文档为准。
 - D-12 的凭据边界设计已完成；当前 Harness 启动链路的逐项凭据注入/继承/泄漏面盘点是 Phase 0 前的强制只读门槛。
 - 当前状态：**Design In Progress / Review Pending；Phase 0 Not Started**。未修改业务代码、Migration、Dockerfile、Compose、API 或 Runner/Worker 实现。
+
+
+## SEM-02D 评审修正（2026-11-25）
+
+用户提出 10 项 P0/P1/P2 评审问题，经当前 master 代码与设计文档只读核对，整体成立。上一轮将 SEM-02D 描述为“完整设计包”的结论撤回；当前状态改为 **Design In Progress — Corrective Design Review Pending**。
+
+修正设计入口：[`sem-02d-review-findings-corrective-design.md`](./sem-02d-review-findings-corrective-design.md)。主要修正：Phase 0 提供最小可操作 HIR 和通知；Interaction terminate/continue 覆盖 Runner 与 SEM-local CodexExecutor；Runner E3 进程退出证据 spool；Detached → Active 同设备恢复；Workspace 丢失归 E5；E6 人工风险接受与 E1/E2/E3 终止证据分离；Session 连续性三分；Detached 不进入 scheduling_shield；所有 claim/recovery/requeue 路径共用 dispatchability predicate。
+
+本轮仍只修改设计文档。没有业务代码、Migration、API、WSS、Dockerfile 或 Compose 变更；Phase 0 未启动。上述修正尚待用户评审，未登记为已批准 ADR。
