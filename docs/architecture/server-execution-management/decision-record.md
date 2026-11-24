@@ -26,7 +26,9 @@
 | ADR-SEM-17 | Workspace/Worktree/Git Mirror 不做备份；运行期间仍使用持久卷，丢失后按 E4/E5 安全隔离，不得推断进程死亡 | 用户明确决策；这些内容可由唯一 origin 重建，运行现场不作为备份目标 | 产品未来明确要求灾难恢复现场 |
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
 
-| ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |\n\n## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
+| ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |
+
+## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
 
 1. **outbox「handler 集合一致」→「单消费者」**：SEM-01 的表述是必要不充分条件的保守版；本 V1 收敛为单消费者约束（更强、更简单）。SEM-01 无错误，属精度提升。
 2. **reconcile_orphans 风险上调**：SEM-01 称「>1h 回收不带 runner 排除」；复核确认 B06-D3 直改 DB（绕过 claim 候选发现的 runner 排除），**同时缺进程证据**——与 B3-2 同根同罚，Phase 0 一并修复（`execution-safety.md` §3.2）。
@@ -57,7 +59,16 @@
 - Runner E3 ACK：Phase 0 可先让远程 Runner 全部走 E4 安全挂起；E3 通道实现必须满足 OQ-3 的证明标准后才允许作为 E3。
 - E4 scheduling shield：必须通过并发 claim、过期租约、迟到心跳、重启恢复和人工解除测试。
 
-## F. Platform–SEM API 边界实施约束\n\n1. SEM 不持有 Platform PostgreSQL 凭据，不执行跨服务 SQL，也不直接读写 `delivery.task_run`。\n2. Platform API 是 Run/Lease/Generation 的唯一写入口；SEM claim 请求必须由 Platform 在事务内完成授权、并发仲裁、generation 递增、token 签发和审计。\n3. Platform 的 Transactional Outbox 只负责可靠触发；事件不作为业务状态权威。SEM 接收必须有幂等键、持久化接收记录和重试/对账机制。\n4. SEM 数据库仅保存执行侧私有状态，例如命令投递账本、连接会话元数据和执行侧协调状态；不得复制并形成第二套 Run/Lease 权威状态。具体表结构在 SEM-02C 定义。\n5. 两侧不做分布式事务。跨服务操作采用明确状态机、幂等 API、超时重试、对账与补偿。\n6. API 使用服务身份认证、最小权限、TLS、请求签名或等效防重放机制；所有写请求绑定 request/idempotency ID、Run ID 和 generation。\n\n## G. 政策合规自查（`engineering-lifecycle-policy.md` §3/§4）
+## F. Platform–SEM API 边界实施约束
+
+1. SEM 不持有 Platform PostgreSQL 凭据，不执行跨服务 SQL，也不直接读写 `delivery.task_run`。
+2. Platform API 是 Run/Lease/Generation 的唯一写入口；SEM claim 请求必须由 Platform 在事务内完成授权、并发仲裁、generation 递增、token 签发和审计。
+3. Platform 的 Transactional Outbox 只负责可靠触发；事件不作为业务状态权威。SEM 接收必须有幂等键、持久化接收记录和重试/对账机制。
+4. SEM 数据库仅保存执行侧私有状态，例如命令投递账本、连接会话元数据和执行侧协调状态；不得复制并形成第二套 Run/Lease 权威状态。具体表结构在 SEM-02C 定义。
+5. 两侧不做分布式事务。跨服务操作采用明确状态机、幂等 API、超时重试、对账与补偿。
+6. API 使用服务身份认证、最小权限、TLS、请求签名或等效防重放机制；所有写请求绑定 request/idempotency ID、Run ID 和 generation。
+
+## G. 政策合规自查（`engineering-lifecycle-policy.md` §3/§4）
 
 - ✅ 事务完整性与并发安全：Phase 0 全部走现有 `claim_core` 事务模板/锁序，不新开旁路。
 - ✅ 唯一执行权与安全进程/工作区生命周期：ADR-SEM-04/05 即为此设立。
