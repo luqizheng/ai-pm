@@ -110,14 +110,14 @@ function goBack() {
 
 // ───────────────────────────── 写路径（R4/B04-02）────────────────────────
 
-/** 选中修订的 pending adr_acceptance 审批行。 */
+/** pending adr_acceptance 审批行（target_id = ADR 本体 id，非修订 id）。 */
 const pendingApproval = computed<DesignApproval | null>(
   () =>
     detail.value?.approvals.find(
       item =>
         item.status === "pending" &&
         item.kind === "adr_acceptance" &&
-        item.target_id === selectedRevisionId.value
+        item.adr_id === adrId.value
     ) ?? null
 );
 
