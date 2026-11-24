@@ -26,11 +26,12 @@ flowchart LR
         API[pm-api<br/>REST / MCP / audit SSE]
         PW[pm-worker<br/>repo-import + mcp-inbox]
         W[ai-pm-worker<br/>role=platform<br/>循环 1/2/3/5/6/7/8<br/>+ 循环4 DB-only 子步]
-        PG[(PostgreSQL<br/>唯一权威事实源)]
+        PG[(Platform PostgreSQL<br/>业务 / Run / Lease 权威)]
     end
     subgraph SEM["Server Execution Management（独立 Docker 主机）"]
         EW[ai-pm-worker<br/>role=execution<br/>循环4 执行子步<br/>Session Manager]
         EX[CodexExecutor<br/>spawn/poll/terminate]
+        SDB[(SEM DB<br/>执行侧状态 / 命令投递)]
         WS[workspace 卷<br/>AI_PM_WORKSPACE_ROOT<br/>worktrees / pid / logs / events / git-mirror]
     end
     subgraph Client["用户设备"]
@@ -40,14 +41,15 @@ flowchart LR
     API --> PG
     PW --> PG
     W --> PG
-    EW --> PG
+    EW <-->|HTTPS API| API
+    EW --> SDB
     EW --- EX --- WS
     R --- H1
     R -->|claim / heartbeat / poll / result| PG
     API -.->|HIR 通知 / Runner 选择| R
 ```
 
-## 核心决策摘要（D1–D8）
+## 核心决策摘要（D1–D9）
 
 | # | 决策 | 要点 | 详见 |
 |---|---|---|---|
@@ -58,7 +60,7 @@ flowchart LR
 | D5 | 工作区唯一所有权 | 一个工作区同一时刻至多一个活进程；新 Attempt 不得复用未确认死亡的旧工作区（新建或等确认后按 reclamation 策略处置） | `execution-safety.md` §5 |
 | D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；新增 `task_run.harness_session_id` 与 `harness_kind` 两列；HIR 使用独立表；Resume 默认关闭，实测通过后按 Harness 版本启用 | `session-manager-design.md` |
 | D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
-| D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |
+| D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |\n| D9 | Platform–SEM 服务边界 | 版本化 HTTPS API + Platform Transactional Outbox；双方数据库独立；Platform 保持 Run/Lease/Generation 权威；SEM 不直连 Platform DB；Runner–SEM 使用 WSS | `protocol-contracts.md`、`deployment-topology.md` |
 
 ## 用户确认的 V1 产品决策
 
@@ -137,7 +139,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：尚待完成代码契约映射与全量一致性审查。** 详细门槛见 `consistency-review.md`。
+- **SEM-02C：尚待完成代码契约映射与全量一致性审查。** 服务 API 边界已由 ADR-SEM-19 确认；详细门槛见 `consistency-review.md`。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
 - 未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
