@@ -103,3 +103,10 @@ ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，�
 - [ART-02B（并入 ART-02 报告第 12 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：基于 lmms `v1.8.1` 固定 commit 核验 File Service API、Rust SDK、TenantScope、对象存储提交流程、presign 与测试覆盖。
 
 **ART-02B 源码结论：** file-service 已提供基础文件存取与 RustFS/S3 适配，但当前上传全量缓冲、`hash=None`、无 upload-intent/finalize/checksum attestation，且对象与元数据提交无原子补偿；租户隔离已有代码证据，但专项测试未覆盖全部端点。该服务暂不能直接承担 Artifact Version 的最终提交协议。真实环境 JWT、跨租户 API、RustFS bucket/备份/恢复验证仍 OPEN。
+
+
+### ART-02C RustFS 部署与备份恢复核验
+
+- [ART-02C（并入 ART-02 报告第 13 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 lmms v1.8.1 标准 Compose、prod/remote override、File Service storage backend、named volume、RustFS adapter 与备份 Runbook。
+
+**ART-02C 关键结论：** v1.8.1 标准 Compose 未配置 `FILE_STORAGE_BACKEND`，代码默认值为 `local`；文件落在 `superpowers_file-storage` named volume。prod/remote override 未切换 RustFS。现有备份 Runbook 未覆盖该卷或 RustFS 对象数据，并且数据库章节描述 MySQL，与当前 PostgreSQL 部署文件存在漂移。实际部署 backend、bucket policy、备份介质和恢复能力仍须在目标环境验证。
