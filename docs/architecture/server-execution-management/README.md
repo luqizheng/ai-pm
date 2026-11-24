@@ -56,9 +56,17 @@ flowchart LR
 | D3 | 角色化装配 | `AI_PM_WORKER_ROLE=platform\|execution\|all`（默认 `all` 保持开发态零行为漂移）；Phase 1 不拆新二进制 | `worker-role-separation.md` |
 | D4 | 回收安全 | **DB 租约过期 ≠ 进程死亡**。回收必须以终止证据为前提：同主机走 poll 三证据；远程 Runner 走心跳宽限 + 终止 ACK，证据不足只隔离不重派（HIR 兜底） | `execution-safety.md` |
 | D5 | 工作区唯一所有权 | 一个工作区同一时刻至多一个活进程；新 Attempt 不得复用未确认死亡的旧工作区（新建或等确认后按 reclamation 策略处置） | `execution-safety.md` §5 |
-| D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；**不新增表以外不强制新增列**——Harness Native Session 以最小增量采集 | `session-manager-design.md` |
+| D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；新增 `task_run.harness_session_id` 与 `harness_kind` 两列；HIR 使用独立表；Resume 默认关闭，实测通过后按 Harness 版本启用 | `session-manager-design.md` |
 | D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
 | D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |
+
+## 用户确认的 V1 产品决策
+
+- Workspace / Worktree / Git Mirror 不做备份；运行期间仍使用单一持久卷。卷丢失不代表进程死亡，活跃 Run 按 E4/E5 隔离。
+- Runner 默认 `unattended`；只有明确配置 `supervised` 才要求领取前用户确认。
+- 每个 Repository 只有一个权威 Git `origin`；SEM 不管理第二远端、同步或合并。
+- HIR 采用独立实体；E4 使用持久化 scheduling shield。
+- Harness Resume 默认关闭，必须按具体版本实测通过后启用。
 
 ## SEM-01 结论复核结果
 
@@ -102,9 +110,9 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 5. Session Manager → `session-manager-design.md`
 6. 接管安全模型 → `runner-supervision-and-handoff.md` §4
 7. Phase 0–5 → `migration-roadmap.md`
-8. 未决问题 → `decision-record.md`
+8. 已关闭 OQ 与验证门槛 → `decision-record.md`
 
 ## 本阶段状态
 
 - Git HEAD：`4ecb2985`（本地 master = origin/master + github/master 政策合并；见最终报告）
-- 本目录文档为本阶段唯一产出；**等待架构复审批准，未开始 Phase 0 实施**。
+- 本目录文档为本阶段唯一产出；**SEM-02B 决策更新中；未开始 Phase 0 实施**。
