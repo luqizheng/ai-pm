@@ -45,7 +45,7 @@ Stale generation, mismatched client identity or missing required scope is reject
 
 ## 4. Claim
 
-A successful claim atomically:
+A successful claim is requested by SEM through the Platform HTTPS API and executed atomically inside Platform:
 1. verifies tenant/project/device authorization and candidate eligibility;
 2. excludes Runs under Scheduling Shield;
 3. serializes ownership using the existing claim transaction pattern;
@@ -66,7 +66,7 @@ Heartbeat proves only that the Runner supervisor loop is alive:
 
 ## 6. Cancellation and E3
 
-Extend the existing Runner command poll/ack channel; do not add a second MCP tool solely for cancellation.
+Carry cancellation commands and ACKs over the authenticated Runner↔SEM WSS channel. Do not use Platform database polling or add a separate MCP tool solely for cancellation.
 
 A cancel command carries command ID, Run ID, generation and target process identity.
 - Command receipt acknowledgement is separate from termination confirmation.
