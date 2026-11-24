@@ -8,7 +8,9 @@ Priority order: prevent duplicate execution; preserve authoritative state/audit;
 |---|---|---|
 | SEM restart, runtime volume intact | Reconcile DB Runs against OS process identity and persisted evidence | Treat lost in-memory child map as proof of death |
 | SEM workspace volume lost | Shield active Runs lacking E1/E2; create/associate HIR; rebuild Git cache only after isolation | Infer process death from missing PID/event files |
-| SEM cannot reach its own DB | Stop new dispatch/claim attempts that require durable local state; preserve/observe local processes safely | Use volatile in-memory state as durable truth |\n| SEM cannot reach Platform API | Stop new claims and authoritative Run mutations; preserve/observe local processes, queue retryable reports locally and reconcile after API recovery | Self-issue Lease or change Run state locally |\n| Platform cannot reach SEM API | Keep Outbox events pending/retryable; do not mark dispatch complete until SEM durably accepts the event | Drop dispatch event or assume SEM accepted it |
+| SEM cannot reach its own DB | Stop new dispatch/claim attempts that require durable local state; preserve/observe local processes safely | Use volatile in-memory state as durable truth |
+| SEM cannot reach Platform API | Stop new claims and authoritative Run mutations; preserve/observe local processes, queue retryable reports locally and reconcile after API recovery | Self-issue Lease or change Run state locally |
+| Platform cannot reach SEM API | Keep Outbox events pending/retryable; do not mark dispatch complete until SEM durably accepts the event | Drop dispatch event or assume SEM accepted it |
 | Platform PostgreSQL unavailable | Platform rejects/defers claim and authoritative mutations; SEM preserves local execution evidence and retries API operations after recovery | Treat SEM DB/cache as Run/Lease authority |
 | Runner offline / heartbeat lost | E4 shield + HIR; await reconnect or human resolution | Automatic re-dispatch |
 | Runner returns with stale generation | Reject heartbeat/result/command mutation | Revive old lease |
