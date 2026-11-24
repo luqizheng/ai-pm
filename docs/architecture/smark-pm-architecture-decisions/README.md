@@ -67,7 +67,7 @@ ADR-ART-001 定义 AI-PM 通用 Artifact Service 的独立部署与数据权威�
 
 ## 基线状态说明
 
-本文件集整理截至 2026-11-24 的架构决策。PA-03 至 PA-07 按各自文档状态执行。ART-01 为本次新增的基础服务架构基线；具体数据模型、API、IAM 适配、对象存储部署和旧数据迁移仍须经过 ART-00 / ART-01 实施设计，不代表已经完成。
+本文件集整理截至 2026-11-24 的架构决策。PA-03 至 PA-07 按各自文档状态执行。Artifact Service 已形成独立基础服务架构与 API/数据模型基线；两个 P0 安全/文件提交协议仍须关闭后才能投入生产。产品负责人已确认不做旧 viz.* 历史数据迁移，旧表在新实现切换并移除代码依赖后清理。
 
 
 ### ART-00 审计结论摘要
@@ -81,14 +81,14 @@ ART-00 已完成仓库静态代码与文档审计：现有 RustFS/file-service�
 - [ART-00](ART-00-artifact-service-current-state-audit-v1.0.md)：现有代码、存储、IAM 与 Visualization 资产静态审计。
 - [ART-01](ART-01-artifact-service-api-and-data-model-v1.0.md)：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
 
-ART-01 是目标实施契约，不代表独立服务、SDK、数据库或迁移已经实现。真实 token-service claims、file-service 能力、RustFS 运维状态和 viz.* 数据量必须在 ART-02 取得证据后才能进入实施。
+ART-01 是目标实施契约，不代表独立服务、SDK、数据库或两个 P0 已经实现。ART-02 已完成源码及 full-dev 核验；生产使用仍受授权委托、文件提交协议和部署安全门禁约束。旧数据迁移已取消。
 
 
 ### ART-02 第一轮核验
 
 - [ART-02 实施前置核验报告](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 pm-api JWT/JWKS、项目授权、file-service、viz.*、SeeCode/Mermaid 和当前 CI；明确区分代码事实、历史快照和运行态待核验项。
 
-ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，但 Artifact 专用 project/action 委托凭证和 file-service upload-intent/checksum/finalize 能力尚未得到证实。两个 P0 项关闭前，不进入生产实现或迁移。
+ART-02 结论：独立服务与复用 file-service 的方向成立，可启动独立仓库和非生产基础开发；Artifact 专用 project/action 委托凭证和 file-service upload-intent/checksum/finalize 能力仍是两个 P0。两项关闭前不得投入生产。历史 viz.* 数据迁移已取消。
 
 
 ### ART-02A 上游源码核验
@@ -116,4 +116,17 @@ ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，�
 
 - [ART-02D（并入 ART-02 报告第 14 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验四张 viz 表的 DDL/约束、应用层读写方、render_output 与 slot_config 的生产接线，以及历史 full-dev 行数快照。
 
-**ART-02D 结论：** Artifact 与 Approval 的读写路径已定位；render_output 写入函数存在但未发现生产调用方，slot_config 未发现应用层消费者。2026-11-15 的 full-dev PostgreSQL 历史快照中四表均为 0 行，但当前生产/目标环境实时行数仍 NOT VERIFIED。不得据此批准生产迁移或旧表退役。
+**ART-02D 结论：** Artifact 与 Approval 的读写路径已定位；render_output 写入函数存在但未发现生产调用方，slot_config 未发现应用层消费者。历史 full-dev 快照四表为 0 行。ART-02E 又于 2026-11-24 确认当前 full-dev 四表均为 0 行、Schema 与 migration 0020 一致。产品负责人另行确认系统无真实用户和业务数据，因此不做历史数据迁移；旧表在新实现切换并移除代码依赖后删除。
+
+
+### ART-02E 目标环境运行态核验
+
+- [ART-02E 运行态核验报告](../implementation/artifact-service/art-02e-runtime-audit/ART-02E-RUNTIME-AUDIT.md)：2026-11-24 full-dev 环境只读核验，四张 viz.* 表均为 0 行、migrations 59/59、Schema 与 0020 一致。
+- 证据范围仅限该 full-dev 环境；生产环境状态不由此推断。
+
+### ART-02F 产品使用状态与旧数据处理决策
+
+- 产品负责人确认 AI-PM 尚无真实用户使用、没有真实业务数据，因此取消旧 Visualization 数据迁移和历史兼容。
+- 新 Artifact Service 独立建模；AI-PM 保留 Approval、Slot Config 等业务职责。
+- 旧 viz.* 表在新实现切换、旧代码依赖移除、测试通过后，通过 AI-PM migration 清理。
+- 详见 [ART-02 第 15 节](ART-02-artifact-service-pre-implementation-verification-v1.0.md)。
