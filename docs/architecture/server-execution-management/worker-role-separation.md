@@ -60,11 +60,11 @@ flowchart TD
 - **约束**：循环 3 在整个系统中**至多一个部署单元运行**（定 Platform 角色）。SEM 角色不装配 outbox worker、不调用 `register_all_handlers`。
 - 为什么这就够了：`register_all_handlers` 装配集合 = `EventCatalog` 全集（`outbox.rs:394` 的编译期/启动期校验）。只要消费者唯一，不存在「A 进程注册了事件 X、B 进程没注册 → X 永久 pending/假死信」的分叉面。
 - guard：SEM 角色启动时若检测到 outbox 循环被请求装配 → 启动失败（fail-fast），防误配。
-- 投递语义不变：outbox 仍是 Platform 内的 DB 轮询分发，SEM 与 Platform 之间**无消息通道**，只共享 PostgreSQL。
+- 投递语义不变：outbox 仍是 Platform 内的 DB 轮询分发，SEM 与 Platform 之间通过版本化 HTTPS API 通信；Platform Outbox 负责可靠触发，双方不共享 PostgreSQL。
 
 ## 4. 循环 4 的跨角色协作
 
-拆分后循环 4 的 DB-only 半边（Platform）与执行半边（SEM）通过 DB 状态协作，无需新通道：
+拆分后循环 4 的 Platform 业务半边与 SEM 执行半边通过版本化 HTTPS API 协作；不共享数据库、不直接读写对方数据：
 
 ```mermaid
 sequenceDiagram
