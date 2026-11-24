@@ -8,8 +8,9 @@
 
 The following rules are now stated consistently across the overview, decision record, safety, topology, domain, protocol, state-machine, recovery, security, operations, testing and roadmap documents:
 
-1. PostgreSQL is the authority for business state, lease ownership and generation.
-2. SEM owns server-side process/workspace lifecycle; Platform retains business orchestration and outbox consumption.
+1. Platform PostgreSQL is authoritative for business state, Run lifecycle, Lease and Generation; SEM cannot access it directly.
+2. Platform and SEM own separate databases and communicate through versioned HTTPS APIs; Platform Outbox provides durable dispatch triggers, SEM Inbox is idempotent, and reconciliation repairs missed delivery.
+3. SEM owns server-side process/workspace lifecycle and SEM-private execution records; Platform retains business orchestration and outbox consumption.
 4. Lease expiry is not process-death evidence.
 5. Only E1/E2/E3 permit automatic reclaim; E4 permits isolation/HIR only; E5 remains uncertain and is never automatically reclaimed.
 6. Scheduling Shield is durable and must be checked by all claim/requeue/recovery paths.
@@ -36,7 +37,10 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-06 Session Resume | Exact Harness and CLI version passes a repeatable real process/session restoration test; otherwise supports_resume remains false |
 | G-07 Empty database | Full migration chain initializes all SEM schema and constraints from an empty database |
 | G-08 Deployment | Independent SEM host can access PostgreSQL and runtime volume; startup/readiness gates prevent claim when prerequisites fail |
-| G-09 Documentation/code alignment | All cited code anchors and current behavior are rechecked against the implementation HEAD immediately before Phase 0 |\n| G-10 Service API boundary | Route/version/auth schemas, service identity, idempotency, timeout/retry, Outbox→SEM inbox delivery, reconciliation and failure semantics are specified; SEM has no Platform DB credentials |\n| G-11 Data ownership | Every persisted field/table has one owning service; Run/Lease/Generation writes remain Platform-only; SEM DB contains execution-private records only |\n| G-12 Cross-service failure handling | No distributed transaction; dispatch loss, duplicate delivery, API outage, SEM restart and partial success have deterministic retry/reconciliation behavior |
+| G-09 Documentation/code alignment | All cited code anchors and current behavior are rechecked against the implementation HEAD immediately before Phase 0 |
+| G-10 Service API boundary | Route/version/auth schemas, service identity, idempotency, timeout/retry, Outbox→SEM inbox delivery, reconciliation and failure semantics are specified; SEM has no Platform DB credentials |
+| G-11 Data ownership | Every persisted field/table has one owning service; Run/Lease/Generation writes remain Platform-only; SEM DB contains execution-private records only |
+| G-12 Cross-service failure handling | No distributed transaction; dispatch loss, duplicate delivery, API outage, SEM restart and partial success have deterministic retry/reconciliation behavior |
 
 ## 3. Known design details still requiring code-level reconciliation
 
@@ -52,7 +56,8 @@ These are implementation-design/verification gates, not reasons to retain compat
 - No Workspace, Worktree or Git Mirror backup/snapshot system.
 - No RPO/RTO for those ephemeral execution assets.
 - No multi-origin Git synchronization in SEM.
-- No new message broker in V1; HTTPS API + Transactional Outbox is the initial integration pattern.\n- No shared Platform/SEM database and no SEM direct SQL access to Platform PostgreSQL.
+- No new message broker in V1; HTTPS API + Transactional Outbox is the initial integration pattern.
+- No shared Platform/SEM database and no SEM direct SQL access to Platform PostgreSQL.
 - No new SEM microservice or binary is implied by this document set.
 - No code implementation is authorized by this review.
 
