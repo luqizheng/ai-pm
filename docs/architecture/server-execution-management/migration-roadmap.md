@@ -30,27 +30,27 @@ flowchart LR
 | **验收标准** | 构造「进程活着 + 租约过期」场景：任何路径都不产生第二个进程；构造「进程死了 + 证据在」场景：下一轮回收成功；全新库迁移链可完整初始化 |
 | **回滚方式** | 还原上述文件（无 Schema 变更，纯代码语义回退） |
 
-## Phase 1：Worker 角色化装配
+## Phase 1：Worker 角色化装配与 Platform–SEM API 解耦
 
 | 项 | 内容 |
 |---|---|
 | **前置条件** | Phase 0 合并 |
-| **涉及模块** | `apps/ai-pm-worker` 装配层 |
-| **预计修改文件** | `apps/ai-pm-worker/src/main.rs`（角色解析 + 循环 4 拆分为 `run_db_only_round`/`run_execution_round` + 按 spawn 过滤；outbox 循环仅 platform/all 角色装配，SEM 角色误配 fail-fast） |
-| **风险** | 低（默认 `all` 零行为漂移）；配置错误导致双 outbox 消费者（fail-fast 缓解） |
-| **测试** | 三角色 × 启动冒烟（循环集合符合归属表）；outbox 双消费者 fail-fast；`all` 角色全量回归（现有测试基线） |
-| **验收标准** | `role=platform` 无任何 spawn/FS 执行行为；`role=execution` 不装配 outbox；单机 `all` 与改造前行为逐循环等价 |
+| **涉及模块** | `apps/ai-pm-worker` 装配层、Platform/SEM 服务 API、服务身份与各自数据库 |
+| **预计修改文件** | `apps/ai-pm-worker/src/main.rs`（角色解析 + 循环 4 拆分；SEM 执行角色通过 Platform HTTPS API 请求 claim 和状态迁移，不再使用 Platform DB 连接）；`apps/pm-api` 内部服务 API；Platform Transactional Outbox 投递；SEM 幂等 Inbox 与独立数据库迁移/配置 |
+| **风险** | API 契约遗漏、重复投递、跨服务部分成功；通过幂等键、Inbox、超时重试和对账处理；SEM 误持 Platform DB 凭据必须在部署验收中禁止 |
+| **测试** | 三角色启动冒烟；Outbox 重复/延迟/失败投递；SEM 重启后 Inbox 去重与 API 对账；Platform API 不可达；SEM 不含 Platform DB 凭据；claim 并发与 generation fencing；`all` 开发态回归 |
+| **验收标准** | `role=platform` 保持业务权威；`role=execution` 不装配 Platform outbox handler、不连接 Platform DB，所有 Run/Lease/Generation 写入均经 Platform API；Outbox/API 故障可恢复且无重复执行 |
 | **回滚方式** | 还原 main.rs（单文件） |
 
 ## Phase 2：独立 Docker 部署（运行期持久卷，不做 Workspace 备份）
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0/1 合并；workspace 运行期持久卷规划完成；明确不建设 Workspace/Worktree/Git Mirror 备份 |
+| **前置条件** | Phase 0/1 合并；Platform HTTPS API 可达；SEM 独立数据库已初始化；workspace 运行期持久卷规划完成；明确不建设 Workspace/Worktree/Git Mirror 备份 |
 | **涉及模块** | Dockerfile、infrastructure compose |
 | **预计修改文件** | `Dockerfile`（新 execution target：含 codex CLI 的 runtime 层）、`infrastructure/full-dev/docker-compose.ai-pm.yml` 或新 compose 文件（`ai-pm-execution-worker` 服务：`AI_PM_WORKER_ROLE=execution`、`AI_PM_RUN_EXECUTOR=codex`、`AI_PM_WORKSPACE_ROOT` 持久卷、`AI_PM_RUN_DISPATCH=on`；Platform 侧服务设 `AI_PM_WORKER_ROLE=platform` + `AI_PM_RUN_DISPATCH=off`）、部署清单文档 |
-| **风险** | SEM 主机与 DB 网络不通（预检项）；卷权限/UID 错配；跨主机 `DATABASE_URL` 误用 `localhost`（AGENTS.md 第 3 条：本机 Docker 映射用 `127.0.0.1`，远程用 IP） |
-| **测试** | 全新环境空库初始化 → Platform + SEM 起服务 → 端到端跑一条 delivery Run（spawn/poll/收尾）；SEM 容器强杀重启 → 在途 Run 按证据分类处置；workspace 卷内容在重启后完好 |
+| **风险** | SEM 主机到 Platform HTTPS API 或 SEM 自有数据库网络不通；服务身份/证书配置错误；卷权限/UID 错配 |
+| **测试** | 全新环境分别初始化 Platform DB 与 SEM DB → Platform + SEM 起服务 → HTTPS Outbox/Inbox 派发 → 端到端跑一条 delivery Run（spawn/poll/收尾）；SEM 容器强杀重启 → Inbox 去重/对账恢复、在途 Run 按证据分类处置；Platform API 短暂不可达后恢复 |
 | **验收标准** | 独立主机上真实执行一条任务全链路成功；Platform 主机上无任何执行进程残留；凭据不落卷（审计抽查卷内文件无 token/密钥）；Workspace/Worktree/Git Mirror 无备份依赖，卷丢失进入 E4/E5 安全隔离 |
 | **回滚方式** | compose 退回单机 `role=all` 形态（默认形态始终保留） |
 
