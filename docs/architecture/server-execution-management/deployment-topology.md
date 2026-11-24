@@ -51,11 +51,11 @@ $AI_PM_WORKSPACE_ROOT/
 └── cleanup-ledger/…              # workspace reclamation 账本
 ```
 
-- **必持久**：整个根目录一个卷。pid 文件/children-map 失忆问题（SEM-01 结论 10）由卷持久化解决——worker 重启后孤儿判定依赖 pid 文件与事件账本仍在。
+- **运行期持久**：整个根目录挂载一个持久卷，供同一 SEM 主机上的进程监督、PID 文件、日志和事件账本在容器重启后继续可见。持久卷不等于备份；本项目明确不备份 Workspace、Worktree 或 Git Mirror。
 - **权限**：容器内专用 UID 运行，卷目录 owner 对齐；不使用 root。
 - **磁盘清理**：workspace reclamation 现有三重开关（ENABLED + SHARED_ROOT + 绝对路径校验，`main.rs:143-220`）语义保留；Phase 0 新增「清理前 `confirm_termination`」前置（见 `execution-safety.md` §5）。
-- **恢复策略**：卷丢失 = 全部执行证据丢失。后果与处置：`task_run` 行仍在 DB，`stage='started'` 的活跃 Run 会因三证据不可得进入 E4/E5 → 挂起 + HIR，不会自动重派（安全优先）。运维预案：卷有备份/快照优先；无备份时接受「活跃 Run 全部人工处置」。
-- **git-mirror**：在同一根下（现状 `workspace_root` 布局），持久化避免全量重镜像。
+- **卷丢失策略**：卷丢失意味着本地 PID/children 关联和执行现场不可用，但**不证明进程已终止**。数据库中所有无法取得 E1/E2 的活跃 Run 进入 E4/E5 隔离并创建/关联 HIR；禁止自动重派。Workspace、Worktree、Git Mirror 不做备份或快照；Git Mirror 可从该 Repository 唯一权威 `origin` 重建。
+- **git-mirror**：在同一根下（现状 `workspace_root` 布局），作为运行期缓存可持久存在；丢失后从唯一权威 `origin` 重建，不做备份。每个 Repository 仅有一个权威 `origin`，SEM 不负责远端同步。
 
 ## 4. PID 与进程证据
 
