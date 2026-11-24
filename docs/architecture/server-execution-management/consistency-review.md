@@ -10,17 +10,17 @@ The following rules are now stated consistently across the overview, decision re
 
 1. PostgreSQL is the authority for business state, lease ownership and generation.
 2. SEM owns server-side process/workspace lifecycle; Platform retains business orchestration and outbox consumption.
-3. Lease expiry is not process-death evidence.
-4. Only E1/E2/E3 permit automatic reclaim; E4 permits isolation/HIR only; E5 remains uncertain and is never automatically reclaimed.
-5. Scheduling Shield is durable and must be checked by all claim/requeue/recovery paths.
-6. Generation fencing does not prevent external Git/network side effects.
-7. Runner heartbeat proves supervisor liveness only, not Harness activity or human presence.
-8. Runner defaults to unattended; supervised requires explicit configuration and pre-claim user confirmation.
-9. HIR is an independent entity and does not replace task_interaction.
-10. Workspace/Worktree/Git Mirror are not backed up; runtime persistence is distinct from backup.
-11. Each Repository has one authoritative origin; SEM does not implement multi-origin synchronization.
-12. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
-13. Harness Resume remains disabled until exact-version real-world acceptance.
+4. Lease expiry is not process-death evidence.
+5. Only E1/E2/E3 permit automatic reclaim; E4 permits isolation/HIR only; E5 remains uncertain and is never automatically reclaimed.
+6. Scheduling Shield is durable and must be checked by all claim/requeue/recovery paths.
+7. Generation fencing does not prevent external Git/network side effects.
+8. Runner heartbeat proves supervisor liveness only, not Harness activity or human presence.
+9. Runner defaults to unattended; supervised requires explicit configuration and pre-claim user confirmation.
+10. HIR is an independent entity and does not replace task_interaction.
+11. Workspace/Worktree/Git Mirror are not backed up; runtime persistence is distinct from backup.
+12. Each Repository has one authoritative origin; SEM does not implement multi-origin synchronization.
+13. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
+14. Harness Resume remains disabled until exact-version real-world acceptance.
 
 ## 2. Required pre-implementation closure gates
 
@@ -36,7 +36,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-06 Session Resume | Exact Harness and CLI version passes a repeatable real process/session restoration test; otherwise supports_resume remains false |
 | G-07 Empty database | Full migration chain initializes all SEM schema and constraints from an empty database |
 | G-08 Deployment | Independent SEM host can access PostgreSQL and runtime volume; startup/readiness gates prevent claim when prerequisites fail |
-| G-09 Documentation/code alignment | All cited code anchors and current behavior are rechecked against the implementation HEAD immediately before Phase 0 |
+| G-09 Documentation/code alignment | All cited code anchors and current behavior are rechecked against the implementation HEAD immediately before Phase 0 |\n| G-10 Service API boundary | Route/version/auth schemas, service identity, idempotency, timeout/retry, Outbox→SEM inbox delivery, reconciliation and failure semantics are specified; SEM has no Platform DB credentials |\n| G-11 Data ownership | Every persisted field/table has one owning service; Run/Lease/Generation writes remain Platform-only; SEM DB contains execution-private records only |\n| G-12 Cross-service failure handling | No distributed transaction; dispatch loss, duplicate delivery, API outage, SEM restart and partial success have deterministic retry/reconciliation behavior |
 
 ## 3. Known design details still requiring code-level reconciliation
 
@@ -52,7 +52,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 - No Workspace, Worktree or Git Mirror backup/snapshot system.
 - No RPO/RTO for those ephemeral execution assets.
 - No multi-origin Git synchronization in SEM.
-- No new message broker.
+- No new message broker in V1; HTTPS API + Transactional Outbox is the initial integration pattern.\n- No shared Platform/SEM database and no SEM direct SQL access to Platform PostgreSQL.
 - No new SEM microservice or binary is implied by this document set.
 - No code implementation is authorized by this review.
 
