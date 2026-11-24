@@ -26,7 +26,7 @@ flowchart LR
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | SEM-02D 关闭执行安全状态载体、HIR 最小实体及证据 API 契约后；可在当前单机先行落地 |
+| **前置条件** | 用户 ratify `sem-02d-closure-design-proposal.md` 中 D-01/D-02，并冻结执行安全屏障、最小 HIR 和证据 API 契约后；可在当前单机先行落地 |
 | **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现）、Platform 执行安全状态/HIR 最小持久化与审计 |
 | **预计修改文件** | 上述执行代码 + 一次 Platform migration（执行安全屏障/HIR 最小记录的正式载体由 SEM-02D 冻结）；`pm-api` 仅在需要暴露安全处置入口时增加最小 API。E3 远程通道尚未验收前，Runner 形态全部走 E4 挂起，不得自动重派 |
 | **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；runner cancel ACK 通道改动触到 runner 主循环（需单独测试；可先落 SEM 侧证据前置，E3 通道 Phase 4 补齐——期间 runner 形态全部走 E4 挂起 + 人工） |
@@ -38,7 +38,7 @@ flowchart LR
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0 合并；Platform–SEM/Runner HTTPS 与 WSS wire contract、认证及 SEM schema 已冻结 |
+| **前置条件** | Phase 0 合并；用户 ratify D-03–D-08，Platform–SEM/Runner HTTPS 与 WSS wire contract、认证、SEM schema、Ports/Adapters 边界已冻结 |
 | **涉及模块** | `apps/ai-pm-worker` 装配层、Platform/SEM 服务 API、服务身份与各自数据库 |
 | **预计修改文件** | `apps/ai-pm-worker/src/main.rs`（角色解析 + 循环 4 拆分；SEM 执行角色通过 Platform HTTPS API 请求 claim 和状态迁移，不再使用 Platform DB 连接）；`apps/pm-api` 内部服务 API；Platform Transactional Outbox 投递；SEM 幂等 Inbox 与独立数据库迁移/配置 |
 | **风险** | API 契约遗漏、重复投递、跨服务部分成功；通过幂等键、Inbox、超时重试和对账处理；SEM 误持 Platform DB 凭据必须在部署验收中禁止 |
