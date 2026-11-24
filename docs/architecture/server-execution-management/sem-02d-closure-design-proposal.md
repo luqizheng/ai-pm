@@ -243,7 +243,91 @@ Phase 0 前需按实际 Codex/其他 Harness 启动器逐项验证：环境变�
 - Phase 5 进行真实双 Runner、多 OS、分区、密钥撤销、凭据副作用与并发验收。
 - D-12 凭据盘点必须在 Phase 0 代码改动前完成，Phase 0/1/2 各自验收真实注入与撤销行为。
 
-## 14. 仍需用户确认的明确事项
+
+## 15. D-13（新增 P1）Runner 资源感知与同机并发准入
+
+**用户提出：Runner 应提交 CPU、磁盘空间和内存信息，并由 SEM 据此决定同一台 PC 是否可以派发多个任务。** 该能力纳入 SEM-02D 关闭范围。以下为建议基线，待确认后正式冻结。
+
+### 15.1 资源采集与上报
+
+Runner Supervisor 定期采集并通过现有 WSS 控制连接发送 `runner.resource.report`。资源报告与 WSS Heartbeat 分离：Heartbeat 证明监督连接存活；Resource Report 描述某个采样时刻的资源快照，二者都不续租。
+
+V1 最小指标：
+
+| 类别 | 必报字段 | 用途 |
+|---|---|---|
+| CPU | logical_cpu_count、cpu_utilization（短窗口与较长窗口）、sample_duration_ms | 判断 CPU 是否有并发余量；使用窗口值，避免瞬时采样抖动 |
+| Memory | total_bytes、available_bytes、memory_pressure（平台可提供时） | 硬性内存准入与压力保护 |
+| Workspace volume | volume_id、total_bytes、available_bytes、workspace_reserved_bytes | 判断实际 Workspace 所在卷是否有足够空间；不能只看系统盘 |
+| 采样元数据 | runner_id（由连接身份确定，不信任 payload）、boot_id、sample_seq、observed_at、schema_version | 防止乱序/重放，识别 Runner 重启与陈旧样本 |
+
+- CPU 使用率按 OS 统一归一化为 0–1；内存/磁盘统一使用 bytes。采样建议 10–15 秒一次，支持配置；断线重连后立即补发最新快照。
+- 多磁盘机器必须上报 Workspace 实际落盘的 volume；SEM 不应要求或保存完整本机任意路径。
+- 可选指标（GPU、磁盘 IOPS、网络带宽、温度）不作为 V1 必需准入条件；未来按 Harness/任务类别另行扩展。
+- 资源样本有最大新鲜度；建议 45 秒。样本过期、boot_id 不匹配、序号倒退或字段无效时，该 Runner 标记为 `resource_unknown`，默认不接收新任务；已有任务不因此被终止。
+
+### 15.2 任务资源需求模型
+
+不能只根据“当前 CPU 低”就无限派发。每个候选任务需要资源需求画像（Resource Profile）：
+- `cpu_units`：预期 CPU 份额/核心等效量；
+- `memory_bytes`：预估峰值内存预算；
+- `workspace_bytes`：预计新增工作区空间预算；
+- `profile_class`：例如 `light` / `standard` / `heavy` / `unknown`。
+
+资源画像来源优先级：
+1. 项目/任务类型或已批准的 Harness 执行配置；
+2. 同类任务的历史运行统计（样本足够后）；
+3. 保守默认值。
+未知画像不得按零资源处理；使用保守默认预算，或按策略只允许单任务独占 Runner。资源画像是调度提示/准入预算，不改变 Platform 对任务业务状态的权威。
+
+### 15.3 SEM 准入算法与并发预留
+
+SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检查：
+- Runner 在线、授权新鲜、监督模式/用户确认条件满足；
+- CPU 使用率未超过准入上限，且剩余 CPU 预算足够；
+- available memory 扣除安全保留量后，足以容纳新任务预算；
+- Workspace volume 可用空间扣除安全保留量后，足以容纳新增工作区预算；
+- 当前 Run 数、Harness/OS 限制和项目级并发上限未超限。
+
+**必须有原子并发预留，不能先并发读同一份 metrics 再各自 Claim。**
+1. SEM 在自己的 DB 事务中锁定该 Runner 的资源快照/调度记录，检查已有活动预留，写入该 Run+Generation 对应的 resource reservation（可先挂在 dispatch_operation 上）。
+2. 只有预留成功后，SEM 才向 Platform 请求 Claim。
+3. Platform Claim 失败/明确未创建 Lease：释放预留。
+4. Claim 结果未知：保留预留并使用同一个 claim_request_id 对账，不能释放后另起一次 Claim。
+5. Claim 成功并派发后：预留与 Run+Generation 绑定，直到 Platform 终态 + 可靠终止证据/安全处置完成才释放；WSS 断开、Runner 离线、Workspace 丢失或资源报告过期都不能释放。
+6. Runner 报告的新快照反映真实当前资源使用；调度预算同时考虑任务资源画像和活动预留，避免并发 Claim 突破容量。实现时须明确“已启动任务的观测占用”与“尚未启动任务的预留”如何折算，禁止把同一任务既按完整实测占用又按完整预测预留重复扣减。
+
+建议初始采用硬门槛 + 保守并发上限，而不是复杂的多维最优化算法。阈值通过真实 Windows Runner 压测校准；不要在没有测量依据时写死 CPU/内存/磁盘百分比。
+
+### 15.4 资源压力与故障语义
+
+- 资源不足只阻止新派发；V1 不自动暂停、杀死或迁移正在运行的任务。
+- CPU 持续高占用可暂时降低 Runner 排名或停止新派发；内存/磁盘达到硬阈值时直接拒绝新派发。
+- 资源数据是调度信号，不是进程存活证据；不能用 CPU=0、内存下降、磁盘空间变化来推断 Harness 已退出，也不能生成 E1/E2/E3。
+- 资源报告中断但 WSS 仍在线：标记资源未知，停止新增派发；已有 Run 按 Lease/进程证据规则继续监督。
+- Runner 离线：不再派发；已有 Run 进入既有 E1–E5 故障处置，不自动释放资源预留。
+- 任务完成后只有 Platform 终态与进程终止/隔离条件满足，SEM 才释放该 Run+Generation 的资源预留。
+
+### 15.5 持久化与协议影响
+
+为避免无必要扩大 SEM 数据模型，建议 V1：
+- 在 `runner_connection` 保存每 Runner 最新资源快照、`boot_id`、`sample_seq`、`observed_at` 和资源健康状态；历史指标可先进入外部监控系统，不要求在 SEM DB 无限存储时序数据。
+- 在 `dispatch_operation` 保存资源画像摘要、准入时快照序号、预留预算、reservation 状态及释放原因；其唯一键仍以 Run+Generation/dispatch operation 为边界。
+- WSS 新增 `runner.resource.report`；Platform 候选/调度 API 返回候选任务的资源画像或资源类别。Runner 只报告本机事实，不自行决定是否接收任务。
+- 资源报告不需要经过 Platform PostgreSQL；资源快照与准入预留归 SEM 私有执行状态。Platform 仍只负责业务 Claim、Lease、Generation 与任务状态。
+
+### 15.6 验收标准
+
+1. 单 Runner 资源充足时可并发运行多个轻量任务，且不超过配置预算。
+2. 内存不足或 Workspace volume 空间不足时，SEM 拒绝新增派发，不影响现有任务。
+3. 两个调度请求并发到达时，资源预留事务保证不会双双使用同一份剩余预算。
+4. Claim 超时/响应丢失时，预留不被提前释放；同一幂等请求恢复后只产生一个 Run+Generation 执行权。
+5. Resource Report 陈旧、乱序、Runner 重启、WSS 断线时，停止新派发并正确恢复快照，不把资源状态当进程死亡证据。
+6. 任务退出但缺少 E1/E2/E3 时，不释放安全屏障或资源预留。
+7. CPU 高占用、内存压力、Workspace 卷空间变化在 Windows Runner 上通过长时间并发压测验证。
+
+
+## 16. 仍需用户确认的明确事项
 
 本提案不擅自冻结下列选择：
 1. D-01：是否采用独立 `delivery.run_execution_barrier` 表，而不是在 `task_run` 增加 barrier 列。
@@ -255,5 +339,6 @@ Phase 0 前需按实际 Codex/其他 Harness 启动器逐项验证：环境变�
 7. D-09：是否接受 V1 将已注册未撤权 Runner Supervisor 视为 E3 可信观察者，而不提供硬件证明。
 8. D-10/D-11：是否批准命令双层状态映射与上述 HIR 状态推进条件。
 9. D-12：实际 Harness 凭据清单需要按当前实现逐项复核；本文是目标边界，不冒充已完成代码盘点。
+10. D-13：是否批准 Runner CPU/Memory/Workspace-volume 资源报告、资源画像、SEM 原子准入预留与资源未知时停止新派发的方案。
 
 在这些事项确认并同步更新所有权威文档前，状态保持 `Design In Progress`，不得启动 Phase 0。
