@@ -131,3 +131,23 @@ D-01–D-12 的候选设计已一次性整理提交，统一标记为 Review Pen
 一致性补充：ADR-SEM-16 所称 E4 持久化 scheduling shield 是执行隔离语义；新设计将其物理载体明确为独立 `delivery.run_execution_barrier`，与 Interaction scheduling shield 分离。Platform dispatchability predicate 必须同时检查两类 shield/barrier。WSS 消息集合必须包含 ADR-SEM-26 的 `runner.resource.report`；资源报告不续租、不作为进程终止证据。
 
 D-12 目标凭据边界已写明，但实际 Codex/Harness 启动器的环境变量、命令行、配置文件、子进程继承、日志、事件文件、crash dump 和 SSH 临时文件盘点仍是 Phase 0 前强制只读门槛。Phase 0 未启动。
+
+
+## 13. 2026-11-25 十项评审问题复核与一致性修正（Review Pending）
+
+新增 [SEM-02D 评审问题核验与修正设计](./sem-02d-review-findings-corrective-design.md)。本轮确认原设计存在以下跨文档不一致：
+
+1. Interaction 事务会创建 terminate command，但执行消费者只覆盖 Runner；SEM-local CodexExecutor 没有 continue/reply-injection 闭环。
+2. HIR 的可操作闭环被推迟到 Phase 4，与 Phase 0–3 的 E4/E5 隔离路径冲突。
+3. Runner 自然退出与 lease-loss cleanup 未形成独立、持久、可重试的 E3 证据回传；command ACK 不能替代 E3。
+4. Runner 重启恢复仅覆盖 start_wait + responded Interaction，不覆盖执行中途 Detached。
+5. `ExitOutcome::Lost` 在 started Run 的 Workspace/PID/logs 丢失场景被误当作 Done，违反 E5。
+6. E4 下人工授权重派与 R-SAFE-1 冲突；需 E6 Human Risk Acceptance，且不伪装成终止证据。
+7. Interaction/HIR 通知没有明确 recipient/delivery 落点；Interaction 创建事务未写通知事件。
+8. Native Session ID 的采集位置写在 SEM poll，无法读取远端 Runner CODEX_HOME；Continuation 与 Native Resume 被混淆。
+9. Detached 不能加入 Interaction scheduling_shield 四值；由 Execution lifecycle + 独立 Barrier 表达，Phase 0 必须有 Migration。
+10. B06-D3 把 shielded Run 回 queued 后，queued claim 不再经过 claimed-only shield 检查；所有入口必须统一 dispatchability predicate。
+
+本轮修正将 HIR 最小闭环前移至 Phase 0，E3/WSS 与 Detached reconnect 放入 Phase 1，Phase 2 增加完整 Interaction/HIR/重启验收，Phase 3 分离三种 Session continuity，Phase 4 只扩展高级 handoff 与 E6。旧文档冲突处以 corrective-design 文档为准，直到全部专题文档完成逐项一致性复核。
+
+当前状态仍为 Design In Progress / Review Pending；没有新增已批准 ADR，Phase 0 未启动。
