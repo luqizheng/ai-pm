@@ -84,7 +84,8 @@ pub struct HarnessCapabilities {
 HIR/重派时：
   harness capabilities.supports_resume
   AND harness_session_id IS NOT NULL
-  AND 原执行端可访问（Runner 设备/SEM 主机在线）\n  AND 所需原生 Session 元数据仍可取得
+  AND 原执行端可访问（Runner 设备/SEM 主机在线）
+  AND 所需原生 Session 元数据仍可取得
   AND 原执行权已安全终止（E1/E2/E3 证据）
   → Resume：仅在原执行端仍可访问、Harness 原生会话元数据可用且目标版本实测通过时，恢复原 Harness Session；新 Attempt 不得仅凭复制 session id 就假设可跨设备/主机恢复
 否则 → Fresh Attempt：新 task_run 行，supersedes_run_id 链保留血缘，HIR 关联记录
