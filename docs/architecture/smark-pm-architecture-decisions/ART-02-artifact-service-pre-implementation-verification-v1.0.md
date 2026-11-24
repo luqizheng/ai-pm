@@ -500,3 +500,122 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 - [ ] 记录部署镜像 digest、服务版本、测试时间、测试用例 ID 与脱敏结果。
 
 **当前状态：ART-02B 源码/测试证据复核已完成；真实运行态验证仍 OPEN。** 在拿到上述脱敏测试证据前，ART-02B 不得标记为 runtime PASS，ART-03 也不得据此解除 P0。
+
+
+---
+
+## 13. ART-02C：RustFS 部署、持久化与备份恢复核验（2026-11-24）
+
+> **核验对象：** `luqizheng/lmms`，Tag `v1.8.1`，peeled commit `7c382118e267ad7b9f7d3457c8648e78e662da41`。  
+> **范围：** 标准 Docker Compose、prod/remote override、file-service 配置、ObjectStore 实现、备份 Runbook 与部署文件树。  
+> **核验限制：** 只读静态仓库核验。未连接用户实际部署主机、Docker daemon、RustFS endpoint、bucket、PostgreSQL 或备份介质；没有读取任何密钥或环境变量实际值。不能将仓库配置推断为用户当前运行态。
+
+### 13.1 关键发现：标准 Compose 默认不是 RustFS
+
+**VERIFIED-CODE：**
+
+- `services/file-service/src/config.rs::default_storage_backend`：`FILE_STORAGE_BACKEND` 未设置时默认 `local`。
+- `examples/docker-deploy-full/docker-compose-services.yml` 中 File Service 设置 `STORAGE_PATH=/var/lib/file-service/storage`，挂载 named volume `file-storage:/var/lib/file-service/storage`。
+- 同一 File Service service block 未设置 `FILE_STORAGE_BACKEND`、`S3_ENDPOINT`、`S3_BUCKET`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`。
+- `examples/docker-deploy-full/docker-compose-services.prod.yml` 对 File Service 只调整 host ports 与 restart policy，没有切换 storage backend。
+- `examples/docker-deploy-full/docker-compose-services.remote.yml` 对 File Service 只增加 restart policy，没有清空 named volume，也没有注入 RustFS 配置。
+- Compose 文件底部将 volume 命名为 `superpowers_file-storage`。
+
+**结论：** 按 v1.8.1 仓库提供的标准部署 Compose，File Service 默认使用 LocalStorage，数据落在 Docker named volume `superpowers_file-storage`。README 虽说明 RustFS 是私有化部署推荐后端，但“代码支持 RustFS”与“标准 Compose 已启用 RustFS”是两件不同的事。
+
+**边界：** 用户可以在仓库外部通过环境注入或自行维护的 Compose override 配置 RustFS；本次仓库静态审计不能证明用户当前环境一定运行 LocalStorage。需要实际部署配置确认。
+
+### 13.2 RustFS 配置与对象存储实现
+
+**VERIFIED-CODE：**
+
+- `StorageBackend::parse` 接受 `local`、`rustfs`、`s3` 等值。
+- RustFS backend 要求 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`；bucket/region/path-style 等从配置读取。
+- RustFS 默认使用 path-style；S3-compatible driver 使用统一实现，不为 RustFS 建独立业务 API。
+- `S3Storage::put/get/get_stream/delete/exists/size/presign_get/presign_put` 已实现。
+- `S3_AUTO_CREATE_BUCKET` 默认 true；启动时异步 best-effort 检查/创建 bucket，失败只记录 warning，不阻断服务启动。
+- 创建 bucket 需要 `CreateBucket` 权限；如果采用最小权限生产策略，建议由运维预建 bucket 并关闭自动创建，而不是给 file-service 运行身份永久授予建桶权限。
+- RustFS 相关配置由 File Service 读取；Artifact Service 不应持有这些长期 S3 凭据，也不应直接访问 bucket。
+
+**部署安全建议：**
+
+- File Service 的 RustFS 凭据应仅具备指定 bucket/prefix 的必要读写/删除权限，不应具备账户级管理权限。
+- Artifact Service 只获得调用 file-service 的 service identity；不要向它注入 `S3_ACCESS_KEY` / `S3_SECRET_KEY`。
+- 生产 bucket 应预建、禁止公共访问、限制网络入口，并将服务端点与管理控制台分离。
+- 需确认 presigned URL 的外部可达域名、TLS、反向代理、DNS 和生命周期；内网 endpoint 生成的签名 URL 不能默认认为浏览器/外部客户端可访问。
+- bucket versioning、object lock、生命周期规则、服务端加密、跨故障域复制等能力，本次没有在 lmms 仓库中找到可证明的 RustFS 运行配置，状态为 NOT VERIFIED。
+
+### 13.3 标准部署的文件持久卷
+
+**VERIFIED-CODE：**
+
+- 标准 Compose 使用 named volume `superpowers_file-storage` 保存 LocalStorage 文件。
+- prod override 未替换该卷；remote override 也保留 base volume。
+- 本次检查的 Compose 片段未为该卷配置宿主机备份、快照、异地复制或自动清理策略。
+- Docker named volume 解决容器重建后的本机持久化，不等于备份，也不等于跨主机灾备。
+
+**结论：** 如果目标环境沿用标准 Compose 且没有外部 override，则 File Service 文件内容依赖 `superpowers_file-storage`。只备份 PostgreSQL 元数据而不备份这个卷，会产生 metadata 存在但对象内容不可恢复的风险；只备份文件卷而不备份 file-service DB，也会丢失文件 ID、tenant、size、expiry 等元数据关联。
+
+### 13.4 备份 Runbook 与部署拓扑不一致
+
+**VERIFIED-DOC：**
+
+- `docs-site/runbooks/backup.md` 明确称为“4 项基础设施组件”备份 SOP，内容覆盖 MySQL、Redis、RabbitMQ、Consul。
+- Runbook 自述“没有自动备份”，当前是手动 SOP。
+- Runbook 没有 File Service `superpowers_file-storage` named volume 的备份/恢复步骤，也没有 RustFS bucket/object 数据的备份/恢复步骤。
+- 本次检查的部署文件使用 `infrastructure/infra-postgres`，其 Compose 配置 PostgreSQL named volume `postgres_data`；上述 Runbook 的数据库章节却写 MySQL。不能把该 MySQL Runbook 当作当前 PostgreSQL 部署已具备的数据库备份证明。
+- `docs/superpowers/specs/2026-07-29-p0.4-backup-runbook-design.md` 将备份范围限定为手动 SOP，并明确把自动化、异地备份/对象存储上传排除在外。
+
+**结论：** 当前仓库中可见的备份文档不足以证明 File Service 数据或 RustFS 对象有可恢复备份；而且数据库类型与当前 PostgreSQL 部署文件存在文档漂移。需要单独补齐与目标部署拓扑一致的 PostgreSQL + 对象存储联合备份/恢复方案。
+
+### 13.5 生命周期与清理
+
+**VERIFIED-CODE：**
+
+- File Service 元数据模型包含 `is_temporary` 与 `expires_at`；下载路径会检查过期时间。
+- 本次审阅的 `services/file-service/src/main.rs` 启动流程没有发现过期对象清理 worker。
+- File Service README 提到临时文件自动清理，但在本次审阅的启动路径中没有找到可证明该功能实际运行的调度任务。
+- S3-compatible ObjectStore 提供 `delete`，但对象删除操作能力不等于生命周期策略已经配置。
+- 本次没有找到可确认的 RustFS bucket lifecycle policy、retention policy 或跨服务协调删除实现。
+
+**结论：** 过期访问限制与物理对象清理是两种不同语义。Artifact Service 需要不可变版本保留策略；不能把 `expires_at` 检查或 README 描述视为已经实现可靠的对象生命周期管理。
+
+### 13.6 联合备份与恢复必须满足的要求
+
+对 Artifact Service 而言，数据库元数据与对象字节是一个逻辑交付单元。目标运行环境至少应具备：
+
+1. **一致性时间点：** 备份期间暂停/协调写入，或采用可证明的一致性快照机制，确保数据库记录与对象集能互相对应。
+2. **数据库备份：** 对 file-service PostgreSQL/MySQL 实际使用的数据库执行加密、校验和、保留策略明确的备份；备份恢复后需验证 schema、文件记录、tenant scope 与索引。
+3. **对象备份：** 对 LocalStorage named volume 或 RustFS bucket/prefix 做独立备份/复制；仅备份 bucket 配置不等于备份对象字节。
+4. **版本/删除语义：** 明确对象版本控制、误删保护、保留期限、软删除窗口、生命周期与最终物理删除的责任边界。
+5. **恢复顺序：** 恢复数据库与对象存储到同一一致性点；随后抽样逐条校验 FileInfo 对应对象存在、size 一致、checksum 一致、可下载。
+6. **恢复演练：** 至少在隔离环境完成一次完整恢复，记录 RPO/RTO、对象数量、字节数、抽样 hash 与失败处理。
+7. **异地保护：** 生产备份不能只留在同一 Docker host 或同一个 RustFS 故障域；需要独立凭据、独立故障域和定期恢复验证。
+
+### 13.7 ART-02C 核验矩阵
+
+| 检查项 | 状态 | 结论 |
+|---|---|---|
+| File Service 支持 RustFS/S3 | VERIFIED-CODE | RustFS backend 与 S3-compatible driver 已实现 |
+| 标准 Compose 启用 RustFS | VERIFIED-CODE：否 | 默认 backend=local，Compose 配置 named volume |
+| 标准 Compose 文件持久化 | VERIFIED-CODE | `superpowers_file-storage` named volume |
+| prod/remote override 切换 RustFS | VERIFIED-CODE：未发现 | override 未配置 backend/endpoint/credentials |
+| RustFS bucket 权限与配置 | NOT VERIFIED | 需目标环境核对；不读取或输出密钥 |
+| bucket versioning / lifecycle / object lock | NOT VERIFIED | 仓库没有可确认的实际 bucket policy |
+| file-storage volume 备份 | NOT FOUND IN REVIEWED RUNBOOK | 没有对应备份/恢复步骤 |
+| RustFS 对象备份 | NOT FOUND IN REVIEWED RUNBOOK | 没有对象数据备份/恢复证据 |
+| PostgreSQL 备份流程 | PARTIAL / DOCUMENTATION DRIFT | 当前部署文件使用 PostgreSQL；被审阅 Runbook 数据库章节为 MySQL |
+| 自动备份 | VERIFIED-DOC：无 | Runbook 明确是手动 SOP |
+| 对象生命周期清理 worker | NOT FOUND IN REVIEWED STARTUP PATH | README 有描述，启动路径未找到 worker |
+| 联合恢复演练 / RPO / RTO | NOT VERIFIED | 必须在实际目标环境执行 |
+
+### 13.8 ART-02C 决定
+
+1. **保留 file-service 作为唯一对象存储控制面**，继续复用 RustFS/S3-compatible driver；不在 Artifact Service 中增加直连对象存储的代码路径。
+2. **把“实际部署启用 RustFS”从默认假设改为部署前显式核验项。** 标准 v1.8.1 Compose 默认是 LocalStorage + named volume；如果生产要用 RustFS，必须在受版本控制的部署 override/环境契约中明确设置 backend、endpoint、bucket 和凭据引用。
+3. 如果继续使用 LocalStorage，必须将 `superpowers_file-storage` 卷纳入备份、异地复制和恢复演练；如果使用 RustFS，则必须把 bucket/object 数据纳入独立备份和恢复演练。
+4. PostgreSQL 元数据与对象数据必须形成联合备份/恢复策略；禁止只备份数据库或只备份对象。
+5. 修正 Runbook 与 PostgreSQL 部署拓扑的漂移，并补充 file-service 对象数据备份章节；不得把手动 SOP 误称为自动备份保障。
+6. 在目标环境确认 backend、endpoint、bucket policy、对象数量/容量、保留策略、备份位置和恢复证据之前，ART-02C 运行态仍为 OPEN。
+
+**当前状态：ART-02C 仓库配置/文档静态核验已完成；用户实际环境 backend、RustFS 配置、备份与恢复状态仍 NOT VERIFIED。**
