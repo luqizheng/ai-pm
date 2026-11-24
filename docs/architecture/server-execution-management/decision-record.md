@@ -1,4 +1,4 @@
-# 架构决策记录与未决问题（decision-record）
+# 架构决策记录、已关闭问题与验证门槛（decision-record）
 
 - 性质：Server Execution Management Architecture V1 的正式决策登记。
 - 规则：每条决策 = 结论 + 依据 + 何时可重启/推翻。
