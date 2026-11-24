@@ -8,7 +8,7 @@
 
 ## 0. 文档效力与决策标记
 
-本文冻结 Artifact Service V1 的目标 API、数据模型、授权模式、存储适配和迁移约束。它是实施契约，不代表服务、数据库、SDK、迁移或生产 IAM 已经实现。
+本文冻结 Artifact Service V1 的目标 API、数据模型、授权模式、存储适配和旧结构清理约束。它是实施契约，不代表服务、数据库、SDK、两个 P0 或生产 IAM 已经实现。
 
 - **[基线]**：由 ADR-ART-001 和已确认产品边界直接确定，实施不得擅自改变。
 - **[技术裁决]**：在用户已授权继续设计的范围内，为获得可实施方案而作出的默认技术选择；如实现发现硬性冲突，须先提交变更说明。
@@ -575,7 +575,7 @@ AI-PM 自己运行消费者契约与集成测试：SDK 兼容、授权委托、�
 | ART-06 | Mermaid Generator | Golden、安全、零外网和资源限制测试通过 |
 | ART-07 | SeeCode Generator 迁移 | SVG-only、安全签收复用、无业务 crate 耦合 |
 | ART-08 | AI-PM SDK 与授权委托 | 跨项目/跨租户/动作越权负例全通过 |
-| ART-09 | Visualization 数据迁移演练 | 完整映射、hash 对账、回滚演练通过 |
+| ART-09 | 旧 viz.* 代码依赖移除与 schema 清理 | 新模型承接业务职责；旧代码引用清零；清理 migration 测试通过 |
 | ART-10 | 分阶段切换与旧路径退役 | 单一写权威、无长期双写、业务验收完成 |
 
 ## 13. 本文尚未决定的事项
@@ -588,12 +588,12 @@ AI-PM 自己运行消费者契约与集成测试：SDK 兼容、授权委托、�
 4. Job queue 使用现有平台设施还是 Artifact Service 自带轻量 PostgreSQL outbox/worker polling。
 5. PNG、PDF 等额外 Generator 输出何时开放。
 6. 数据保留期、软删除恢复期、备份 RPO/RTO 和服务 SLO。
-7. 迁移窗口与旧 viz.* 表最终退役时间。
+7. 新实现切换顺序、旧 viz.* 代码依赖清理范围与 DROP migration 发布顺序。
 
 这些是 ART-02 的取证和部署决策，不是重新讨论 Artifact Service 是否独立、是否复用 file-service、是否保留 Mermaid/SeeCode 的理由。
 
 ## 14. 验收结论
 
-ART-01 冻结了 V1 的目标服务边界、资源模型、API 目录、授权委托原则、file-service 适配契约、Generator 安全契约、Visualization 数据迁移方向和实施门禁。
+ART-01 冻结了 V1 的目标服务边界、资源模型、API 目录、授权委托原则、file-service 适配契约、Generator 安全契约、Visualization 新职责承接、旧表清理方向和实施门禁。
 
-**ART-01 完成不等于 Artifact Service 已实现。** 在 ART-02 取得真实 IAM、file-service、RustFS、CI 和 viz 数据证据之前，不得创建生产迁移或开放生产流量。后续实施必须逐项满足本文契约，并将实现证据以 ART-03 及后续记录归档。
+**ART-01 完成不等于 Artifact Service 已实现。** 两个 P0（安全授权委托、file-service 可验证文件提交协议）关闭并通过测试之前，不得开放生产流量。旧数据迁移已取消；后续实施必须逐项满足本文契约，并将实现证据以 ART-03 及后续记录归档。
