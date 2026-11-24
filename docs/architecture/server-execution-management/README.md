@@ -130,7 +130,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 用户于 2026-11-24 确认：SEM 是 Runner 任务派发与接管的唯一协调入口。Runner 不再主动轮询 Platform MCP 领取任务。SEM 选择/确认目标 Runner 后，通过 Platform 服务 API 请求 Claim；Platform 仍在自身数据库事务中校验设备身份、项目绑定、资格、Scheduling Shield、并发互斥并签发 Lease/Generation。SEM 只有在成功 Claim 后才可通过 WSS 派发执行授权。Harness 继续通过 Platform MCP 使用业务工具。
 
-控制通道唯一归属：Claim、Runner 监督心跳、Lease Renewal、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Agent Activity 不续租；Lease Renewal 只由 Runner Supervisor 经 WSS 发起、SEM 转 Platform API。Runner 不得绕过 SEM 直接 Claim 或轮询命令。
+控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 唯一路径尚未冻结：必须明确 Runner liveness、Lease Renewal 与 Agent Activity 的区别，禁止形成双重续租。
 
 ## 原始交付索引
 
