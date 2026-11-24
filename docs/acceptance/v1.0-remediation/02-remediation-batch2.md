@@ -29,8 +29,16 @@
 
 - **B03-01 R1 契约保持**：本批曾实现「REVIEW_REQUIRED 续接自动回退 IN_PROGRESS（R2）」并通过 15/15 路由测试，因与第一批已运行态复验的 R1 横幅+人工按钮契约冲突而**撤销**，维持 R1。
 
-## 4. 部署态复验（镜像重建后补充）
+## 4. 部署态复验（2026-11-24 15:40 实测）
 
-- [ ] pm-api / ai-pm-worker / ai-frontend-web 三镜像重建并滚动
-- [ ] DiscoveryView 答复入口渲染与提交（真实会话 201）
-- [ ] B05-01 落库断言留待下一轮真实「需求→批准→分解」业务流（不伪造：现有 REQ-TASKFLOW-001 v1 已挂任务触发幂等跳过；v2 变更草案的批准属真人工决策，不在本批代行）
+| 项 | 结果 |
+|---|---|
+| pm-api / ai-pm-worker 镜像重建并滚动 | ✅（BuildKit 依赖层缓存命中，秒级重建）；ai-frontend-web `--no-cache` 重建后 bundle 含新代码（index-Bp01bco1.js 含 answerFailed key） |
+| **B02-01 答复入口** | ✅ DiscoveryView 渲染 3 个 open 问题答复表单（dc-answer-form-*）；经表单提交真实答复 → 页面出现答案文本、未答 3→2、无错误；截图 `evidence/b2-answer-submitted.png` |
+| B03-03 完结/退回按钮 | ✅ NEEDS_USER_INPUT 会话显示「复核通过并完结」，REVIEW_REQUIRED 显示退回+完结（第一批已交付，本批核对） |
+| B05-01 落库断言 | 留待下一轮真实「需求→批准→分解」业务流（REQ-TASKFLOW-001 v1 已挂任务幂等跳过；v2 变更草案批准属真人工决策，不代行） |
+
+### 运维动作（用户裁决，非业务伪造）
+
+1. **leo 密码重置**：原口令失效（用户确认被改）。经 argon2id 生成器（m=19456,t=2,p=1 与原哈希参数一致）产出新 PHC 直写 `public.iam_users.password_hash`，`password_expired_at=NULL`，`verify()` 往返校验通过；新口令=仓库 e2e 标准 `Checkpoint@123456`。
+2. **iam-service 重启**：写库后浏览器登录 200 但 `/users/me` 401 `unknown kid`（iam 的 JWKS 缓存不含 token-service 现用键）——重启刷新缓存后 login+users/me 全 200。
