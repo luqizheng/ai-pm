@@ -107,3 +107,15 @@
 ## I. 十项评审问题的修正状态（2026-11-25，Review Pending）
 
 十项问题经只读核验整体成立。修正设计见 `sem-02d-review-findings-corrective-design.md`。特别注意：本节对 OQ-1/OQ-3/OQ-5 的改写是候选修正，**尚未批准，不改变 ADR-SEM-01–26 已确认记录**。HIR 最小可操作闭环前移 Phase 0；E3 进程退出报告与 Detached reconnect 放入 Phase 1；E6 不是终止证据；Detached 不加入 scheduling_shield；所有派发路径统一 dispatchability predicate。
+
+
+## J. ADR-SEM-14 ACK 语义澄清提案（Review Pending）
+
+ADR-SEM-14 中“ACK 必须由 Runner 在 OS 进程句柄确认退出后发送”仅适用于**终止确认 ACK / E3**，不能解释为普通命令 receipt ACK 也必须等到进程退出。新协议将以下事实分开：
+
+1. `command.received`：Runner 已持久接收命令；
+2. `command.result`：命令执行成功/失败；
+3. `runner.process.exit`：OS 观察到精确进程身份已退出，满足条件时才构成 E3；
+4. `continuation.consumed`：用户回复已注入且新 Agent 已启动。
+
+自然退出、lease-loss cleanup、startup orphan cleanup 和 boot transition 也可产生 E3 process-exit evidence，不要求先有 cancel command。该澄清尚待评审，不新增或改写已批准 ADR。
