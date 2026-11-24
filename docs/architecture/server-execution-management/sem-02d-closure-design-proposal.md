@@ -114,7 +114,7 @@ Claim 请求必须包含目标 Runner 身份、稳定 `claim_request_id`、候�
 
 - 身份来自已验证 Ticket 与当前连接，不信任 payload 的 runner/device ID。
 - 执行消息必须携带 `run_id`、`generation`；命令消息另带 `command_id`；进程证据另带完整 `process_identity`。
-- V1 消息类型：`session.ready`、`runner.heartbeat`、`lease.renew`、`execution.dispatch`、`execution.accepted`、`execution.rejected`、`command.deliver`、`command.received`、`command.result`、`command.failed`、`process.terminated`、`runner.reconnect_sync`、`connection.revoked`、`server.drain`、`server.shutdown`。
+- V1 消息类型：`session.ready`、`runner.heartbeat`、`lease.renew`、`execution.dispatch`、`execution.accepted`、`execution.rejected`、`command.deliver`、`command.received`、`command.result`、`command.failed`、`process.terminated`、`runner.reconnect_sync`、`runner.resource.report`、`connection.revoked`、`server.drain`、`server.shutdown`。
 - 每条需要可靠投递的服务端命令先写 SEM `command_delivery` 再发送；Runner receipt ACK 只证明收到，不证明执行成功或进程退出。
 - `process.terminated` 仅在 OS wait/handle 确认目标进程树终止后发送；SEM 转发 Platform 验证，不能凭 WSS ACK 生成 E3。
 - 连接 epoch 每次成功重连单调增加；旧 epoch、旧 generation、重复 message_id 被拒绝或按幂等结果响应。
@@ -347,3 +347,8 @@ SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检
 ## 17. 批量评审交付说明（2026-11-25）
 
 用户要求将剩余设计一次性整理提交，后续集中评审，不再按单个 D 项逐条等待确认。本次因此将 D-01–D-12 全部作为一个完整候选设计批次提交；不新增或伪造用户已批准的 ADR。统一评审入口为 `sem-02d-review-package.md`。D-12 的目标安全边界已定义，但真实 Harness 凭据注入/继承/日志面仍须在 Phase 0 代码改动前做只读盘点。Phase 0 仍未启动。
+
+
+### D-04/D-05 与 ADR-SEM-26 的强制对齐补充
+
+WSS V1 消息类型清单必须包含 `runner.resource.report`。七表模型中，`runner_connection` 保存当前 Runner 的资源快照（`resource_boot_id`、`resource_sample_seq`、`resource_observed_at`、`resource_snapshot`、`resource_health`）；`dispatch_operation` 保存任务资源画像、CPU/内存/Workspace 空间预留及预留状态。该设计落实 ADR-SEM-26，不新增第八张必需表。资源报告不续租、不作为 Heartbeat 或 E1/E2/E3 证据；资源未知/过期只阻止新派发。
