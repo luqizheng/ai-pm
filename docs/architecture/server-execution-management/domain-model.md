@@ -1,0 +1,71 @@
+# SEM V1 Domain Model
+
+Status: normative architecture target, not a claim about current implementation.
+
+## 1. Core concepts
+
+| Concept | Meaning | V1 identity / authority |
+|---|---|---|
+| Logical execution | One task's execution lineage across retries | A lineage of delivery.task_run rows |
+| Run / Attempt | One concrete execution attempt and lease generation | One task_run row; attempt_no and supersedes_run_id preserve lineage |
+| Executor Session | Platform-created executor process identity | task_run.executor_session; never a Harness session ID |
+| Harness Native Session | Session identity owned by a Harness | task_run.harness_session_id + harness_kind |
+| Runner | Registered client-side process supervisor | Persisted Runner registration |
+| Lease | Time-bounded execution ownership | Run owner, token verifier, expiry and generation |
+| HIR | Human workflow for abnormal execution intervention | New governance.human_intervention_request entity |
+| Scheduling Shield | Durable exclusion from automatic claim/requeue | PostgreSQL state associated with the Run |
+
+## 2. Run lineage
+
+- One logical execution may contain multiple Run rows.
+- One Run row is one Attempt and has at most one active execution owner.
+- supersedes_run_id points to the prior Run in the same task lineage.
+- attempt_no increases monotonically within that lineage.
+- A replacement Attempt receives a new Run ID, generation, executor process identity and workspace.
+- A Harness Resume does not transfer the old lease or process identity.
+- A copied Harness session ID alone never proves cross-device or cross-host resumability.
+
+## 3. HIR entity target
+
+Target table: governance.human_intervention_request.
+
+Minimum conceptual attributes:
+- ID and tenant/project/task/Run references.
+- Optional superseding Run reference.
+- Reason code and evidence class (E3/E4/E5 or non-liveness intervention).
+- Status, requested action and resolution code.
+- Created/updated/resolved/closed timestamps.
+- Actor identity for system and human transitions.
+- Optional Runner selection and Harness session reference.
+- Optimistic concurrency/version field.
+
+Required constraints:
+- HIR and Run must share tenant/project/task lineage.
+- Multiple historical HIRs may exist; unresolved duplicates for one active intervention episode are prevented.
+- Every transition is transactional and audited.
+- HIR does not replace task_interaction. Interaction requests normal user input/decision/permission; HIR coordinates abnormal execution, process uncertainty and takeover.
+
+## 4. Runner supervision
+
+- Missing supervision mode at first registration defaults to unattended.
+- unattended may claim automatically within platform authorization.
+- supervised requires explicit user confirmation before each claim.
+- Supervision mode is independent of online/offline/busy/unavailable.
+- Mode changes are authorized and audited; active leases are not silently reinterpreted.
+
+## 5. Session and workspace rules
+
+- executor_session is not a Harness Native Session ID.
+- Harness capabilities are code-level adapter metadata; Resume is disabled by default and gated by exact Harness/version acceptance.
+- Workspace loss does not imply process death.
+- Workspace, Worktree and Git Mirror are not backup targets. The runtime volume may persist while SEM operates; loss invokes E4/E5 isolation.
+- Each Repository has one authoritative Git origin. SEM does not orchestrate multi-origin synchronization.
+
+## 6. Scheduling Shield
+
+The shield is a durable scheduling invariant, not an audit-only event or lease extension:
+- Every claim and automatic requeue/recovery path excludes shielded Runs.
+- Lease may expire naturally while shield remains active.
+- Late heartbeat does not clear the shield or revive an old generation.
+- Only evidence-backed termination or authorized audited human resolution may release it.
+- A shielded Run must have an actionable HIR or explicit operational escalation record.
