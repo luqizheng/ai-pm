@@ -153,3 +153,37 @@ Generation Fencing 不能撤销已经注入进程的 Git/SSH/API 凭据。Phase 
 
 - poll 证据只覆盖 SEM 同主机进程；远程 runner 的进程事实永远依赖 runner 自报（E3）或心跳（E4）——这是分布式边界，不是实现缺陷。
 - 「旧进程被 fencing 拒绝后仍可能继续跑完外部副作用」：Phase 0 后残余风险 = E4 窗口内的 git push/外部调用。接受残余并在 HIR 处置时人工核查远端分支。
+
+
+## 7. 2026-11-25 评审问题修正（规范性补充，优先于前文冲突表述）
+
+### 7.1 E3 不再等同于 cancel ACK
+
+E3 是对精确进程身份的 OS 退出观察，不是命令投递回执。Runner 必须报告自然退出、命令终止、租约丢失后的本地清理、启动孤儿清理、Runner shutdown 和 boot transition reconciliation。报告通过 Runner 设备身份认证的 WSS 连接发送，必须绑定 Run、Generation、boot_id、PID、process creation identity、退出结果、时间和 evidence digest。证据先写入 Runner 本地持久 spool，SEM 持久化 ACK 后才可清除待发记录。Lease 失效不能阻止 Runner 报告旧进程退出事实，但旧 Generation 证据不得修改新 Generation 的业务状态。
+
+命令 receipt ACK、command result 和 E3 process-exit evidence 分开建模。自然退出也必须报告；仅写日志后丢弃 active 不满足 E3。
+
+### 7.2 Lost / Workspace 丢失一律不能作为死亡证明
+
+`ExitOutcome::Lost` 表示无法确定退出状态，不表示已观察到进程退出。若 Platform 已记录 `stage='started'` 或 spawn-confirmed，PID、logs、Workspace root 同时缺失时必须是 `Uncertain/E5`。只有权威记录证明从未 spawn，才可按 B3-1 未启动回收。卷丢失是证据丢失，不是进程死亡。
+
+### 7.3 E6 Human Risk Acceptance
+
+原 R-SAFE-1 只约束**自动重派**：自动重派必须具备 E1/E2/E3。E4/E5 默认隔离，不自动重派。
+
+新增 E6 = Human Risk Acceptance，是有权限操作者明确接受旧进程仍可能运行的风险授权，不是终止证据。E6 可以授权一个唯一、明确绑定的 successor Attempt，但旧 Execution Barrier 仍为 `risk_accepted_unconfirmed`，不得伪装为 released/terminated。必须展示残余风险（重复 Git/外部 API/LLM 副作用）、执行二次确认、记录缓解措施与审计；新 Attempt 使用独立 Workspace/Worktree，外部副作用须人工核查。后续取得 E1/E2/E3 后，才可独立释放旧 Barrier。HIR 关闭和 E6 授权均不自动释放 Barrier。
+
+### 7.4 Interaction、HIR 与屏障的边界
+
+- Interaction shield 保持 `none/human_wait/start_wait/timed_out` 四值，不加入 Detached。
+- `Detached` 是 Execution/Session lifecycle 状态；物理隔离由独立 `delivery.run_execution_barrier` 承载。
+- Phase 0 必须建立正式 Barrier + 最小可操作 HIR + 收件人/通知投递模型；这需要 Migration，不得再描述为“Phase 0 无 Schema 变更”。
+- Interaction terminate/continue、HIR、Continuation、Cleanup Need 分别处理进程控制、执行异常处置、回复注入和资源清理，不互相替代。
+
+### 7.5 统一派发门禁
+
+所有普通 queued claim、B3-1/B3-2、B06-D3、retry/requeue、orphan reconciliation、handoff 和 E6 successor 必须调用统一 Platform dispatchability predicate。普通新启动必须满足 Interaction shield = none 且不存在阻断性 Execution Barrier；Continuation 必须匹配 responded Interaction、start_wait、有效 delivery/command 和当前 generation。B06-D3 不得把 shielded Run 改回可普通领取的 queued 状态。候选 SQL 过滤之后仍须在锁内再次校验。
+
+### 7.6 本节对应完整修正设计
+
+见 [SEM-02D 评审问题核验与修正设计](./sem-02d-review-findings-corrective-design.md)。本节与前文任何“E4 授权重派”“Done{Lost} 可回收”“HIR 到 Phase 4 才可操作”的冲突表述，以本节和修正设计为准；所有内容仍为 Review Pending，未授权实施。
