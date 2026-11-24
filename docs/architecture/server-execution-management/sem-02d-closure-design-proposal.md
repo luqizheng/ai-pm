@@ -1,9 +1,9 @@
 # SEM-02D — 阻断项关闭设计提案（D-01–D-13）
 
-- 状态：**D-01–D-12 Proposed；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
+- 状态：**完整设计已形成；D-01–D-12 Review Pending；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
 - 日期：2026-11-25
 - 基线：当前 master 的 SEM-02D 审查报告及 ADR-SEM-01–26
-- 范围：把 D-01–D-13 从“问题清单”推进为可审阅、可实现的具体设计；D-13 已批准，其余 D 项仍待确认。
+- 范围：把 D-01–D-13 从“问题清单”推进为完整、可审阅、可实现的设计基线；D-13 已批准，D-01–D-12 由用户统一评审。
 - 明确边界：本文件只提出设计，不代表已修改代码、Migration、API、WSS、Docker 或运行配置；Phase 0 仍未启动。
 - 不重开：独立 DB、单一 Git origin、不备份 Workspace、不引入消息中间件、SEM 唯一 Runner 控制面、Lease Renewal 唯一路径、Runner 默认 unattended 等已确认决策。
 
@@ -14,7 +14,7 @@
 3. 对所有自动 Claim、重派、回收和 retry/requeue，使用同一个 Platform 侧执行安全屏障谓词。
 4. 任何不确定的进程状态都 fail closed：保留隔离、创建/关联 HIR，不自动重派。
 5. HTTP/WSS 采用显式版本、稳定幂等键和可恢复状态；传输 ACK 不等于业务完成，命令 receipt 不等于进程终止。
-6. D-01–D-12 的技术提案须经用户确认后才能从 Proposed 转为 Ratified；D-13 已按 ADR-SEM-26 冻结。代码事实仍须在 Phase 0 前按最新 HEAD 复核。
+6. D-01–D-12 已完成成套设计，状态统一为 Review Pending；用户评审通过后才可从 Proposed 转为 Ratified。D-13 已按 ADR-SEM-26 冻结。代码事实仍须在 Phase 0 前按最新 HEAD 复核。
 
 ## 1. D-01（P0）执行不确定性屏障物理模型
 
@@ -327,9 +327,9 @@ SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检
 7. CPU 高占用、内存压力、Workspace 卷空间变化在 Windows Runner 上通过长时间并发压测验证。
 
 
-## 16. 仍需用户确认的明确事项
+## 16. 用户评审清单（整套设计已提交，尚未批准）
 
-本提案不擅自冻结下列选择：
+以下是本批次提供给用户一次性评审的推荐选择。它们已形成完整设计，但不因文档提交而自动成为已批准 ADR：
 1. D-01：是否采用独立 `delivery.run_execution_barrier` 表，而不是在 `task_run` 增加 barrier 列。
 2. D-02：是否同意 Phase 0 创建最小正式 HIR 表，Phase 4 扩展同一表。
 3. D-03/D-04：是否批准建议的 `/internal/v1` 路由前缀、JSON envelope 和消息命名。
@@ -341,4 +341,9 @@ SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检
 9. D-12：实际 Harness 凭据清单需要按当前实现逐项复核；本文是目标边界，不冒充已完成代码盘点。
 10. D-13 已关闭：用户确认纳入统一架构，正式登记为 ADR-SEM-26；其余 D-01–D-12 仍待确认。
 
-在 D-01–D-12 确认并同步更新所有权威文档前，整体状态保持 `Design In Progress`，不得启动 Phase 0。
+本次已把 D-01–D-12 的推荐设计完整写出并同步到专题文档。用户评审通过并完成必要修订前，整体状态保持 `Design In Progress / Review Pending`，不得启动 Phase 0。
+
+
+## 17. 批量评审交付说明（2026-11-25）
+
+用户要求将剩余设计一次性整理提交，后续集中评审，不再按单个 D 项逐条等待确认。本次因此将 D-01–D-12 全部作为一个完整候选设计批次提交；不新增或伪造用户已批准的 ADR。统一评审入口为 `sem-02d-review-package.md`。D-12 的目标安全边界已定义，但真实 Harness 凭据注入/继承/日志面仍须在 Phase 0 代码改动前做只读盘点。Phase 0 仍未启动。
