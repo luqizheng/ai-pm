@@ -78,6 +78,8 @@
 - `architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md`：实施前置核验报告，含 ART-02A 对 lmms v1.8.1 token-service/file-service 源码、SDK 与 OpenAPI 的核验结果，列出已验证能力、P0 阻断项和环境核验任务。
 - `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分和迁移边界。
 
+- ART-02D 现有 viz.* 数据、读写路径与迁移依赖核验（并入 [ART-02 第 14 节](architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md)）：包含历史 full-dev 快照与当前运行态未验证项。
+
 通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 与 ART-01 为准；ART-00 是静态审计证据，ART-02 是实施前置核验记录。未完成的运行态核验不能以静态代码、设计文档或历史快照替代。
 
 ### 3.4 历史设计与当前基线
