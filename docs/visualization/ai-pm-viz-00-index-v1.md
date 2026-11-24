@@ -1,6 +1,6 @@
 # AI-PM Visualization Engine 立项文档包 · 索引与裁决摘要 V1.1
 
-> 状态：**实施前架构复审附条件通过（ADR V1.0.1）**；[V1.0.2 安全修订](ai-pm-viz-15-v0-6-security-review-v1.md)（放弃 iframe → 产物静态化）待 Architecture/Security Owner 签收。R-01 取号结论 0020（已按实测复核更正）、R-02 已关闭、R-03（PNG）开放按 B2 处理。未进入完整实施。
+> 状态：既有 Visualization 业务语义与安全规则继续有效；**部署与通用产物存储边界由 ADR-ART-001（2026-11-24）修订**。原 ADR-VIZ-001 的 V1 同库同服务部署策略、ADR-VIZ-006 的 PostgreSQL 文件内容存储策略，仅在 ADR-ART-001 明确范围内被取代。SeeCode 继续遵守 M-2 双签的服务端 SVG-only 约束；Mermaid 提升为 Artifact Service V1 正式 Generator。现状映射见 [27 号 ART-00 前置说明](ai-pm-viz-27-artifact-service-integration-v1.md)。
 
 ## 1. 文档导航
 
@@ -23,7 +23,7 @@
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |
 | 17 | [**Registry 词表会签表 V1.2**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审修订（V-01~V-12）+ 三裁决（**R-05 方向分离 / R-06 PC 唯一权威 / R-08 反向视图≠新事实**）+ **R-07 定版 `kb.memory_supported_by_source`**（memory→source，一对多实证）+ 三层方向表述（DAG 无需翻转）+ 15 条 Lint + 会签记录表 |
-| 26 | [**P1 执行提示词**](ai-pm-viz-26-p1-execution-prompt-v1.md) | **给新 session 的自包含任务书**：P1 三项交付（G6 引入+V-1 阈值 / 交互通道四项 / 三张图接线）+ 已就绪资产清单 + 7 条验收标准 + 硬约束与门禁 + **实测踩过的坑（core 表结构/字符串陷阱/并发测试/psql 需 -h）** + 执行顺序 + 边界 |
+| 27 | [**Artifact Service 集成边界与 ART-00 审计清单**](ai-pm-viz-27-artifact-service-integration-v1.md) | 与 ADR-ART-001 配套：通用 Artifact 管理/存储/生成迁出为独立基础 Web Server；保留 AI-PM 的 VizSpec、Relation Registry、业务投影与 Live Graph；Mermaid / SeeCode Generator 分工、旧 viz.* 数据映射和迁移审计要求。 |\n| 26 | [**P1 执行提示词**](ai-pm-viz-26-p1-execution-prompt-v1.md) | **给新 session 的自包含任务书**：P1 三项交付（G6 引入+V-1 阈值 / 交互通道四项 / 三张图接线）+ 已就绪资产清单 + 7 条验收标准 + 硬约束与门禁 + **实测踩过的坑（core 表结构/字符串陷阱/并发测试/psql 需 -h）** + 执行顺序 + 边界 |
 | 27 | [**P1 V-1 实测报告**](viz-p1-g6-benchmark-v1.md) | **PASS（2026-11-12）**：G6 chunk 306.3 KB gzip ≤350 / 150 节点交互 53.1~54.4 fps ≥50 / 主 bundle 零污染 / 布局仅 antv-dagre；含固定测试条件、优化四阶段（含 SVG 方案否决）、复现脚本与风险 |
 | 24 | [**M-2 双签单（打印版 HTML）**](ai-pm-viz-24-m2-signoff-form.html) | 一页 A4：定位变更对照（6 维）+ **12 项逐条双签表**（Architecture/Security 分列勾选）+ 双签栏 + 签收前已就绪技术前提清单 |
 | 25 | [**第二/三批会签单（打印版 HTML）**](ai-pm-viz-25-batch23-signoff-form.html) | 一页 A4：6 条待签关系的语义/源表/端点 + 各自**前置条件与专家硬约束**（Q-1 分层保留 / R-06 不得绕过 PC 注册表 / R-07 代码实证修正 / R-09 不得自由写入）+ 逐条独立签名 |
@@ -36,7 +36,7 @@
 
 ## 2. 立项核心判断（一段话版）
 
-AI-PM 的关系数据已在库中显式建模，但 UI 看不见——可视化引擎把**关系升级为第三表达层**，使系统从"记录认知"升级为"看见并验证自身认知结构"。工程形态为**共享基础设施**：自有 Spec + 渲染 Adapter + Artifact 版本审批 + 权限继承 + 可拔降级。**专家最终定调：不做图形工具集合，做 AI-PM 的统一关系表达与视觉呈现基础设施。不可妥协原则：Visualization 可以读取、解释、关联和呈现业务事实，但不能创造、修改或批准业务事实。**
+AI-PM 的关系数据已在库中显式建模，但 UI 看不见——可视化引擎把**关系升级为第三表达层**，使系统从"记录认知"升级为"看见并验证自身认知结构"。工程形态为**共享基础设施**：自有 Spec + 渲染 Adapter + Artifact 版本审批 + 权限继承 + 可拔降级。**专家最终定调：不做图形工具集合，做 AI-PM 的统一关系表达与视觉呈现基础设施。不可妥协原则：Visualization 可以读取、解释、关联和呈现业务事实，但不能创造、修改或批准业务事实。2026-11-24 起，持久化产物管理由独立通用 Artifact Service 承担；Visualization 仍负责业务语义和在线视图。**
 
 ## 3. 八个最终问题的回答（评审后定稿）
 
@@ -68,7 +68,7 @@ envelope 第 9 类 `viz_artifact`（fail-closed 不变）；Accept/Reject 复用
 
 | 编号 | 裁决 | 来源 |
 |---|---|---|
-| DV-1 | 引擎定位=共享基础设施非独立域；独立 crate ≠ 独立 Domain；服务拆分按部署边界（V1 同库同服务） | 初版 + 评审 Q1 |
+| DV-1 | 引擎定位=共享基础设施非独立域；独立 crate ≠ 独立 Domain；原 V1 同库同服务部署策略由 ADR-ART-001（2026-11-24）修订为独立 Artifact Service | 初版 + 评审 Q1 + ADR-ART-001 |
 | DV-2 | 双 Adapter 架构保留（SeeCode=解释性产物，G6=在线关系图；Cytoscape 仅备选不同时引入；不自研 SVG 引擎） | 初版 + 评审 Q2 |
 | DV-3 | Spec 为自有四段式格式；渲染器 spec 仅是编译目标 | 初版 |
 | DV-4 | 引擎零业务写路径；接受图形不生效业务变更 | 初版（专家定为不可妥协原则） |

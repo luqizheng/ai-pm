@@ -1,8 +1,8 @@
 # smark-pm 架构决策文档
 
-**文档集版本：** 1.3  
-**基线日期：** 2026-11-21  
-**范围：** 共同设计原则、PA-03、PA-04、PA-05、PA-06、PA-07
+**文档集版本：** 1.4  
+**基线日期：** 2026-11-24  
+**范围：** 共同设计原则、PA-03、PA-04、PA-05、PA-06、PA-07、ART-01
 
 ## 文档结构
 
@@ -54,3 +54,79 @@ PA-07 中用户明确确认的决策、用户授权范围内形成的技术裁�
 4. 本文件集应纳入 Git 版本管理。
 5. PA-07 旧 Agent Work Unit / Agent Team 设计仅在与当前基线一致的部分继续参考；冲突部分标记为历史，不得继续作为有效设计依据。
 6. PA-07 Agent Team 文档中的 Agent Work Unit 是逻辑工作包，不是平台独立 Task / Run 生命周期或 Agent 身份体系。
+
+
+## ART-01 基线、实施规范与实施证据
+
+ADR-ART-001 定义 AI-PM 通用 Artifact Service 的独立部署与数据权威边界。它修订既有 Visualization 决策中明确列出的部署与存储部分，但不改变 Visualization 的业务语义权威、VizSpec、Relation Registry、权限投影和 Live Graph 规则。
+
+- Artifact Service 管理通用 Artifact、Version、Reference、文件存储和 Generator Job。
+- AI-PM 业务侧负责业务对象、业务授权上下文、审批和关系语义。
+- Mermaid 与 SeeCode 是 Artifact Service 的 Generator Adapter；SeeCode 继续遵守 SVG-only 安全签收。
+- ART-00 现状审计、ART-01 API/数据模型设计和后续实施证据必须独立归档。
+
+## 基线状态说明
+
+本文件集整理截至 2026-11-24 的架构决策。PA-03 至 PA-07 按各自文档状态执行。Artifact Service 已形成独立基础服务架构与 API/数据模型基线；两个 P0 安全/文件提交协议仍须关闭后才能投入生产。产品负责人已确认不做旧 viz.* 历史数据迁移，旧表在新实现切换并移除代码依赖后清理。
+
+
+### ART-00 审计结论摘要
+
+ART-00 已完成仓库静态代码与文档审计：现有 RustFS/file-service、docproc ArtifactStore、Visualization Artifact 和 SeeCode 沙箱可复用，但尚无通用独立 Artifact Web Service。建议新建独立 Repository 以获得独立 Cargo workspace、CI、镜像与发布；物理文件存储继续复用 file-service/RustFS。生产数据量、项目授权委托和 GitHub Actions 运行态仍需 ART-01/ART-02 前核验。详见 [ART-00 审计报告](ART-00-artifact-service-current-state-audit-v1.0.md)。
+
+
+### ART-01 文档入口与实施状态
+
+- [ADR-ART-001](ADR-ART-001-artifact-service-v1.0.md)：独立 Artifact Service 架构决策。
+- [ART-00](ART-00-artifact-service-current-state-audit-v1.0.md)：现有代码、存储、IAM 与 Visualization 资产静态审计。
+- [ART-01](ART-01-artifact-service-api-and-data-model-v1.0.md)：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
+
+ART-01 是目标实施契约，不代表独立服务、SDK、数据库或两个 P0 已经实现。ART-02 已完成源码及 full-dev 核验；生产使用仍受授权委托、文件提交协议和部署安全门禁约束。旧数据迁移已取消。
+
+
+### ART-02 第一轮核验
+
+- [ART-02 实施前置核验报告](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 pm-api JWT/JWKS、项目授权、file-service、viz.*、SeeCode/Mermaid 和当前 CI；明确区分代码事实、历史快照和运行态待核验项。
+
+ART-02 结论：独立服务与复用 file-service 的方向成立，可启动独立仓库和非生产基础开发；Artifact 专用 project/action 委托凭证和 file-service upload-intent/checksum/finalize 能力仍是两个 P0。两项关闭前不得投入生产。历史 viz.* 数据迁移已取消。
+
+
+### ART-02A 上游源码核验
+
+- [ART-02A（并入 ART-02 报告第 11 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：基于 `luqizheng/lmms` Tag `v1.8.1` 核验 token-service、file-service、Rust SDK、OpenAPI 与 audience/tenant scope 实现。
+
+**ART-02A 发现两个明确的 P0：** 当前 `POST /tokens/resource` 路由未挂载身份验证中间件，且签发 claims 缺少 `aud` / `tid`，不得作为 Artifact delegation 使用；File Service 虽有 multipart 和 presign，但当前上传路径未计算 hash（`hash=None`），未发现 upload-intent/finalize/checksum-attestation 协议。File Service 的 `aud=file-service` 与 TenantScope 租户边界已有代码依据。以上均为 v1.8.1 静态源码结论，不代表运行环境验证。
+
+
+### ART-02B File Service 契约核验
+
+- [ART-02B（并入 ART-02 报告第 12 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：基于 lmms `v1.8.1` 固定 commit 核验 File Service API、Rust SDK、TenantScope、对象存储提交流程、presign 与测试覆盖。
+
+**ART-02B 源码结论：** file-service 已提供基础文件存取与 RustFS/S3 适配，但当前上传全量缓冲、`hash=None`、无 upload-intent/finalize/checksum attestation，且对象与元数据提交无原子补偿；租户隔离已有代码证据，但专项测试未覆盖全部端点。该服务暂不能直接承担 Artifact Version 的最终提交协议。真实环境 JWT、跨租户 API、RustFS bucket/备份/恢复验证仍 OPEN。
+
+
+### ART-02C RustFS 部署与备份恢复核验
+
+- [ART-02C（并入 ART-02 报告第 13 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 lmms v1.8.1 标准 Compose、prod/remote override、File Service storage backend、named volume、RustFS adapter 与备份 Runbook。
+
+**ART-02C 关键结论：** v1.8.1 标准 Compose 未配置 `FILE_STORAGE_BACKEND`，代码默认值为 `local`；文件落在 `superpowers_file-storage` named volume。prod/remote override 未切换 RustFS。现有备份 Runbook 未覆盖该卷或 RustFS 对象数据，并且数据库章节描述 MySQL，与当前 PostgreSQL 部署文件存在漂移。实际部署 backend、bucket policy、备份介质和恢复能力仍须在目标环境验证。
+
+
+### ART-02D 现有 viz.* 数据与迁移依赖核验
+
+- [ART-02D（并入 ART-02 报告第 14 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验四张 viz 表的 DDL/约束、应用层读写方、render_output 与 slot_config 的生产接线，以及历史 full-dev 行数快照。
+
+**ART-02D 结论：** Artifact 与 Approval 的读写路径已定位；render_output 写入函数存在但未发现生产调用方，slot_config 未发现应用层消费者。历史 full-dev 快照四表为 0 行。ART-02E 又于 2026-11-24 确认当前 full-dev 四表均为 0 行、Schema 与 migration 0020 一致。产品负责人另行确认系统无真实用户和业务数据，因此不做历史数据迁移；旧表在新实现切换并移除代码依赖后删除。
+
+
+### ART-02E 目标环境运行态核验
+
+- [ART-02E 运行态核验报告](../implementation/artifact-service/art-02e-runtime-audit/ART-02E-RUNTIME-AUDIT.md)：2026-11-24 full-dev 环境只读核验，四张 viz.* 表均为 0 行、migrations 59/59、Schema 与 0020 一致。
+- 证据范围仅限该 full-dev 环境；生产环境状态不由此推断。
+
+### ART-02F 产品使用状态与旧数据处理决策
+
+- 产品负责人确认 AI-PM 尚无真实用户使用、没有真实业务数据，因此取消旧 Visualization 数据迁移和历史兼容。
+- 新 Artifact Service 独立建模；AI-PM 保留 Approval、Slot Config 等业务职责。
+- 旧 viz.* 表在新实现切换、旧代码依赖移除、测试通过后，通过 AI-PM migration 清理。
+- 详见 [ART-02 第 15 节](ART-02-artifact-service-pre-implementation-verification-v1.0.md)。
