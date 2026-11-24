@@ -126,3 +126,12 @@ D-12 的目标架构边界已经定义，但“当前实现中实际如何注入
 - 是否满足 Design Complete 门槛。
 
 在此之前，本评审包保持 **Review Pending**，Phase 0 保持 **Not Started**。
+
+
+## 11. 新一轮评审发现（2026-11-25）
+
+用户对本评审包提出 10 项 P0/P1/P2 问题。只读复核确认这些问题整体成立，尤其是 Interaction 执行闭环、Phase 0–3 HIR 可操作性、Runner E3 进程退出证据、Detached 同设备恢复、Workspace 丢失误判、E6 人工风险授权、通知收件人、Session 连续性、Detached 状态载体及统一 dispatchability predicate。
+
+新增修正设计文档：[`sem-02d-review-findings-corrective-design.md`](./sem-02d-review-findings-corrective-design.md)。该文档给出十项核验、对象关系、Execution Control Port、E3/E5/E6、通知模型、Detached → Active、统一派发谓词和重排后的 Phase 0–5。它覆盖并修正本评审包中与上述内容冲突的旧表述。
+
+因此本评审包仍是 Review Pending，且**上一轮“Design Package Complete”结论撤回**；当前状态为 **Design In Progress — Corrective Design Review Pending**。Phase 0 未启动。
