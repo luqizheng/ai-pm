@@ -53,7 +53,7 @@ sequenceDiagram
    - *心跳丢失（worker 自身 spawn）*：`poll_active_runs` 用本地三证据 poll，能正确判 Running/Dead；但租约过期的 Run 不在 poll 集合里（poll 只扫 `lease_expires_at > now()`，`run_executor.rs:585-594`），而 claim 回收路径不 poll → 证据能力存在却没接到回收决策上。
 5. **generation fencing 能防止哪些操作？** DB 写路径全部被守卫：结果接受（`accept_executor_result` 校验 token hash + generation）、Run 状态机迁移（`run_transition_guard`）、命令路由（旧 `lease_owner` 快照失效）、心跳续租（旧 token 不匹配）。旧进程**对 DB 是盲的**。
 6. **generation fencing 无法防止哪些外部副作用？** git commit / git push（远端仓库多出未追踪分支提交）、外部服务调用（LLM 消耗、消息发送）、工作区文件写入（P2 与 P1 写同一 worktree 时互相踩）、本地日志/事件文件追加。
-7. **旧进程仍运行时能否阻止它 git push / 提交 / 调外部服务？** **不能即时阻断**——它持有的是 OS 层进程与已注入的凭据（git 凭据、SSH key、env 里的 lease token 只影响 DB 通道）。可行的削减手段是：①尽快 terminate（同主机可 kill；Runner 远程走 cancel 命令 + ACK）；②workspace 唯一所有权（P2 不复用 P1 的工作区，新 Attempt 用新 worktree，物理隔离写冲突）；③任务分支隔离（`git_branch` 按 task 生成，P1 的 push 落在同分支时由 SEM 侧收尾按 generation 标记丢弃/告警）；④外部调用面收敛（executor 侧凭据最小化、短时授权、撤销和脱敏，Phase 0 必须覆盖）。
+7. **旧进程仍运行时能否阻止它 git push / 提交 / 调外部服务？** **不能即时阻断**——它持有的是 OS 层进程与已注入的凭据（git 凭据、SSH key、env 里的 lease token 只影响 DB 通道）。可行的削减手段是：①尽快 terminate（同主机可 kill；Runner 远程走 cancel 命令 + ACK）；②workspace 唯一所有权（P2 不复用 P1 的工作区，新 Attempt 用新 worktree，物理隔离写冲突）；③任务分支隔离（每个执行尝试使用明确的任务分支策略；旧进程 push 的提交仍需检查远端，不得假设 DB generation 能撤销远端写入）；④外部调用面收敛（executor 侧凭据最小化、短时授权、撤销和脱敏，Phase 0 必须覆盖）。
 
 ### 1.5 结论
 
