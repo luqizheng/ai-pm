@@ -122,3 +122,12 @@ The closure proposal includes D-13: Runner Supervisor reports CPU utilization/ca
 ## 11. ADR-SEM-26 consistency check
 
 Runner resource telemetry and resource-aware admission are now a ratified architecture decision. The WSS protocol carries `runner.resource.report`; SEM owns the latest snapshot and per-Run+Generation resource reservations; task resource profiles are evaluated before Platform Claim. CPU, memory and the actual Workspace volume are covered. Resource reports are neither heartbeat nor Lease Renewal nor process-termination evidence. Stale/unknown samples block only new dispatch. Concurrent scheduling must atomically reserve capacity before Claim; ambiguous Claim outcomes retain the reservation and reuse the same idempotency key. This decision does not authorize automatic termination or migration of active work. Implementation and threshold calibration remain acceptance work, not completed functionality.
+
+
+## 12. SEM-02D 批量设计包状态（2026-11-25）
+
+D-01–D-12 的候选设计已一次性整理提交，统一标记为 Review Pending；详见 `sem-02d-review-package.md` 与 `sem-02d-closure-design-proposal.md`。D-13 已按 ADR-SEM-26 ratified。当前不将任何尚未由用户批准的 D 项标记为关闭，也不把设计完整性等同于代码实现或验收完成。
+
+一致性补充：ADR-SEM-16 所称 E4 持久化 scheduling shield 是执行隔离语义；新设计将其物理载体明确为独立 `delivery.run_execution_barrier`，与 Interaction scheduling shield 分离。Platform dispatchability predicate 必须同时检查两类 shield/barrier。WSS 消息集合必须包含 ADR-SEM-26 的 `runner.resource.report`；资源报告不续租、不作为进程终止证据。
+
+D-12 目标凭据边界已写明，但实际 Codex/Harness 启动器的环境变量、命令行、配置文件、子进程继承、日志、事件文件、crash dump 和 SSH 临时文件盘点仍是 Phase 0 前强制只读门槛。Phase 0 未启动。
