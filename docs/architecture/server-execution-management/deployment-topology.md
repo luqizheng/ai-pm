@@ -6,36 +6,40 @@
 
 ```mermaid
 flowchart LR
-    subgraph HostP["Platform 主机（现状）"]
-        API[pm-api :port]
+    subgraph HostP["Platform 主机"]
+        API[pm-api HTTPS]
         PW[pm-worker]
         WP[ai-pm-worker role=platform]
         PG[(Platform PostgreSQL<br/>业务权威)]
     end
-    subgraph HostE["SEM 主机（新增，独立 Docker）"]
+    subgraph HostE["SEM 主机（独立 Docker）"]
         WE[ai-pm-worker role=execution]
-        CODEX[codex CLI / 其他 harness]
-        SDB[(SEM DB<br/>执行侧私有状态)]\n        VOL[(workspace 卷<br/>AI_PM_WORKSPACE_ROOT)]
+        SDB[(SEM DB<br/>执行侧私有状态)]
+        CODEX[Codex CLI / 其他 Harness]
+        VOL[(AI_PM_WORKSPACE_ROOT 持久卷)]
     end
     API <--> PG
     PW <--> PG
     WP <--> PG
-    WE <-->|SQL only| PG
+    WP -->|Transactional Outbox / HTTPS| WE
+    WE -->|claim / status / evidence API| API
+    WE <--> SDB
     WE --- CODEX
     WE --- VOL
-    U[用户设备 runner] <-->|claim/heartbeat/poll/result 经 DB| PG
-    U -.->|REST| API
+    R[用户设备 Runner] <-->|WSS| WE
 ```
 
-- **Platform ↔ SEM**：唯一的耦合面是 PostgreSQL。无 RPC、无消息队列、无 Redis/Kafka/RabbitMQ（任务禁令）。
-- **SEM → DB**：直连（与现状 worker 相同的 `DATABASE_URL` 形态；本机连 Docker 映射一律 `127.0.0.1`，跨主机用内网 IP，遵循 AGENTS.md 第 3 条）。
-- **Runner ↔ SEM**：**不存在直接通信**。Runner 与平台的所有交互仍走 DB 通道（claim/heartbeat/命令 poll/结果上报）+ REST。SEM 与 Runner 是「各自持有执行权」的竞争关系，由租约/generation 仲裁。
-- **API / MCP**：全部留在 Platform。SEM 不暴露任何 API。
+- **Platform ↔ SEM**：版本化 HTTPS 服务 API；双方数据库独立。SEM 不连接 Platform PostgreSQL。Platform Transactional Outbox 负责可靠触发，SEM 通过 API 请求 claim、上报状态和执行证据。
+- **Platform DB**：仅 Platform 服务访问，权威保存业务 Run/Lease/Generation、审批和审计。
+- **SEM DB**：只保存 SEM 私有执行侧状态（命令收件/投递账本、连接元数据和恢复协调记录），不得成为 Run/Lease 的第二权威。
+- **Runner ↔ SEM**：认证 WSS 双向长连接；Runner 主动连接 SEM，传输命令、ACK、Heartbeat 和执行事件。
+- **API / MCP**：业务 API/MCP 留在 Platform；SEM 暴露受服务身份保护的内部 HTTPS API 和 Runner WSS 端点。
 
 ## 2. 数据库
 
-- 单库共享：`delivery.task_run` 等表是三方共识的仲裁点。
-- SEM 对 DB 的写入范围：Run 状态机迁移、租约/generation、run_events、审计、执行证据（终止确认）。全部经现有 `run_dispatch`/`run_transition_guard` 通道，**不开直写旁路**（AGENTS/项目惯例：项目属性直写 SQL 的历史债不新增）。
+- Platform 数据库：`delivery.task_run` 等表是业务 Run/Lease/Generation 的权威仲裁点，只由 Platform 服务访问。
+- SEM 数据库：保存 SEM 执行侧私有数据；SEM 对 Run 状态的变更必须调用 Platform API，由 Platform 内部完成事务与审计。
+- 不做跨数据库事务；采用 Outbox/Inbox、幂等请求、重试和对账。
 - Greenfield：SEM 主机部署使用独立 SEM 数据库；但全新库必须可完整初始化（政策 §3）——现有迁移链即初始化路径，本设计不新增表以外的硬依赖。
 
 ## 3. Workspace 卷结构（`AI_PM_WORKSPACE_ROOT`）
@@ -78,7 +82,14 @@ $AI_PM_WORKSPACE_ROOT/
 
 - 卷内容（pid/日志/事件）**禁止**包含凭据明文；执行端 env 由 spawn 时注入，进程退出即消失。
 
-## 7. 网络 API、认证与可用性\n\n- Platform 到 SEM：HTTPS，内部服务身份认证；API 版本化、幂等、限流并记录 request_id/event_id。\n- Runner 到 SEM：WSS，Runner 主动建立连接；断线重连后必须先同步当前命令/Generation，不得盲目重放旧命令。\n- SEM 不可达时，Platform Outbox 保留未成功投递事件并重试；SEM 恢复后通过 API 对账。SEM 不可达不影响 Platform 业务服务。\n- SEM 无法访问 Platform API 时，不得自行签发 Lease 或改变权威 Run 状态；在途执行按执行安全模型处理。\n\n## 8. 启动 / 关闭顺序与健康检查
+## 7. 网络 API、认证与可用性
+
+- Platform 到 SEM：HTTPS，内部服务身份认证；API 版本化、幂等、限流并记录 request_id/event_id。
+- Runner 到 SEM：WSS，Runner 主动建立连接；断线重连后必须先同步当前命令/Generation，不得盲目重放旧命令。
+- SEM 不可达时，Platform Outbox 保留未成功投递事件并重试；SEM 恢复后通过 API 对账。SEM 不可达不影响 Platform 业务服务。
+- SEM 无法访问 Platform API 时，不得自行签发 Lease 或改变权威 Run 状态；在途执行按执行安全模型处理。
+
+## 8. 启动 / 关闭顺序与健康检查
 
 **启动**：PostgreSQL → Platform（api/worker）→ SEM（execution worker）。
 - SEM 健康检查 = 进程存活 + DB 连通 + `AI_PM_WORKSPACE_ROOT` 可写 + 执行器（codex CLI）存在。任一失败 → 容器不 ready，不领 Run（领取门控天然停摆，在途 Run 由证据模型保护，不会被误回收——`execution-safety.md` 的 E4/E5 挂起语义保证 SEM 宕机是**安全的**）。
