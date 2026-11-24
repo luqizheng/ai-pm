@@ -19,7 +19,8 @@
 | 查找 PA-07 实施审计与当前状态 | [PA-07 实施产物索引](architecture/pa-07-implementation/README.md)（IMP-001~003 + 最终验收报告） |
 | 查找 PA-08 执行可靠性实施计划 | [PA-08 实施索引](architecture/pa-08-implementation/README.md) |
 | 查找 AI-PM 通用 Artifact Service 架构基线 | [ADR-ART-001](architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md) |
-| 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |\n| 查找 Artifact Service API、数据模型和授权契约 | [ART-01 设计基线](architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md) |
+| 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |
+| 查找 Artifact Service API、数据模型和授权契约 | [ART-01 设计基线](architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md) |
 | 查找 S01–S05 产品场景与 UI 规格 | [scenarios/](scenarios/) |
 | 查找验收记录 | [acceptance/](acceptance/) |
 | 查找历史审查、代码事实和差距证据 | [audit/](audit/) |
