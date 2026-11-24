@@ -125,6 +125,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | migration-roadmap.md | Phase 0–5 实施路线图 |
 | consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
 | code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
+| service-protocol-security-and-persistence.md | Lease Renewal、服务身份、WSS 认证撤权、SEM Inbox/Delivery Ledger、幂等和故障恢复建议基线 |
 
 ## ADR-SEM-20：SEM 统一负责 Runner 任务派发与接管
 
@@ -147,7 +148,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：代码契约映射初审已完成，全量一致性审查与 18 项接口门槛关闭仍在进行。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。
+- **SEM-02C：代码契约映射初审已完成；本轮新增服务协议/安全/持久化建议基线，仍需用户确认关键方案并完成全量一致性审查。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。新增 `service-protocol-security-and-persistence.md` 是设计建议，不代表已实现或已获用户最终批准。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
 - 本轮仅新增 `code-contract-mapping.md` 并更新架构索引；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
