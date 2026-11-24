@@ -71,6 +71,6 @@ The shield is a durable scheduling invariant, not an audit-only event or lease e
 - A shielded Run must have an actionable HIR or explicit operational escalation record.
 
 
-## 7. Runner resource capacity (D-13 — proposed)
+## 7. Runner resource capacity (ADR-SEM-26 — approved)
 
 Runner reports CPU, memory, and the actual Workspace volume's free space to SEM. SEM owns the latest resource snapshot and per-Run+Generation admission reservations; Platform remains authoritative for Claim, Lease, Generation, and business Run state. Candidate tasks carry a conservative resource profile (CPU units, peak memory budget, Workspace growth budget, profile class). SEM atomically reserves capacity before requesting Platform Claim, retains reservations through ambiguous Claim outcomes and active execution, and releases only after safe terminal/termination handling. Unknown or stale metrics block new work but never imply that active processes have exited. Resource pressure does not automatically kill or migrate running tasks in V1.
