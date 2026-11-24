@@ -17,15 +17,33 @@ const MOCK_MODULE_PATTERN =
 
 export function releaseMockGuard(): Plugin {
   let mode = "";
+  let mockEnabled = false;
 
   return {
     name: "ai-pm-release-mock-guard",
     apply: "build",
     configResolved(config) {
       mode = config.mode;
+      // 闸 1（显式）：发布模式下 VITE_USE_MOCK=1 直接失败——不依赖 bundler
+      // 元数据。rolldown 下 chunk 的 moduleIds 可能为空，只靠闸 2 会静默
+      // 漏放（2026-11-24 full-dev dist 实测：fixtures 字符串进了产线 bundle）。
+      mockEnabled = config.env.VITE_USE_MOCK === "1" || process.env.VITE_USE_MOCK === "1";
+      if (RELEASE_MODES.has(mode) && mockEnabled) {
+        throw new Error(
+          [
+            "[release-guard] 发布构建（production/staging）禁止 VITE_USE_MOCK=1，已中止。",
+            "演示数据只能经 VITE_USE_MOCK=1 在本地 dev/单测中加载。"
+          ].join("\n")
+        );
+      }
     },
     generateBundle(_options, bundle) {
       if (!RELEASE_MODES.has(mode)) return;
+      if (mockEnabled) {
+        throw new Error(
+          "[release-guard] 发布构建检测到 VITE_USE_MOCK=1（generateBundle 复核），已中止。"
+        );
+      }
 
       const hits: string[] = [];
       for (const output of Object.values(bundle)) {

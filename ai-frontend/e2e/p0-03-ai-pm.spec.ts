@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { api } from "./team/stack";
 import { buildOwner, createProjectFor, psql, signInVia, type TestOwner } from "./p0/fixtures";
-import { asAiPrincipal, registerMockProvider, signTokenWith, waitFor } from "./p0/helpers";
+import { asAiPrincipal, asApiKeyPrincipal, registerMockProvider, waitFor } from "./p0/helpers";
 
 /**
  * P0-03 · Project AI-PM 核心能力（规格 13 号，阶段 B）
@@ -172,7 +172,7 @@ test("P0-009 分析链 → mock provider 结构化结果 + 提案待确认 + 零
 });
 
 /** P0-010 · AI 建议人工确认：三道闸全拒 + 人工确认产生 Revision 2 */
-test("P0-010 提案停待确认；AI 身份/api_key 直调 confirm 403；人工确认 superseded 旧版", async () => {
+test("P0-010 提案停待确认；AI 身份 confirm 403（人工门）；api_key 403（可信上下文）；人工确认 superseded 旧版", async () => {
   // 前置：人工创建 REQ-001 并确认到 approved（真实链）
   const req = await api("POST", `/v1/pm/projects/${project.id}/requirements`, owner.token, {
     code: "REQ-010",
@@ -217,7 +217,9 @@ test("P0-010 提案停待确认；AI 身份/api_key 直调 confirm 403；人工�
   expect(current.status).toBe(200);
   expect(current.body.requirement.current_revision_id).toBe(v1Id);
 
-  // 闸①：kind='ai_pm' 主体直调 confirm → 403（require_human 查库，R24 消息）
+  // 闸①：kind='ai_pm' 主体直调 confirm → 403（require_human 查库，R24 消息）。
+  // asAiPrincipal 先补 team 资格（P4-ORG Team-first 硬前置）再由 owner 授予
+  // project_member——可见性闸放行，人工门 require_human 按 kind='ai_pm' 拒绝。
   const ai = await asAiPrincipal(owner, "p0-ai-impersonated", project.id);
   const aiAttempt = await api(
     "POST",
@@ -228,12 +230,13 @@ test("P0-010 提案停待确认；AI 身份/api_key 直调 confirm 403；人工�
   expect(aiAttempt.status).toBe(403);
   expect(aiAttempt.body.message ?? "").toContain("human principal");
 
-  // 闸②：api_key 通道直调 confirm → 403（ensure_trusted_context）
-  const apiKeyToken = signTokenWith("p0-api-key", owner.tid, { purpose: "api_key" });
+  // 闸②：api_key 通道直调 confirm → 403（ensure_trusted_context：机器凭据
+  // 不构成可信交互上下文；主体已入编 → 可见性放行 → 可信门 403 可达）
+  const key = await asApiKeyPrincipal(owner, "p0-api-key", project.id);
   const keyAttempt = await api(
     "POST",
     `/v1/pm/requirements/${reqId}/revisions/${v2Id}/confirm`,
-    apiKeyToken,
+    key.token,
     { expected_content_hash: v2Hash }
   );
   expect(keyAttempt.status).toBe(403);

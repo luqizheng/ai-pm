@@ -35,7 +35,7 @@ let ownerA: TestOwner;
 let projectA1: TestProject;
 
 /** P0-004 · 正常创建项目并归属 Team */
-test("P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 5 人编制", async ({
+test("P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 编制拆两面（P4-ORG D-2）", async ({
   context,
   page
 }) => {
@@ -74,7 +74,9 @@ test("P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 5 人�
   expect(row, "created project must appear in tenant list").toBeTruthy();
   expect(row.status).toBe("planning");
 
-  // DB：归属 Team A + 恰 5 人编制（owner/ai_pm/architect/developer/tester）
+  // DB：归属 Team A + P4-ORG（DR-PA-04③/D-2）编制拆两面：
+  // project_member 只承载人类行（owner）；Agent 执行实例 4 行在
+  // ai.project_agent_member（职能 ≠ 访问角色，bootstrap.rs 播种）。
   const tenant = psql(
     `SELECT tenant_id FROM core.project WHERE id = '${projectId}'`
   );
@@ -83,7 +85,12 @@ test("P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 5 人�
     `SELECT string_agg(role, ',' ORDER BY role) FROM core.project_member
       WHERE project_id = '${projectId}'`
   );
-  expect(roles).toBe("ai_pm,architect,developer,owner,tester");
+  expect(roles).toBe("owner");
+  const agentKinds = psql(
+    `SELECT string_agg(role_kind, ',' ORDER BY role_kind) FROM ai.project_agent_member
+      WHERE project_id = '${projectId}'`
+  );
+  expect(agentKinds).toBe("ai_pm,architect,developer,tester");
 
   projectA1 = { id: projectId, code: "E2EPA19104", name: "e2e-project-a1", tenantId: ownerA.team.id };
 });
@@ -135,7 +142,7 @@ test("P0-005 零外部依赖 → CC 可用；AI 配置就绪；无阻断提示",
 });
 
 /** P0-006 · 初始化事项派生状态正确且与 Read Model 一致（7 态 / 7 key） */
-test("P0-006 初始化 7 事项 7 态派生一致；project_basics 恒 completed；刷新不丢", async ({
+test("P0-006 初始化 8 事项 7 态派生一致；project_basics 恒 completed；刷新不丢", async ({
   context,
   page
 }) => {
@@ -157,6 +164,7 @@ test("P0-006 初始化 7 事项 7 态派生一致；project_basics 恒 completed
     "repository_access",
     "code_analysis",
     "project_cognition",
+    "baseline",
     "dev_environment",
     "human_actions"
   ];

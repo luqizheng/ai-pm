@@ -55,14 +55,8 @@ const CURRENT_PROJECT_KEY = "aipm.current-project";
 /** mock 预览（本地 dev / 单测）：用设计稿样本；发布构建改为真实项目列表 */
 const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
 
-async function bootstrapProjectContext() {
-  if (mockPreview) {
-    const { demoProject, demoProjects } = await import("./demo");
-    shell.setProjects(demoProjects);
-    if (!shell.currentProjectId) shell.setCurrentProject(demoProject.id);
-    return;
-  }
-
+/** 拉取项目列表写入壳状态（启动引导与「未知项目补拉」共用同一事实源） */
+async function refreshProjects(): Promise<void> {
   try {
     const page = await listProjects({ size: 100 });
     shell.setProjects(
@@ -72,23 +66,34 @@ async function bootstrapProjectContext() {
         description: project.description ?? undefined
       }))
     );
-    let restored: string | null = null;
-    try {
-      restored = localStorage.getItem(CURRENT_PROJECT_KEY);
-    } catch {
-      restored = null;
-    }
-    // 恢复优先级：URL 上下文 > 上次本地偏好 > 首个项目
-    // （URL query 是页面数据真源，顶栏必须与当前路由一致）
-    const preferred =
-      page.items.find(project => project.id === urlProjectId()) ??
-      page.items.find(project => project.id === restored) ??
-      page.items[0];
-    if (preferred) shell.setCurrentProject(preferred.id);
   } catch {
     // 项目列表不可用时保持空壳（各页自行展示空态），不注入演示数据
     shell.setProjects([]);
   }
+}
+
+async function bootstrapProjectContext() {
+  if (mockPreview) {
+    const { demoProject, demoProjects } = await import("./demo");
+    shell.setProjects(demoProjects);
+    if (!shell.currentProjectId) shell.setCurrentProject(demoProject.id);
+    return;
+  }
+
+  await refreshProjects();
+  let restored: string | null = null;
+  try {
+    restored = localStorage.getItem(CURRENT_PROJECT_KEY);
+  } catch {
+    restored = null;
+  }
+  // 恢复优先级：URL 上下文 > 上次本地偏好 > 首个项目
+  // （URL query 是页面数据真源，顶栏必须与当前路由一致）
+  const preferred =
+    shell.projects.find(project => project.id === urlProjectId()) ??
+    shell.projects.find(project => project.id === restored) ??
+    shell.projects[0];
+  if (preferred) shell.setCurrentProject(preferred.id);
 }
 
 /**
@@ -138,6 +143,13 @@ watch(
 // （打开项目 = 切换当前项目上下文；store 的持久化与仓库上下文由上方 watch 联动）
 watch(urlProjectId, projectId => {
   if (projectId && projectId !== shell.currentProjectId) {
+    // DEF-ALPHA-02：新建项目不在启动时拉取的列表里，直接落地会让
+    // currentProject 解析为 null——上下文栏/助手永远停在「正在切换项目…」。
+    // 未知项目先补拉列表（顶栏/选择器同步拿到新项目），再落地当前项目。
+    if (!shell.projects.some(project => project.id === projectId)) {
+      void refreshProjects().then(() => shell.setCurrentProject(projectId));
+      return;
+    }
     shell.setCurrentProject(projectId);
   }
 });

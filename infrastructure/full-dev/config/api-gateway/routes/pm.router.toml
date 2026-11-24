@@ -54,3 +54,18 @@ service    = "pm-api"
 upstream   = "/v1/pc/{rest}"
 downstream = "/v1/pc/{rest}"
 service    = "pm-api"
+
+# 5) /v1/projc/*：ProjC 认知对象浏览面（apps/pm-api/src/knowledge_services.rs
+#    /v1/projc/objects）。此前缺路由，知识库页「影响分析（跨域关系遍历）」
+#    报「加载失败」（2026-11-24 full-dev UI 冒烟实测：pm-api 直连 401、
+#    经网关 404）——与 11-13 /v1/kb、/v1/pc 缺路由同类复发，新命名空间
+#    落地时必须同步补本清单。
+[[route]]
+upstream   = "/v1/projc/{rest}"
+downstream = "/v1/projc/{rest}"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/projc"
+downstream = "/v1/projc"
+service    = "pm-api"

@@ -7,23 +7,23 @@ import { api } from "../team/stack";
 import { buildOwner, createProjectFor, psql, type TestOwner } from "../p0/fixtures";
 import {
   asAiPrincipal,
+  asApiKeyPrincipal,
   createLocalRepoFixture,
-  signTokenWith,
   waitFor,
   type LocalRepo
 } from "../p0/helpers";
 
 /**
- * 阶段 D · S1~S6 主链（交付物 05 V1.1 §4.1）
+ * 阶段 D · S1~S6 主链（交付物 05 V1.1 §4.1；2026-11-24 迁移 ProjC 管线）
  *
  * tenantA / projectA1 绑定本地 file:// 仓库夹具（固定 commit），真 pm-api +
  * 真 worker + FakeModel(derived；无 provider → analysis_mode=derived)：
  *   S1 analyze → report analyzing→analyzed（报告门 409 + commit 锚）
  *   S2 KB draft（确认前不可检索）
- *   S3 PC 草稿 + ai_agent 提案 + pending approval（draft lifecycle + source/evidence 钉 KB Revision）
- *   S4 人工 confirm_revision + PC decision（AI/api_key 403；发布后索引/检索可见）
- *   S5 close_report → 批量发布（lifecycle→active、version+snapshot_hash、锚点固化）
- *   S6 重复 close（记录实际行为；幂等键 pc-decision:{id} 不重复发布）
+ *   S3 ProjC 草稿 + repo_analysis 提案 + submitted（draft lifecycle + source/evidence 钉 KB Revision）
+ *   S4 人工 confirm_revision + ProjC P5 决策（AI/api_key 403；审阅流 v2：决定暂记，close 才发布）
+ *   S5 close_report → ProjC 批量发布（lifecycle→active、version+snapshot_hash、锚点固化）
+ *   S6 重复 close（409；版本数不增）
  *
  * E1 对象身份关联表写入 test-case/evidence/chain/e1-object-identity.json。
  */
@@ -178,76 +178,64 @@ test("S2 KB：kb.document_revision draft + 确认前检索不命中", async () =
   expect(JSON.stringify(before.body)).not.toContain(kbRevisionId);
 });
 
-/** S3：PC 草稿 + ai_agent 提案 + pending approval；source/evidence 钉扎 KB Revision。 */
-test("S3 PC：draft lifecycle + ai_agent 提案 + pending approval + 钉扎 KB Revision", async () => {
+/** S3：ProjC 草稿 + repo_analysis 提案 + submitted；source/evidence 钉扎 KB Revision。 */
+test("S3 ProjC：draft lifecycle + repo_analysis 提案 + submitted + 钉扎 KB Revision", async () => {
   const detail = await api(
     "GET",
     `/v1/pm/analysis-reports/${reportId}?project_id=${projectId}`,
     owner.token
   );
-  const proposals = detail.body.proposals ?? [];
-  expect(proposals.length, "analysis must draft one PC proposal").toBeGreaterThan(0);
+  // P3-11 双域分流：分析提案在 projc_proposals（pc.proposal 仅 identity 综合通道，
+  // 分析链不再写 pc.proposal——2026-11-24 管线迁移）。
+  const proposals = detail.body.projc_proposals ?? [];
+  expect(proposals.length, "analysis must draft one ProjC proposal").toBeGreaterThan(0);
   proposalId = proposals[0].proposal_id as string;
   expect(proposals[0].status).toBe("submitted");
 
-  const proposal = await api(
-    "GET",
-    `/v1/pc/proposals/${proposalId}?project_id=${projectId}`,
-    owner.token
-  );
-  expect(proposal.status).toBe(200);
-
   const meta = psql(
     `SELECT origin_kind || '|' || status || '|' || expected_version_no
-       FROM pc.proposal WHERE id = '${proposalId}'`,
+       FROM projc.proposal WHERE id = '${proposalId}'`,
     DB
   );
   const [originKind, proposalStatus, expectedVersionNo] = meta.split("|");
-  expect(originKind).toBe("ai_agent");
+  // 分析链起草 = repo_analysis（旧 ai_agent 口径属 pc identity 综合通道）。
+  expect(originKind).toBe("repo_analysis");
   expect(proposalStatus).toBe("submitted");
   expect(Number(expectedVersionNo)).toBeGreaterThanOrEqual(0);
 
-  const approval = psql(
-    `SELECT count(*) FROM pc.approval
-      WHERE proposal_id = '${proposalId}' AND status = 'pending'`,
-    DB
-  );
-  expect(Number(approval)).toBeGreaterThan(0);
-
-  // lifecycle 恒 draft（AI 无 active 写入）。
+  // lifecycle 恒 draft/identity（AI 无 active 写入）。
   const lifecycles = psql(
     `SELECT string_agg(DISTINCT lifecycle_status, ',')
-       FROM pc.cognition_object
+       FROM projc.cognition_object
       WHERE project_id = '${projectId}'`,
     DB
   );
-  // bootstrap 播种的 identity 单例与本次分析产出的 draft 并存；AI 不得写 active。
+  // 分析起草对象为 draft；bootstrap 播种的 identity 单例并存；AI 不得写 active。
   expect(lifecycles.split(",")).toContain("draft");
   expect(lifecycles.split(",")).not.toContain("active");
 
-  // source + evidence 钉扎本次 KB Revision。
+  // source + evidence 钉扎本次 KB Revision（projc 面，G-1 硬门同源）。
   const sourcePinned = psql(
-    `SELECT count(*) FROM pc.source
+    `SELECT count(*) FROM projc.source
       WHERE project_id = '${projectId}' AND target_revision_id = '${kbRevisionId}'`,
     DB
   );
   expect(Number(sourcePinned)).toBeGreaterThan(0);
   const evidencePinned = psql(
-    `SELECT count(*) FROM pc.evidence e
-       JOIN pc.source s ON s.id = e.source_id
-      WHERE e.project_id = '${projectId}' AND s.target_revision_id = '${kbRevisionId}'
-        AND e.target_revision_id = '${kbRevisionId}'`,
+    `SELECT count(*) FROM projc.evidence e
+       JOIN projc.source s ON s.id = e.source_id
+      WHERE e.project_id = '${projectId}' AND s.target_revision_id = '${kbRevisionId}'`,
     DB
   );
   expect(Number(evidencePinned)).toBeGreaterThan(0);
 
-  // 通知状态（G-UI-4 衔接）：AI 起草提案 → pc_proposal_pending 留痕（outbox 消费）。
+  // 通知状态（G-UI-4 衔接）：AI 起草提案 → projc_proposal_pending 留痕（outbox 消费）。
   await waitFor(
     () =>
       Number(
         psql(
           `SELECT count(*) FROM integration.notification
-            WHERE project_id = '${projectId}' AND kind = 'pc_proposal_pending'`,
+            WHERE project_id = '${projectId}' AND kind = 'projc_proposal_pending'`,
           DB
         )
       ) > 0
@@ -255,43 +243,48 @@ test("S3 PC：draft lifecycle + ai_agent 提案 + pending approval + 钉扎 KB R
         : null,
     60_000,
     1000,
-    "pc_proposal_pending notification"
+    "projc_proposal_pending notification"
   );
 });
 
-/** S4：人工门（AI/api_key 403）→ confirm_revision + decision → 发布后可检索。 */
+/** S4：人工门（AI/api_key 403）→ confirm_revision + P5 决策 → 发布后可检索。 */
 test("S4 人工：AI/api_key 决策 403；真人 confirm + approve；发布后索引/检索可见", async () => {
-  const proposal = await api(
+  // ProjC 提案无单体详情端点：expected_version_no 从报告详情的 projc_proposals 行取。
+  const detail = await api(
     "GET",
-    `/v1/pc/proposals/${proposalId}?project_id=${projectId}`,
+    `/v1/pm/analysis-reports/${reportId}?project_id=${projectId}`,
     owner.token
   );
-  const expectedVersionNo = Number(proposal.body.expected_version_no ?? 0);
+  const row = (detail.body.projc_proposals ?? []).find(
+    (p: { proposal_id: string }) => p.proposal_id === proposalId
+  );
+  expect(row, "proposal row must persist in report detail").toBeTruthy();
+  const expectedVersionNo = Number(row.expected_version_no ?? 0);
   expect(expectedVersionNo).toBeGreaterThanOrEqual(0);
 
-  // 闸①：AI 主体（kind=ai_pm）决策 → 403。
+  // P5 决策入口（审阅流 v2：close 前决定可反复改；close 即冻结）。
+  const decide = (token: string, note: string) =>
+    api(
+      "POST",
+      `/v1/pm/projc/proposals/${proposalId}/decide?project_id=${projectId}`,
+      token,
+      { action: "approve", expected_version_no: expectedVersionNo, note }
+    );
+
+  // 闸①：AI 主体（kind=ai_pm）决策 → 403（ensure_formal_authorized 治理授权真人面）。
   const ai = await asAiPrincipal(owner, "chain-ai", projectId);
-  const aiAttempt = await api(
-    "POST",
-    `/v1/pc/proposals/${proposalId}/decision?project_id=${projectId}`,
-    ai.token,
-    { action: "approve", expected_version_no: expectedVersionNo, note: "ai should be denied" }
-  );
+  const aiAttempt = await decide(ai.token, "ai should be denied");
   expect(aiAttempt.status).toBe(403);
 
-  // 闸②：api_key 通道 → 403（ensure_trusted_context）。
-  const apiKey = signTokenWith("chain-api-key", owner.tid, { purpose: "api_key" });
-  const keyAttempt = await api(
-    "POST",
-    `/v1/pc/proposals/${proposalId}/decision?project_id=${projectId}`,
-    apiKey,
-    { action: "approve", expected_version_no: expectedVersionNo, note: "api key denied" }
-  );
+  // 闸②：api_key 通道 → 403（ensure_trusted_context；asApiKeyPrincipal 已入编，
+  // 可见性闸放行后可信上下文门可达）。
+  const apiKey = await asApiKeyPrincipal(owner, "chain-api-key", projectId);
+  const keyAttempt = await decide(apiKey.token, "api key denied");
   expect(keyAttempt.status).toBe(403);
 
-  // 终态未变：仍 submitted / pending。
+  // 终态未变：仍 submitted。
   expect(
-    psql(`SELECT status FROM pc.proposal WHERE id = '${proposalId}'`, DB)
+    psql(`SELECT status FROM projc.proposal WHERE id = '${proposalId}'`, DB)
   ).toBe("submitted");
 
   // 真人 KB confirm（draft → published）。
@@ -330,20 +323,15 @@ test("S4 人工：AI/api_key 决策 403；真人 confirm + approve；发布后�
   );
   expect(Number(ftsHit)).toBeGreaterThan(0);
 
-  // 真人 PC approve（暂记 approved；正式版本由 close 批量发布）。
-  const approved = await api(
-    "POST",
-    `/v1/pc/proposals/${proposalId}/decision?project_id=${projectId}`,
-    owner.token,
-    { action: "approve", expected_version_no: expectedVersionNo, note: "chain S4 human approve" }
-  );
+  // 真人 ProjC approve（审阅流 v2：决定暂记 approved；正式版本由 close 批量发布）。
+  const approved = await decide(owner.token, "chain S4 human approve");
   expect(approved.status).toBe(200);
   expect(approved.body.status).toBe("approved");
-  expect(approved.body.published_version_no).toBeNull();
+  expect(approved.body.published_version_ref).toBeNull();
 
   const decided = psql(
-    `SELECT p.status || '|' || a.status FROM pc.proposal p
-       JOIN pc.approval a ON a.proposal_id = p.id
+    `SELECT p.status || '|' || a.status FROM projc.proposal p
+       JOIN projc.approval a ON a.proposal_id = p.id
       WHERE p.id = '${proposalId}' ORDER BY a.created_at DESC LIMIT 1`,
     DB
   );
@@ -377,7 +365,7 @@ test("S4 人工：AI/api_key 决策 403；真人 confirm + approve；发布后�
   expect(publishAudit).toBe(`${ownerPrincipalId}|kb.document_revision.published`);
 });
 
-/** S5：close_report → 批量发布 + 版本快照 + 锚点固化。 */
+/** S5：close_report → ProjC 批量发布 + 版本快照 + 锚点固化。 */
 test("S5 close：approved 提案批量发布、lifecycle→active、version+snapshot_hash、锚点固化", async () => {
   const close = await api(
     "POST",
@@ -386,17 +374,29 @@ test("S5 close：approved 提案批量发布、lifecycle→active、version+snap
   );
   expect(close.status).toBe(200);
   expect(close.body.status).toBe("closed");
-  expect(close.body.applied_proposals).toBe(1);
+  // pc 域零提案（管线已切 ProjC）；ProjC 域 1 批准提案首发。
+  expect(close.body.applied_proposals).toBe(0);
+  expect(close.body.projc_applied).toBe(1);
+  expect(close.body.projc_replayed).toBe(0);
+  expect(close.body.projc_publish_failed_proposals).toBe(0);
+  expect(close.body.projc_withdrawn).toBe(0);
   expect(close.body.publish_failed_proposals).toBe(0);
   expect(close.body.withdrawn_proposals).toBe(0);
   expect(close.body.rejected_kb).toBe(false);
   expect(close.body.last_analyzed_commit).toBe(repo.head);
 
-  // 版本 + 成员快照 + snapshot_hash。
+  // published_versions：projc 域首发记录可回读。
+  const entries = (close.body.published_versions ?? []).filter(
+    (e: { domain: string }) => e.domain === "projc"
+  );
+  expect(entries.length).toBe(1);
+  expect(entries[0].proposal_id).toBe(proposalId);
+
+  // 版本 + 成员快照 + snapshot_hash（projc 面）。
   const version = psql(
     `SELECT v.id || '|' || v.version_no || '|' || v.snapshot_hash || '|' ||
-            (SELECT count(*) FROM pc.version_member vm WHERE vm.version_id = v.id)
-       FROM pc.cognition_version v
+            (SELECT count(*) FROM projc.version_member vm WHERE vm.version_id = v.id)
+       FROM projc.cognition_version v
       WHERE v.project_id = '${projectId}'
       ORDER BY v.version_no DESC LIMIT 1`,
     DB
@@ -410,7 +410,7 @@ test("S5 close：approved 提案批量发布、lifecycle→active、version+snap
   // lifecycle → active（identity 单例保留原态）；报告 closed；仓库锚点固化。
   expect(
     psql(
-      `SELECT string_agg(DISTINCT lifecycle_status, ',') FROM pc.cognition_object
+      `SELECT string_agg(DISTINCT lifecycle_status, ',') FROM projc.cognition_object
         WHERE project_id = '${projectId}'`,
       DB
     ).split(",")
@@ -422,22 +422,21 @@ test("S5 close：approved 提案批量发布、lifecycle→active、version+snap
     psql(`SELECT last_analyzed_commit_sha FROM integration.project_repository WHERE id = '${repo.repositoryId}'`, DB)
   ).toBe(repo.head);
 
-  // P7 版本读面可回读（服务化契约）。
-  const p7 = await api(
+  // ProjC 只读浏览面（网关路由 /v1/projc/* → pm-api）可回读已发布对象。
+  const browse = await api(
     "GET",
-    `/v1/pc/versions/${versionId}?project_id=${projectId}`,
+    `/v1/projc/objects?project_id=${projectId}`,
     owner.token
   );
-  expect([200, 404, 501]).toContain(p7.status);
+  expect(browse.status).toBe(200);
 
-  // 通知状态（G-UI-4）：版本发布留痕（去重锚 = version id）。
+  // 通知状态（G-UI-4）：ProjC 版本发布留痕。
   await waitFor(
     () =>
       Number(
         psql(
           `SELECT count(*) FROM integration.notification
-            WHERE project_id = '${projectId}' AND kind = 'pc_version_published'
-              AND payload->>'dedup_key' = '${versionId}'`,
+            WHERE project_id = '${projectId}' AND kind = 'projc_version_published'`,
           DB
         )
       ) > 0
@@ -445,7 +444,7 @@ test("S5 close：approved 提案批量发布、lifecycle→active、version+snap
         : null,
     60_000,
     1000,
-    "pc_version_published notification"
+    "projc_version_published notification"
   );
 
   // 审计可追溯（G-UI-4）：close 的真实 Human Actor。
@@ -458,10 +457,10 @@ test("S5 close：approved 提案批量发布、lifecycle→active、version+snap
   expect(closeAudit).toBe(`${ownerPrincipalId}|analysis_report.closed`);
 });
 
-/** S6：重复 close —— 记录实际行为；不得重复发布版本。 */
-test("S6 幂等：重复 close 不重执行（实际行为登记；版本数不增）", async () => {
+/** S6：重复 close —— 409；ProjC 版本数不增。 */
+test("S6 幂等：重复 close 不重执行（409；版本数不增）", async () => {
   const versionsBefore = Number(
-    psql(`SELECT count(*) FROM pc.cognition_version WHERE project_id = '${projectId}'`, DB)
+    psql(`SELECT count(*) FROM projc.cognition_version WHERE project_id = '${projectId}'`, DB)
   );
 
   const again = await api(
@@ -469,16 +468,25 @@ test("S6 幂等：重复 close 不重执行（实际行为登记；版本数不�
     `/v1/pm/analysis-reports/${reportId}/close?project_id=${projectId}`,
     owner.token
   );
-  // 现状：报告非 analyzed → 409（候选契约 E2-3「返回原结果」待裁决，只记录实际）。
+  // 报告非 analyzed → 409（审阅流 v2：closed 即冻结，决策入口同样 409）。
   expect(again.status).toBe(409);
 
   const versionsAfter = Number(
-    psql(`SELECT count(*) FROM pc.cognition_version WHERE project_id = '${projectId}'`, DB)
+    psql(`SELECT count(*) FROM projc.cognition_version WHERE project_id = '${projectId}'`, DB)
   );
   expect(versionsAfter).toBe(versionsBefore);
   expect(psql(`SELECT status FROM integration.repo_analysis_report WHERE id = '${reportId}'`, DB)).toBe(
     "closed"
   );
+
+  // 关闭后决策入口冻结（409）。
+  const frozen = await api(
+    "POST",
+    `/v1/pm/projc/proposals/${proposalId}/decide?project_id=${projectId}`,
+    owner.token,
+    { action: "reject", expected_version_no: 0, note: "frozen after close" }
+  );
+  expect(frozen.status).toBe(409);
 });
 
 test.afterAll(() => {
@@ -493,7 +501,7 @@ test.afterAll(() => {
         project_id: projectId,
         report: { report_id: reportId, intake_id: intakeId, commit_sha: repo.head },
         kb: { document_id: kbDocumentId, revision_id: kbRevisionId },
-        proposal: { proposal_id: proposalId, origin_kind: "ai_agent" },
+        proposal: { proposal_id: proposalId, origin_kind: "repo_analysis" },
         version: { version_id: versionId },
         compatibility_ref: {
           note: "Report 身份=repo_analysis_report；正文由 kb.document_revision 持有；kb_revision_id 为兼容引用（非独立 Report Revision 对象，P2 落地前）"

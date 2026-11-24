@@ -115,9 +115,9 @@ test("UIFLOW-02 UI 建团 → 邀请页横幅；后端创建者 = owner", async 
   expect(me.body.team?.name).toContain(TEAM_NAME);
 });
 
-// ─────────────────────────────── UIFLOW-03 UI 建项目 → 列表可见；5 人编制落库
+// ─────────────────────────────── UIFLOW-03 UI 建项目 → 列表可见；编制拆两面落库
 
-test("UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；5 人编制", async ({
+test("UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；编制拆两面", async ({
   context,
   page
 }) => {
@@ -140,12 +140,19 @@ test("UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；5 �
   await page.goto("/projects");
   await expect(page.getByText(PROJECT_NAME).first()).toBeVisible({ timeout: 20_000 });
 
-  // DB 双证据：恰好 5 人编制（owner/ai_pm/architect/developer/tester）
+  // DB 双证据（P4-ORG DR-PA-04③/D-2 编制拆两面）：
+  // project_member 只承载人类行（owner）；4 个 Agent 执行行在
+  // ai.project_agent_member（职能 ≠ 访问角色）。
   const members = psql(
     `SELECT role FROM core.project_member WHERE project_id = '${projectId}' ORDER BY role`
   );
   const roles = members.split("\n").map(s => s.trim()).filter(Boolean).sort();
-  expect(roles).toEqual(["ai_pm", "architect", "developer", "owner", "tester"]);
+  expect(roles).toEqual(["owner"]);
+  const agentKinds = psql(
+    `SELECT role_kind FROM ai.project_agent_member WHERE project_id = '${projectId}' ORDER BY role_kind`
+  );
+  const kinds = agentKinds.split("\n").map(s => s.trim()).filter(Boolean).sort();
+  expect(kinds).toEqual(["ai_pm", "architect", "developer", "tester"]);
 });
 
 // ─────────────────────────────── UIFLOW-04 需求页读真

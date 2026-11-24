@@ -34,6 +34,28 @@ pub(super) async fn load_work_summary(
     .await?;
     let recent_runs = load_recent_run_briefs(pool, tenant_id, project_id, 5).await?;
 
+    // 需求进度：active 需求总数 + 当前修订已 approved（真人 confirm 定稿）数。
+    // draft / pending_confirmation / superseded 不计入进度——与 requirement.rs
+    // 状态机一致（Revision 2 approved → v1 superseded，进度只看 current）。
+    let requirement_total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.requirement \
+         WHERE project_id = $1 AND tenant_id = $2 AND lifecycle_status = 'active'",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+    let requirement_approved: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.requirement req \
+          JOIN delivery.requirement_revision rev ON rev.id = req.current_revision_id \
+         WHERE req.project_id = $1 AND req.tenant_id = $2 \
+           AND req.lifecycle_status = 'active' AND rev.state = 'approved'",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+
     let delivery_rows = crate::delivery::list_project_delivery(pool, tenant_id, project_id).await?;
     let mut delivery = DeliverySummary {
         delivered: 0,
@@ -53,6 +75,8 @@ pub(super) async fn load_work_summary(
     Ok(WorkSummary {
         task_total,
         task_by_status,
+        requirement_total,
+        requirement_approved,
         active_run_count,
         active_runs,
         recent_runs,

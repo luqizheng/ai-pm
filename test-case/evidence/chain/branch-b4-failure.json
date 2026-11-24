@@ -1,14 +1,14 @@
 {
   "failed": {
-    "id": "b47b0dbd-8fe2-4231-b685-b6ad80cda843",
+    "id": "620b8d99-7bf2-41f6-9b8b-1760f95996f5",
     "status": "failed",
-    "commit_sha": "517291163a5f4fbe070ef1d46fc493340373be99",
+    "commit_sha": "f9475c915a61f658b83f35465dcfe82a4f2fac01",
     "run_mode": "full",
     "since_commit": "",
     "error_code": "kb_analysis_failed",
-    "stage_detail": "",
+    "stage_detail": "KB 分析失败",
     "kb_revision_id": "",
-    "error_detail": "git: git authentication failed"
+    "error_detail": "git: git_not_found: git remote not found"
   },
   "intake_task_states": "FAILED",
   "retry_status": 202

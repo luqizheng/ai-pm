@@ -315,12 +315,13 @@ function openSettings() {
           :items="data.activity"
         />
         <div class="cc-rail">
+          <!-- 脚注不接 i18n 演示文案（AGENTS 规则 4：发布态禁止演示数据）；
+               真实同步信息由数据面下发后再以 :footnote 传入 -->
           <KnowledgeSnapshotCard
             :title="t('s01.command-center.knowledgeTitle')"
             :meta="t('s01.command-center.knowledgeMeta')"
             :action-label="t('s01.command-center.knowledgeAction')"
             :stats="data.knowledge"
-            :footnote="t('s01.command-center.knowledgeFootnote')"
             @action="openKnowledge"
           />
           <MembersCard

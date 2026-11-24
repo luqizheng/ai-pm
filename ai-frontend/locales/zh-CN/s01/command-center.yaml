@@ -90,7 +90,6 @@ command-center:
   knowledgeTitle: 知识快照
   knowledgeMeta: 只读摘要
   knowledgeAction: 打开 Knowledge
-  knowledgeFootnote: 知识库最近一次同步于今日 08:20，覆盖支付与订单两个域。
   membersTitle: 项目成员
   membersMeta: "{humans} 人 · {agents} Agent"
   selectProject: 请先在顶栏选择一个项目
@@ -104,7 +103,8 @@ command-center:
     tasksHint: "共 {total} 个任务，{done} 个已完成"
     risksHint: 风险与阻塞事项合计
     actionsHint: 需要人确认后才可继续推进的变更与取舍
-    unavailableHint: 当前接口未提供该指标
+    overallHint: 需求与任务进度均值
+    requirementsHint: "已定稿 {done} / 共 {total} 条需求"
     chipBlocked: "{count} 阻塞"
     chipNeedsHandle: 需处理
   tasks:

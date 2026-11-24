@@ -1,18 +1,18 @@
 {
   "config": {
     "argv": [
-      "C:\\nvm4w\\nodejs\\node.exe",
-      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "C:\\Users\\Administrator\\AppData\\Local\\Author Software\\nvm\\installs\\v24.16.0\\node.exe",
+      "C:\\projects\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "-c",
       "playwright.chain.config.ts"
     ],
-    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.chain.config.ts",
-    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "configFile": "C:\\projects\\ai-pm\\ai-frontend\\playwright.chain.config.ts",
+    "rootDir": "C:/projects/ai-pm/ai-frontend/e2e",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
-    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
+    "globalSetup": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
     "globalTeardown": null,
     "globalTimeout": 0,
     "grep": {},
@@ -24,7 +24,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/chain/playwright-artifacts",
+        "outputDir": "C:/projects/ai-pm/test-case/evidence/chain/playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -32,7 +32,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testDir": "C:/projects/ai-pm/ai-frontend/e2e",
         "testIgnore": [],
         "testMatch": [
           "chain/*.spec.ts"
@@ -44,15 +44,15 @@
       {
         "grep": {},
         "grepInvert": null,
-        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\chain\\playwright-artifacts",
+        "outputDir": "C:\\projects\\ai-pm\\test-case\\evidence\\chain\\playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
         "name": "",
-        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
-        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
         "testIgnore": [],
         "testMatch": "chain/*.spec.ts",
         "timeout": 300000,
@@ -114,7 +114,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -128,7 +128,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2371,
+                  "duration": 2310,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -140,12 +140,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:50:59.160Z",
+                  "startTime": "2026-11-23T23:13:26.858Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -173,7 +173,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -187,17 +187,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 331,
+                  "duration": 258,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:02.207Z",
+                  "startTime": "2026-11-23T23:13:29.694Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -215,7 +215,7 @@
           "column": 1
         },
         {
-          "title": "S3 PC：draft lifecycle + ai_agent 提案 + pending approval + 钉扎 KB Revision",
+          "title": "S3 ProjC：draft lifecycle + repo_analysis 提案 + submitted + 钉扎 KB Revision",
           "ok": true,
           "tags": [],
           "tests": [
@@ -225,7 +225,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -239,17 +239,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 905,
+                  "duration": 578,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:02.553Z",
+                  "startTime": "2026-11-23T23:13:29.956Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -261,7 +261,7 @@
               "status": "expected"
             }
           ],
-          "id": "940ed833aed6a7f6044e-fa0448de9724eaf5a37e",
+          "id": "940ed833aed6a7f6044e-033933c0f92a0863c441",
           "file": "chain/chain-01-full-loop.spec.ts",
           "line": 182,
           "column": 1
@@ -277,7 +277,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -291,17 +291,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1175,
+                  "duration": 1154,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:03.474Z",
+                  "startTime": "2026-11-23T23:13:30.539Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -315,7 +315,7 @@
           ],
           "id": "940ed833aed6a7f6044e-6131012830c5647d4515",
           "file": "chain/chain-01-full-loop.spec.ts",
-          "line": 263,
+          "line": 251,
           "column": 1
         },
         {
@@ -329,7 +329,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -343,17 +343,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1053,
+                  "duration": 800,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:04.674Z",
+                  "startTime": "2026-11-23T23:13:31.699Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -367,11 +367,11 @@
           ],
           "id": "940ed833aed6a7f6044e-0467b264f8b0ce3624f6",
           "file": "chain/chain-01-full-loop.spec.ts",
-          "line": 381,
+          "line": 369,
           "column": 1
         },
         {
-          "title": "S6 幂等：重复 close 不重执行（实际行为登记；版本数不增）",
+          "title": "S6 幂等：重复 close 不重执行（409；版本数不增）",
           "ok": true,
           "tags": [],
           "tests": [
@@ -381,7 +381,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -395,17 +395,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 434,
+                  "duration": 386,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:05.746Z",
+                  "startTime": "2026-11-23T23:13:32.505Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -417,9 +417,9 @@
               "status": "expected"
             }
           ],
-          "id": "940ed833aed6a7f6044e-886893f425eee704c436",
+          "id": "940ed833aed6a7f6044e-e0be6521590f16c3ca18",
           "file": "chain/chain-01-full-loop.spec.ts",
-          "line": 462,
+          "line": 461,
           "column": 1
         }
       ]
@@ -431,7 +431,7 @@
       "line": 0,
       "specs": [
         {
-          "title": "B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本",
+          "title": "B1 close 残留：projc_withdrawn + rejected_kb=true，不产生正式版本",
           "ok": true,
           "tags": [],
           "tests": [
@@ -441,7 +441,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -455,7 +455,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3393,
+                  "duration": 3033,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -467,12 +467,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:06.238Z",
+                  "startTime": "2026-11-23T23:13:32.909Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -484,7 +484,7 @@
               "status": "expected"
             }
           ],
-          "id": "458049366f74312147e5-a65d76c670a1e8304333",
+          "id": "458049366f74312147e5-3ddb4333b84dbc7463e5",
           "file": "chain/chain-02-branches.spec.ts",
           "line": 122,
           "column": 1
@@ -500,7 +500,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -514,7 +514,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5609,
+                  "duration": 5163,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -532,12 +532,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:09.775Z",
+                  "startTime": "2026-11-23T23:13:36.029Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -551,7 +551,7 @@
           ],
           "id": "458049366f74312147e5-e020e163033ff577e35e",
           "file": "chain/chain-02-branches.spec.ts",
-          "line": 171,
+          "line": 173,
           "column": 1
         },
         {
@@ -565,7 +565,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -579,7 +579,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2816,
+                  "duration": 2579,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -591,12 +591,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:15.404Z",
+                  "startTime": "2026-11-23T23:13:41.198Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -610,7 +610,7 @@
           ],
           "id": "458049366f74312147e5-fc9ddb8967c2f1372ba6",
           "file": "chain/chain-02-branches.spec.ts",
-          "line": 214,
+          "line": 216,
           "column": 1
         },
         {
@@ -624,7 +624,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -638,7 +638,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3444,
+                  "duration": 815,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -650,12 +650,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T23:51:18.236Z",
+                  "startTime": "2026-11-23T23:13:43.783Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -669,7 +669,7 @@
           ],
           "id": "458049366f74312147e5-fc72162e5c6e9f3e377c",
           "file": "chain/chain-02-branches.spec.ts",
-          "line": 234,
+          "line": 236,
           "column": 1
         }
       ]
@@ -677,8 +677,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-11-15T23:50:50.489Z",
-    "duration": 32325.677,
+    "startTime": "2026-11-23T23:13:17.375Z",
+    "duration": 28267.759000000002,
     "expected": 10,
     "skipped": 0,
     "unexpected": 0,

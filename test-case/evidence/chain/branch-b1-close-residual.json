@@ -1,22 +1,28 @@
 {
   "report": {
-    "id": "982e672a-933b-4ea3-a15a-d5830e1bc7a6",
+    "id": "c203e39d-8fef-486b-8441-e49bcf69a771",
     "status": "analyzed",
-    "commit_sha": "934f8e61a6128395dc8e33e69ad5909421225fd8",
+    "commit_sha": "b3f9d545bcc864373ee26f66e15c323786d78518",
     "run_mode": "full",
     "since_commit": "",
     "error_code": "",
     "stage_detail": "",
-    "kb_revision_id": "379b7335-3114-4ea9-9e14-a9f7c67f0bf7",
+    "kb_revision_id": "4d61cdcf-3d77-4afb-8610-7272913f63ed",
     "error_detail": ""
   },
   "close": {
-    "report_id": "982e672a-933b-4ea3-a15a-d5830e1bc7a6",
+    "report_id": "c203e39d-8fef-486b-8441-e49bcf69a771",
     "status": "closed",
     "applied_proposals": 0,
+    "replayed_proposals": 0,
     "publish_failed_proposals": 0,
-    "withdrawn_proposals": 1,
+    "withdrawn_proposals": 0,
     "rejected_kb": true,
-    "last_analyzed_commit": "934f8e61a6128395dc8e33e69ad5909421225fd8"
+    "last_analyzed_commit": "b3f9d545bcc864373ee26f66e15c323786d78518",
+    "projc_applied": 0,
+    "projc_replayed": 0,
+    "projc_publish_failed_proposals": 0,
+    "projc_withdrawn": 1,
+    "published_versions": []
   }
 }

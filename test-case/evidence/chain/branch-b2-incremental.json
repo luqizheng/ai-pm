@@ -1,25 +1,25 @@
 {
   "first": {
-    "id": "c8ccd41d-2f09-4ef1-8a04-9441360fd7b8",
+    "id": "c1ad82c2-f927-4281-bb51-7690a22d4b87",
     "status": "analyzed",
-    "commit_sha": "94d5810f4271878aa463544d2961d507ca59cbd4",
+    "commit_sha": "e260378162d7395552adbd8bd4db0d990e5419ef",
     "run_mode": "full",
     "since_commit": "",
     "error_code": "",
     "stage_detail": "",
-    "kb_revision_id": "340dadf5-efde-4d26-b45b-859fee816ca3",
+    "kb_revision_id": "eb863e2c-b109-4d70-aa76-49d9093b7ea5",
     "error_detail": ""
   },
-  "anchor": "94d5810f4271878aa463544d2961d507ca59cbd4",
+  "anchor": "e260378162d7395552adbd8bd4db0d990e5419ef",
   "second": {
-    "id": "ca7a6ef4-6f05-4dad-b4cc-52d57d7d2a3e",
+    "id": "47fa35cf-1629-457d-89f2-4fbde5310b32",
     "status": "analyzed",
-    "commit_sha": "da2f910d83b88ac081f2f97f829b184334066a54",
+    "commit_sha": "f2e593621f55fb362490eed82fe60278e164567b",
     "run_mode": "incremental",
-    "since_commit": "94d5810f4271878aa463544d2961d507ca59cbd4",
+    "since_commit": "e260378162d7395552adbd8bd4db0d990e5419ef",
     "error_code": "",
     "stage_detail": "",
-    "kb_revision_id": "0ca0b7f3-1750-4956-8033-19673d03ed16",
+    "kb_revision_id": "31df6c90-f6b3-4028-842b-79d09f81c612",
     "error_detail": ""
   }
 }

@@ -118,8 +118,8 @@ test.beforeAll(async () => {
   projectId = project.id;
 });
 
-/** B1：close 残留——未审批提案 withdrawn、KB draft rejected、零版本。 */
-test("B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本", async () => {
+/** B1：close 残留——未审批 ProjC 提案 withdrawn、KB draft rejected、零版本。 */
+test("B1 close 残留：projc_withdrawn + rejected_kb=true，不产生正式版本", async () => {
   const repo = await createLocalRepoFixture(owner, projectId, "chain-branch-b1", {
     "README.md": "# branch b1\n"
   });
@@ -129,7 +129,7 @@ test("B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本", a
   expect(analyzed.status).toBe("analyzed");
 
   const versionsBefore = Number(
-    psql(`SELECT count(*) FROM pc.cognition_version WHERE project_id = '${projectId}'`, DB)
+    psql(`SELECT count(*) FROM projc.cognition_version WHERE project_id = '${projectId}'`, DB)
   );
   const close = await api(
     "POST",
@@ -137,8 +137,10 @@ test("B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本", a
     owner.token
   );
   expect(close.status).toBe(200);
+  // pc 域零提案（管线已切 ProjC）；ProjC 域未决提案 close 时撤回。
   expect(close.body.applied_proposals).toBe(0);
-  expect(close.body.withdrawn_proposals).toBeGreaterThanOrEqual(1);
+  expect(close.body.projc_applied).toBe(0);
+  expect(close.body.projc_withdrawn).toBeGreaterThanOrEqual(1);
   expect(close.body.rejected_kb).toBe(true);
 
   expect(
@@ -150,14 +152,14 @@ test("B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本", a
   expect(
     Number(
       psql(
-        `SELECT count(*) FROM pc.proposal
+        `SELECT count(*) FROM projc.proposal
           WHERE project_id = '${projectId}' AND status = 'withdrawn'`,
         DB
       )
     )
   ).toBeGreaterThanOrEqual(1);
   const versionsAfter = Number(
-    psql(`SELECT count(*) FROM pc.cognition_version WHERE project_id = '${projectId}'`, DB)
+    psql(`SELECT count(*) FROM projc.cognition_version WHERE project_id = '${projectId}'`, DB)
   );
   expect(versionsAfter).toBe(versionsBefore);
 

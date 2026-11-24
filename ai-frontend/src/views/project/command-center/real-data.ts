@@ -134,18 +134,30 @@ function buildHealth(
   const riskHigh =
     risks?.items.filter(item => item.severity === "high").length ?? 0;
   const actionTotal = actions?.total ?? 0;
-  const unavailableHint = t("s01.command-center.health.unavailableHint");
+  // 需求进度：真人 confirm 定稿（revision approved）占比——草案/待确认不算进度。
+  const reqTotal = work?.requirement_total ?? 0;
+  const reqApproved = work?.requirement_approved ?? 0;
+  const reqPercent = reqTotal > 0 ? Math.round((reqApproved / reqTotal) * 100) : 0;
+  // 总体进度 = 需求进度与任务进度的简单均值（口径透明，不伪造）。
+  const overallPercent = Math.round((reqPercent + percent) / 2);
 
   return [
     {
       label: t("s01.command-center.health.overall"),
-      value: "—",
-      hint: unavailableHint
+      value: overallPercent,
+      suffix: "%",
+      progress: overallPercent,
+      hint: t("s01.command-center.health.overallHint")
     },
     {
       label: t("s01.command-center.health.requirements"),
-      value: "—",
-      hint: unavailableHint
+      value: reqPercent,
+      suffix: "%",
+      progress: reqPercent,
+      hint: t("s01.command-center.health.requirementsHint", {
+        done: reqApproved,
+        total: reqTotal
+      })
     },
     {
       label: t("s01.command-center.health.tasks"),

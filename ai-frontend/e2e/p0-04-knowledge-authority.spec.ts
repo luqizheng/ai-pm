@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 
 import { api } from "./team/stack";
 import { buildOwner, createProjectFor, psql, signInVia, type TestOwner } from "./p0/fixtures";
-import { asAiPrincipal, confirmDraftRevision, signTokenWith, submitKnowledgeProposal } from "./p0/helpers";
+import { asAiPrincipal, asApiKeyPrincipal, confirmDraftRevision, submitKnowledgeProposal } from "./p0/helpers";
 
 /**
  * P0-04 · Requirement 与 Knowledge 三层权威（规格 14 号，阶段 B）
@@ -175,7 +175,7 @@ test("P0-012 Rev3 诞生旧版 superseded；陈旧哈希 confirm 409 且终态�
 });
 
 /** P0-013 · 知识域 AI AutoApply 禁止：提案待确认；Git HEAD 不变 = 权威未动 */
-test("P0-013 知识提案停 redline/待确认；AI 身份与 api_key 确认全 403；Git HEAD 不动", async () => {
+test("P0-013 知识提案停 redline/待确认；AI 身份 confirm 403（人工门）；api_key 403（可信上下文）；Git HEAD 不动", async () => {
   const docKey = `kb-p0-013-${projectId.slice(0, 8)}`;
   const me = await api("GET", "/v1/pm/me", owner.token);
   const ownerId = me.body.principal_id as string;
@@ -201,6 +201,8 @@ test("P0-013 知识提案停 redline/待确认；AI 身份与 api_key 确认全 
   // 闸①：kind='ai_pm' 主体直调红线确认 → 403
   // 人工门落在 confirmed_by 的 kind（knowledge_proposal/submit.rs:298
   // `require_human(pool, confirmed_by)`）——AI 主体把自己填成确认人即被拒。
+  // asAiPrincipal 先补 team 资格（P4-ORG Team-first）再授予 project_member，
+  // 可见性闸放行 → 403 可达。
   const ai = await asAiPrincipal(owner, "p0-kb-ai", projectId);
   const aiAttempt = await api(
     "POST",
@@ -214,12 +216,13 @@ test("P0-013 知识提案停 redline/待确认；AI 身份与 api_key 确认全 
   );
   expect(aiAttempt.status).toBe(403);
 
-  // 闸②：api_key 通道 → 403（ensure_trusted_context）
-  const apiKeyToken = signTokenWith("p0-kb-key", owner.tid, { purpose: "api_key" });
+  // 闸②：api_key 通道 → 403（ensure_trusted_context：机器凭据不构成可信
+  // 交互上下文；asApiKeyPrincipal 已入编 → 可见性放行 → 可信门 403 可达）
+  const key = await asApiKeyPrincipal(owner, "p0-kb-key", projectId);
   const keyAttempt = await api(
     "POST",
     `/v1/pm/documents/proposals/${proposalId}/confirm`,
-    apiKeyToken,
+    key.token,
     { project_id: projectId, confirmed_by: ownerId, operation_id: `p0-013-key-${Date.now()}` }
   );
   expect(keyAttempt.status).toBe(403);

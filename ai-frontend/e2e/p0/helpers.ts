@@ -89,6 +89,24 @@ export function signTokenWith(
  *
  * 只对测试自建主体做注入，不触碰任何业务行。
  */
+/**
+ * P4-ORG Team-first：grant 的硬前置是目标主体的 `core.team_member` 行
+ * （provision 只写 tenant_member，不再自动入队）。测试身份注入风格下，
+ * 先给主体补 owner 所在 Team 的 'member' 行，grant 才可能成功、
+ * require_human 的 403 人工门才在 REST 全链可达。
+ */
+function seedTeamMembership(owner: TestOwner, principalId: string): void {
+  psql(
+    `INSERT INTO core.team_member (team_id, principal_id, tenant_id, role, granted_by)
+      SELECT tm.team_id, '${principalId}', tm.tenant_id, 'member', tm.principal_id
+        FROM core.team_member tm
+        JOIN core.principal_identity pi ON pi.principal_id = tm.principal_id
+       WHERE pi.subject = '${owner.sub}'
+         AND tm.role = 'owner'
+       ON CONFLICT (team_id, principal_id) DO NOTHING`
+  );
+}
+
 export async function asAiPrincipal(
   owner: TestOwner,
   sub: string,
@@ -101,6 +119,7 @@ export async function asAiPrincipal(
   if (!principalId) throw new Error(`principal not provisioned for ${sub}`);
   if (projectId) {
     // 授予方必须是项目管理者（真人 owner）——用 owner 令牌，不是 AI 主体自己的
+    seedTeamMembership(owner, principalId);
     const granted = await api("POST", `/v1/pm/projects/${projectId}/members`, owner.token, {
       principal_id: principalId
     });
@@ -119,6 +138,33 @@ export async function asAiPrincipal(
      RETURNING kind`
   );
   if (updated !== "ai_pm") throw new Error(`failed to flip principal kind: '${updated}'`);
+  return { token, principalId };
+}
+
+/**
+ * api_key 通道主体：provision → 补 team 资格 → owner 授予项目成员。
+ * **不翻转 kind**（保持 human）：可信交互门（ensure_trusted_context）按
+ * auth_mode='api_key' 拒绝——成员资格让可见性闸放行后，403 在 REST 可达。
+ */
+export async function asApiKeyPrincipal(
+  owner: TestOwner,
+  sub: string,
+  projectId?: string
+): Promise<{ token: string; principalId: string }> {
+  const token = signTokenWith(sub, owner.tid, { purpose: "api_key" });
+  const me = await api("GET", "/v1/pm/me", token);
+  const principalId = me.body.principal_id as string;
+  if (!principalId) throw new Error(`principal not provisioned for ${sub}`);
+  if (projectId) {
+    seedTeamMembership(owner, principalId);
+    const granted = await api("POST", `/v1/pm/projects/${projectId}/members`, owner.token, {
+      principal_id: principalId
+    });
+    if (![200, 201, 409].includes(granted.status))
+      throw new Error(
+        `grant project membership failed: ${granted.status} ${JSON.stringify(granted.body)}`
+      );
+  }
   return { token, principalId };
 }
 

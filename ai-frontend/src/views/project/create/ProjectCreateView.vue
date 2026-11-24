@@ -291,6 +291,7 @@ async function submit() {
 
 .pc-page__columns {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-6);
   align-items: flex-start;
 }
@@ -418,9 +419,12 @@ async function submit() {
   line-height: var(--line-height-caption);
 }
 
-/* 壳三栏（侧栏 232 + 上下文栏 320）+ 页内双栏（表单 760 + rail 300）需 ~1700 视口，
- * ≤1240 先收 rail 保表单宽度——本页专属断点，早于全站 1100 档 */
-@media (max-width: 1240px) {
+/* 壳三栏（侧栏 232 + 上下文栏 320）+ 页内双栏（表单 760 + rail 300）需 ~1700 视口。
+ * DEF-ALPHA-01（2026-11-24 实测）：旧断点 1240 没算壳双栏，1280 视口下 rail 挤爆
+ * flex，表单被 min-width:0 压成零宽竖排、视觉上被 rail 覆盖。修法两层：
+ * ①columns 允许 wrap——宽度不足时 rail 换行到表单下方，任何视口不重叠；
+ * ②断点上调到 1700——壳双栏在场时直接收掉 rail，保证表单优先拿满行宽。 */
+@media (max-width: 1700px) {
   .pc-page__rail {
     display: none;
   }

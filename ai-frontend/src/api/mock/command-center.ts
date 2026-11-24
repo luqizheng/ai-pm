@@ -112,6 +112,8 @@ export const commandCenter: CommandCenter = {
       data: {
         task_total: 0,
         task_by_status: {},
+        requirement_total: 0,
+        requirement_approved: 0,
         active_run_count: 0,
         active_runs: [],
         recent_runs: [],

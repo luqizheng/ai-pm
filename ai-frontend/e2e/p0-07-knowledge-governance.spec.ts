@@ -315,13 +315,15 @@ test("P0-051 发现管道无实现 → NOT_IMPLEMENTED（不计 PASS）", async 
 });
 
 /** P0-052 · 澄清与采纳闭环 → NOT_IMPLEMENTED（R55）；澄清语义经 interactions 预演 */
-test("P0-052 采纳闭环管道无实现 → NOT_IMPLEMENTED；澄清语义锚点可观测", async () => {
+test("P0-052 采纳闭环管道已实现 → 表面可观测；澄清语义锚点可观测", async () => {
   const table = psql(
     `SELECT count(*) FROM information_schema.tables
       WHERE table_schema IN ('kb','integration','ai')
         AND (table_name ILIKE '%adoption%' OR table_name ILIKE '%clarification%')`
   );
-  expect(Number(table)).toBe(0);
+  // R55 已清偿（0058_external_commit_adoption，PA-P0 外部 Commit 采纳闭环）：
+  // integration.external_commit + integration.external_commit_clarification
+  expect(Number(table)).toBeGreaterThanOrEqual(1);
   // 澄清语义真实载体：`delivery.task_interaction`（链式续接语义在列上：
   // event_id 事件锚、previous_chain_id 链、continuation_generation 世代、
   // chain_open 链开合）——锚点可观测即预演成立
@@ -333,7 +335,7 @@ test("P0-052 采纳闭环管道无实现 → NOT_IMPLEMENTED；澄清语义锚�
     expect(interactionCols).toContain(col);
   }
   test.info().annotations.push({
-    type: "NOT_IMPLEMENTED",
-    description: "「发现→分析→澄清→免澄清记录→采纳」专用管道未实现（R55）；提案确认面可预演（见 049a/054）。"
+    type: "IMPLEMENTED",
+    description: "「发现→分析→澄清→采纳→关闭」管道已落地（0058；integration.external_commit / external_commit_clarification）；澄清语义锚点 delivery.task_interaction 保留可观测。"
   });
 });

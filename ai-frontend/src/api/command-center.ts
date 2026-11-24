@@ -126,6 +126,9 @@ export interface DeliverySummary {
 export interface WorkSummary {
   task_total: number;
   task_by_status: Record<string, number>;
+  /** active 需求总数 / 其中当前修订已 approved（真人定稿）数 */
+  requirement_total: number;
+  requirement_approved: number;
   active_run_count: number;
   active_runs: ActiveRun[];
   recent_runs: RunBrief[];

@@ -1,18 +1,18 @@
 {
   "config": {
     "argv": [
-      "C:\\nvm4w\\nodejs\\node.exe",
-      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "C:\\Users\\Administrator\\AppData\\Local\\Author Software\\nvm\\installs\\v24.16.0\\node.exe",
+      "C:\\projects\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "-c",
       "playwright.p0.config.ts"
     ],
-    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.p0.config.ts",
-    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "configFile": "C:\\projects\\ai-pm\\ai-frontend\\playwright.p0.config.ts",
+    "rootDir": "C:/projects/ai-pm/ai-frontend/e2e",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
-    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
+    "globalSetup": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
     "globalTeardown": null,
     "globalTimeout": 0,
     "grep": {},
@@ -24,7 +24,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/p0/playwright-artifacts",
+        "outputDir": "C:/projects/ai-pm/test-case/evidence/p0/playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -32,7 +32,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testDir": "C:/projects/ai-pm/ai-frontend/e2e",
         "testIgnore": [],
         "testMatch": [
           "p0-*.spec.ts"
@@ -44,15 +44,15 @@
       {
         "grep": {},
         "grepInvert": null,
-        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\p0\\playwright-artifacts",
+        "outputDir": "C:\\projects\\ai-pm\\test-case\\evidence\\p0\\playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
         "name": "",
-        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
-        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
         "testIgnore": [],
         "testMatch": "p0-*.spec.ts",
         "timeout": 90000,
@@ -134,7 +134,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -148,17 +148,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4662,
+                  "duration": 4933,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:11:51.974Z",
+                  "startTime": "2026-11-23T23:14:33.377Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -186,7 +186,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -200,17 +200,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5507,
+                  "duration": 4857,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:11:56.984Z",
+                  "startTime": "2026-11-23T23:14:38.710Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -238,7 +238,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -252,17 +252,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2829,
+                  "duration": 2277,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:02.502Z",
+                  "startTime": "2026-11-23T23:14:43.586Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -288,7 +288,7 @@
       "line": 0,
       "specs": [
         {
-          "title": "P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 5 人编制",
+          "title": "P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 编制拆两面（P4-ORG D-2）",
           "ok": true,
           "tags": [],
           "tests": [
@@ -298,7 +298,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -312,17 +312,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2260,
+                  "duration": 1970,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:05.368Z",
+                  "startTime": "2026-11-23T23:14:45.887Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -334,7 +334,7 @@
               "status": "expected"
             }
           ],
-          "id": "0c785c6480c7baa85b53-cadb09f5735d683278dd",
+          "id": "0c785c6480c7baa85b53-b94ad7cc4f1c51296aab",
           "file": "p0-02-team-project.spec.ts",
           "line": 38,
           "column": 1
@@ -350,7 +350,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -364,17 +364,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2823,
+                  "duration": 1782,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:07.640Z",
+                  "startTime": "2026-11-23T23:14:47.864Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -388,11 +388,11 @@
           ],
           "id": "0c785c6480c7baa85b53-a3197b855ae0c73f6323",
           "file": "p0-02-team-project.spec.ts",
-          "line": 92,
+          "line": 99,
           "column": 1
         },
         {
-          "title": "P0-006 初始化 7 事项 7 态派生一致；project_basics 恒 completed；刷新不丢",
+          "title": "P0-006 初始化 8 事项 7 态派生一致；project_basics 恒 completed；刷新不丢",
           "ok": true,
           "tags": [],
           "tests": [
@@ -402,7 +402,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -416,17 +416,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4146,
+                  "duration": 2384,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:10.475Z",
+                  "startTime": "2026-11-23T23:14:49.652Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -438,9 +438,9 @@
               "status": "expected"
             }
           ],
-          "id": "0c785c6480c7baa85b53-7704fad3b4063115570d",
+          "id": "0c785c6480c7baa85b53-d612e51b2983e02f6939",
           "file": "p0-02-team-project.spec.ts",
-          "line": 138,
+          "line": 145,
           "column": 1
         },
         {
@@ -454,7 +454,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -468,17 +468,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1036,
+                  "duration": 641,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:14.635Z",
+                  "startTime": "2026-11-23T23:14:52.042Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -492,7 +492,7 @@
           ],
           "id": "0c785c6480c7baa85b53-9eda1260315f83b9becf",
           "file": "p0-02-team-project.spec.ts",
-          "line": 206,
+          "line": 214,
           "column": 1
         }
       ]
@@ -514,7 +514,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -528,17 +528,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4735,
+                  "duration": 3139,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:15.701Z",
+                  "startTime": "2026-11-23T23:14:52.698Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -566,7 +566,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -580,17 +580,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2349,
+                  "duration": 2232,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:20.523Z",
+                  "startTime": "2026-11-23T23:14:55.873Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -618,7 +618,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -632,17 +632,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 929,
+                  "duration": 726,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:22.884Z",
+                  "startTime": "2026-11-23T23:14:58.110Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -660,7 +660,7 @@
           "column": 1
         },
         {
-          "title": "P0-010 提案停待确认；AI 身份/api_key 直调 confirm 403；人工确认 superseded 旧版",
+          "title": "P0-010 提案停待确认；AI 身份 confirm 403（人工门）；api_key 403（可信上下文）；人工确认 superseded 旧版",
           "ok": true,
           "tags": [],
           "tests": [
@@ -670,7 +670,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -684,17 +684,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1605,
+                  "duration": 1891,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:23.819Z",
+                  "startTime": "2026-11-23T23:14:58.841Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-03-ai-pm.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -706,7 +706,7 @@
               "status": "expected"
             }
           ],
-          "id": "23468976c4f3825eff4a-8a306ef7f4f43994b9d8",
+          "id": "23468976c4f3825eff4a-6d9570ebd9ea0b91fcd4",
           "file": "p0-03-ai-pm.spec.ts",
           "line": 175,
           "column": 1
@@ -730,7 +730,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -744,17 +744,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3377,
+                  "duration": 2447,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:25.437Z",
+                  "startTime": "2026-11-23T23:15:00.753Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -782,7 +782,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -796,17 +796,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1598,
+                  "duration": 1366,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:28.951Z",
+                  "startTime": "2026-11-23T23:15:03.504Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -824,7 +824,7 @@
           "column": 1
         },
         {
-          "title": "P0-013 知识提案停 redline/待确认；AI 身份与 api_key 确认全 403；Git HEAD 不动",
+          "title": "P0-013 知识提案停 redline/待确认；AI 身份 confirm 403（人工门）；api_key 403（可信上下文）；Git HEAD 不动",
           "ok": true,
           "tags": [],
           "tests": [
@@ -834,7 +834,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -848,17 +848,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1096,
+                  "duration": 1420,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:30.557Z",
+                  "startTime": "2026-11-23T23:15:04.877Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -870,7 +870,7 @@
               "status": "expected"
             }
           ],
-          "id": "509006ce3944a19ca09e-85d495b0e79f6d9080ae",
+          "id": "509006ce3944a19ca09e-648237a364d2685b3d0e",
           "file": "p0-04-knowledge-authority.spec.ts",
           "line": 178,
           "column": 1
@@ -886,7 +886,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -900,17 +900,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2458,
+                  "duration": 1826,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:31.661Z",
+                  "startTime": "2026-11-23T23:15:06.303Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-04-knowledge-authority.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -924,7 +924,7 @@
           ],
           "id": "509006ce3944a19ca09e-805d4f1ea6daac1213b1",
           "file": "p0-04-knowledge-authority.spec.ts",
-          "line": 257,
+          "line": 260,
           "column": 1
         }
       ]
@@ -946,7 +946,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -960,7 +960,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 890,
+                  "duration": 653,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -972,12 +972,12 @@
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:34.135Z",
+                  "startTime": "2026-11-23T23:15:08.149Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1005,7 +1005,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1019,17 +1019,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4451,
+                  "duration": 4237,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:35.660Z",
+                  "startTime": "2026-11-23T23:15:09.441Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1057,7 +1057,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1071,17 +1071,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4257,
+                  "duration": 3894,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:40.121Z",
+                  "startTime": "2026-11-23T23:15:13.684Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1109,7 +1109,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1123,17 +1123,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 378,
+                  "duration": 261,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:44.389Z",
+                  "startTime": "2026-11-23T23:15:17.585Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1161,7 +1161,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1175,21 +1175,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 15365,
+                  "duration": 3830,
                   "errors": [],
                   "stdout": [],
-                  "stderr": [
-                    {
-                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\n"
-                    }
-                  ],
+                  "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:12:44.779Z",
+                  "startTime": "2026-11-23T23:15:17.853Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1217,7 +1213,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1231,17 +1227,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 342,
+                  "duration": 316,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:00.157Z",
+                  "startTime": "2026-11-23T23:15:21.689Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1269,7 +1265,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1283,7 +1279,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 6810,
+                  "duration": 5562,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -1292,18 +1288,15 @@
                     },
                     {
                       "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'docs/spec.md', LF will be replaced by CRLF the next time Git touches it\n"
-                    },
-                    {
-                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\n"
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:00.506Z",
+                  "startTime": "2026-11-23T23:15:22.011Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1331,7 +1324,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1345,21 +1338,21 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2363,
+                  "duration": 2476,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
                     {
-                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nsubmit_run_result: delivery error: lease_invalid: lease credential rejected\n"
+                      "text": "submit_run_result: delivery error: lease_invalid: lease credential rejected\n"
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:07.324Z",
+                  "startTime": "2026-11-23T23:15:27.580Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-05-task-delivery.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1395,7 +1388,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1413,17 +1406,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 73,
+                  "duration": 44,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:09.713Z",
+                  "startTime": "2026-11-23T23:15:30.089Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1455,7 +1448,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1469,17 +1462,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 14138,
+                  "duration": 13325,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:09.887Z",
+                  "startTime": "2026-11-23T23:15:30.270Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1507,7 +1500,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1521,17 +1514,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 21,
+                  "duration": 10,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:24.031Z",
+                  "startTime": "2026-11-23T23:15:43.601Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1559,7 +1552,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1573,17 +1566,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 341,
+                  "duration": 261,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:24.059Z",
+                  "startTime": "2026-11-23T23:15:43.615Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1611,7 +1604,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1625,17 +1618,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 25,
+                  "duration": 15,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:24.410Z",
+                  "startTime": "2026-11-23T23:15:43.883Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1663,7 +1656,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1677,7 +1670,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 9211,
+                  "duration": 7644,
                   "errors": [],
                   "stdout": [],
                   "stderr": [
@@ -1686,18 +1679,15 @@
                     },
                     {
                       "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/lib.rs', LF will be replaced by CRLF the next time Git touches it\n"
-                    },
-                    {
-                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\n"
                     }
                   ],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:24.445Z",
+                  "startTime": "2026-11-23T23:15:43.902Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1725,7 +1715,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1743,17 +1733,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 16,
+                  "duration": 10,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:33.664Z",
+                  "startTime": "2026-11-23T23:15:51.554Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1785,7 +1775,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1803,17 +1793,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 184,
+                  "duration": 123,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:33.694Z",
+                  "startTime": "2026-11-23T23:15:51.567Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1845,7 +1835,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1859,17 +1849,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 712,
+                  "duration": 446,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:33.885Z",
+                  "startTime": "2026-11-23T23:15:51.694Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1897,7 +1887,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1911,17 +1901,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 348,
+                  "duration": 277,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:34.604Z",
+                  "startTime": "2026-11-23T23:15:52.146Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-06-mcp.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -1957,7 +1947,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -1971,17 +1961,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3139,
+                  "duration": 2755,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:34.971Z",
+                  "startTime": "2026-11-23T23:15:52.448Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2009,7 +1999,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2023,17 +2013,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 512,
+                  "duration": 354,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:38.532Z",
+                  "startTime": "2026-11-23T23:15:55.518Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2061,7 +2051,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2075,17 +2065,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2022,
+                  "duration": 1401,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:39.053Z",
+                  "startTime": "2026-11-23T23:15:55.876Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2113,7 +2103,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2127,17 +2117,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 559,
+                  "duration": 314,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:41.084Z",
+                  "startTime": "2026-11-23T23:15:57.282Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2165,7 +2155,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2179,17 +2169,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 178,
+                  "duration": 116,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:41.654Z",
+                  "startTime": "2026-11-23T23:15:57.601Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2217,7 +2207,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2231,17 +2221,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 587,
+                  "duration": 414,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:41.841Z",
+                  "startTime": "2026-11-23T23:15:57.721Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2269,7 +2259,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -2287,17 +2277,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 183,
+                  "duration": 119,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:42.435Z",
+                  "startTime": "2026-11-23T23:15:58.139Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -2319,7 +2309,7 @@
           "column": 1
         },
         {
-          "title": "P0-052 采纳闭环管道无实现 → NOT_IMPLEMENTED；澄清语义锚点可观测",
+          "title": "P0-052 采纳闭环管道已实现 → 表面可观测；澄清语义锚点可观测",
           "ok": true,
           "tags": [],
           "tests": [
@@ -2329,14 +2319,14 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                     "line": 0,
                     "column": 0
                   }
                 },
                 {
-                  "type": "NOT_IMPLEMENTED",
-                  "description": "「发现→分析→澄清→免澄清记录→采纳」专用管道未实现（R55）；提案确认面可预演（见 049a/054）。"
+                  "type": "IMPLEMENTED",
+                  "description": "「发现→分析→澄清→采纳→关闭」管道已落地（0058；integration.external_commit / external_commit_clarification）；澄清语义锚点 delivery.task_interaction 保留可观测。"
                 }
               ],
               "expectedStatus": "passed",
@@ -2347,24 +2337,24 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 418,
+                  "duration": 227,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T09:13:42.624Z",
+                  "startTime": "2026-11-23T23:15:58.262Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\p0-07-knowledge-governance.spec.ts",
                         "line": 0,
                         "column": 0
                       }
                     },
                     {
-                      "type": "NOT_IMPLEMENTED",
-                      "description": "「发现→分析→澄清→免澄清记录→采纳」专用管道未实现（R55）；提案确认面可预演（见 049a/054）。"
+                      "type": "IMPLEMENTED",
+                      "description": "「发现→分析→澄清→采纳→关闭」管道已落地（0058；integration.external_commit / external_commit_clarification）；澄清语义锚点 delivery.task_interaction 保留可观测。"
                     }
                   ],
                   "attachments": []
@@ -2373,7 +2363,7 @@
               "status": "expected"
             }
           ],
-          "id": "fa828d45ffb7d0bd6edd-dedc7506a386358d468c",
+          "id": "fa828d45ffb7d0bd6edd-58601975ae33fe896cf4",
           "file": "p0-07-knowledge-governance.spec.ts",
           "line": 318,
           "column": 1
@@ -2383,8 +2373,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-11-15T09:11:41.181Z",
-    "duration": 124290.23,
+    "startTime": "2026-11-23T23:14:16.926Z",
+    "duration": 103216.216,
     "expected": 41,
     "skipped": 0,
     "unexpected": 0,

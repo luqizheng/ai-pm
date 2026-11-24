@@ -73,7 +73,7 @@ test.beforeAll(async ({ browser }) => {
 });
 
 /** TC-P1-01-01 · 部分初始化状态正确显示（零依赖新项目的派生快照） */
-test("TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_started", async () => {
+test("TC-01 部分初始化：8 个固定 key，basics=completed 其余 not_started", async () => {
   const items = await readItems(projectA.id);
   const byKey = Object.fromEntries(items.map(i => [i.key, i]));
 
@@ -84,6 +84,7 @@ test("TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_star
       "repository_access",
       "code_analysis",
       "project_cognition",
+      "baseline",
       "dev_environment",
       "human_actions"
     ].sort()
@@ -92,7 +93,7 @@ test("TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_star
   expect(byKey.project_basics.source_state).toBe("planning");
   // 代码分析以零仓库为不适用（G-01 矩阵：repository_access 零仓库合法
   // = not_started，code_analysis 无作业对象 = not_applicable，纯函数
-  // init_judgement 为权威）；其余五项 not_started。
+  // init_judgement 为权威）；其余六项按下方断言。
   expect(byKey.code_analysis.status, "code_analysis").toBe("not_applicable");
   // 人工处理以「待人工事项数」为信号：0 = 无待办 = completed（G-01 纯函数权威）。
   expect(byKey.human_actions.status, "human_actions").toBe("completed");
@@ -100,6 +101,7 @@ test("TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_star
     "project_goal",
     "repository_access",
     "project_cognition",
+    "baseline",
     "dev_environment"
   ]) {
     expect(byKey[key].status, key).toBe("not_started");
@@ -200,6 +202,8 @@ test("TC-06 fresh context 快照 = 领域表重算（纯派生，无缓存参与
     repository_access: "not_started",
     code_analysis: "not_applicable",
     project_cognition: "not_started",
+    // PA-07 基线事项：零提案 → not_started（init_judgement::baseline_status）
+    baseline: "not_started",
     dev_environment: "not_started",
     human_actions: "completed"
   };

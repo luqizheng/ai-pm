@@ -90,7 +90,6 @@ command-center:
   knowledgeTitle: Knowledge Snapshot
   knowledgeMeta: Read-only summary
   knowledgeAction: Open Knowledge
-  knowledgeFootnote: Last synced today 08:20, covering the payment and order domains.
   membersTitle: Members
   membersMeta: "{humans} humans · {agents} agents"
   selectProject: Select a project in the top bar first
@@ -104,7 +103,8 @@ command-center:
     tasksHint: "{done} of {total} tasks completed"
     risksHint: Blocked tasks and unmet dependencies combined
     actionsHint: Changes and trade-offs that need human confirmation
-    unavailableHint: This metric is not provided by the current API
+    overallHint: Average of requirement and task progress
+    requirementsHint: "{done} of {total} requirements confirmed"
     chipBlocked: "{count} blocked"
     chipNeedsHandle: Needs handling
   tasks:

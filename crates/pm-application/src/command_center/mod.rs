@@ -354,6 +354,9 @@ pub struct InitItem {
 pub struct WorkSummary {
     pub task_total: i64,
     pub task_by_status: BTreeMap<String, i64>,
+    /// 需求进度（§4.3）：active 需求总数与其中当前修订已 approved（真人定稿）数。
+    pub requirement_total: i64,
+    pub requirement_approved: i64,
     pub active_run_count: i64,
     pub active_runs: Vec<ActiveRun>,
     pub recent_runs: Vec<RunBrief>,

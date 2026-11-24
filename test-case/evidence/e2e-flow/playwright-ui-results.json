@@ -1,18 +1,18 @@
 {
   "config": {
     "argv": [
-      "C:\\nvm4w\\nodejs\\node.exe",
-      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "C:\\Users\\Administrator\\AppData\\Local\\Author Software\\nvm\\installs\\v24.16.0\\node.exe",
+      "C:\\projects\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "-c",
       "playwright.flow.config.ts"
     ],
-    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.flow.config.ts",
-    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "configFile": "C:\\projects\\ai-pm\\ai-frontend\\playwright.flow.config.ts",
+    "rootDir": "C:/projects/ai-pm/ai-frontend/e2e",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
-    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow\\global-setup.ts",
+    "globalSetup": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow\\global-setup.ts",
     "globalTeardown": null,
     "globalTimeout": 0,
     "grep": {},
@@ -24,7 +24,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/e2e-flow/playwright-ui-artifacts",
+        "outputDir": "C:/projects/ai-pm/test-case/evidence/e2e-flow/playwright-ui-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -32,7 +32,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testDir": "C:/projects/ai-pm/ai-frontend/e2e",
         "testIgnore": [],
         "testMatch": [
           "flow.spec.ts"
@@ -44,15 +44,15 @@
       {
         "grep": {},
         "grepInvert": null,
-        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\e2e-flow\\playwright-ui-artifacts",
+        "outputDir": "C:\\projects\\ai-pm\\test-case\\evidence\\e2e-flow\\playwright-ui-artifacts",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
           "actualWorkers": 1
         },
         "name": "",
-        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
-        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "C:\\projects\\ai-pm\\ai-frontend\\e2e",
         "testIgnore": [],
         "testMatch": "flow.spec.ts",
         "timeout": 90000,
@@ -134,7 +134,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -148,17 +148,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 6129,
+                  "duration": 4942,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:29.553Z",
+                  "startTime": "2026-11-23T23:17:37.555Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -186,7 +186,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -200,17 +200,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2423,
+                  "duration": 1449,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:36.062Z",
+                  "startTime": "2026-11-23T23:17:42.838Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -228,7 +228,7 @@
           "column": 1
         },
         {
-          "title": "UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；5 人编制",
+          "title": "UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；编制拆两面",
           "ok": true,
           "tags": [],
           "tests": [
@@ -238,7 +238,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -252,17 +252,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4213,
+                  "duration": 2481,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:38.500Z",
+                  "startTime": "2026-11-23T23:17:44.293Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -274,7 +274,7 @@
               "status": "expected"
             }
           ],
-          "id": "f353db48c569834dc22b-b3cb60291cc1a7eb37e7",
+          "id": "f353db48c569834dc22b-aca2b28774389178acbf",
           "file": "flow.spec.ts",
           "line": 120,
           "column": 1
@@ -290,7 +290,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -304,17 +304,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2457,
+                  "duration": 1456,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:42.731Z",
+                  "startTime": "2026-11-23T23:17:46.780Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -328,7 +328,7 @@
           ],
           "id": "f353db48c569834dc22b-a554d4a3be5d5633a46c",
           "file": "flow.spec.ts",
-          "line": 153,
+          "line": 160,
           "column": 1
         },
         {
@@ -342,7 +342,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -356,17 +356,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3732,
+                  "duration": 2036,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:45.204Z",
+                  "startTime": "2026-11-23T23:17:48.243Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -380,7 +380,7 @@
           ],
           "id": "f353db48c569834dc22b-7dc746daffd9a64dcdc3",
           "file": "flow.spec.ts",
-          "line": 179,
+          "line": 186,
           "column": 1
         },
         {
@@ -394,7 +394,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -408,21 +408,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 8807,
+                  "duration": 5867,
                   "errors": [],
                   "stdout": [],
-                  "stderr": [
-                    {
-                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\n"
-                    }
-                  ],
+                  "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:48.951Z",
+                  "startTime": "2026-11-23T23:17:50.285Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -436,7 +432,7 @@
           ],
           "id": "f353db48c569834dc22b-d471993e5b63258a29e0",
           "file": "flow.spec.ts",
-          "line": 209,
+          "line": 216,
           "column": 1
         },
         {
@@ -450,7 +446,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -464,17 +460,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2366,
+                  "duration": 1324,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:11:57.773Z",
+                  "startTime": "2026-11-23T23:17:56.160Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -488,7 +484,7 @@
           ],
           "id": "f353db48c569834dc22b-196a5f437328ce23707f",
           "file": "flow.spec.ts",
-          "line": 253,
+          "line": 260,
           "column": 1
         },
         {
@@ -502,7 +498,7 @@
                 {
                   "type": "serial",
                   "location": {
-                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                     "line": 0,
                     "column": 0
                   }
@@ -516,17 +512,17 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2384,
+                  "duration": 1316,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-15T10:12:00.154Z",
+                  "startTime": "2026-11-23T23:17:57.491Z",
                   "annotations": [
                     {
                       "type": "serial",
                       "location": {
-                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "file": "C:\\projects\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
                         "line": 0,
                         "column": 0
                       }
@@ -540,7 +536,7 @@
           ],
           "id": "f353db48c569834dc22b-44c9b6d8750af902e327",
           "file": "flow.spec.ts",
-          "line": 264,
+          "line": 271,
           "column": 1
         }
       ]
@@ -548,8 +544,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-11-15T10:11:25.228Z",
-    "duration": 39235.381,
+    "startTime": "2026-11-23T23:17:28.635Z",
+    "duration": 31626.607,
     "expected": 8,
     "skipped": 0,
     "unexpected": 0,
