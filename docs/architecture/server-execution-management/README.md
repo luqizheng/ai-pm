@@ -61,6 +61,7 @@ flowchart LR
 | D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
 | D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |
 | D9 | Platform–SEM 服务边界 | 版本化 HTTPS API + Platform Transactional Outbox；双方数据库独立；Platform 保持 Run/Lease/Generation 权威；SEM 不直连 Platform DB；Runner–SEM 使用 WSS | `protocol-contracts.md`、`deployment-topology.md` |
+| D10 | SEM 统一派发与接管 Runner | SEM 是 Runner 控制面的唯一调度/派发/接管协调者；Runner 不再轮询 Platform MCP Claim；SEM 代表目标 Runner 请求 Platform 原子 Claim；Harness 业务 MCP 保留 | `protocol-contracts.md` §2–6、`runner-supervision-and-handoff.md` §5、`decision-record.md` ADR-SEM-20 |
 
 ## 用户确认的 V1 产品决策
 
@@ -124,6 +125,12 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | migration-roadmap.md | Phase 0–5 实施路线图 |
 | consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
 | code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
+
+## ADR-SEM-20：SEM 统一负责 Runner 任务派发与接管
+
+用户于 2026-11-24 确认：SEM 是 Runner 任务派发与接管的唯一协调入口。Runner 不再主动轮询 Platform MCP 领取任务。SEM 选择/确认目标 Runner 后，通过 Platform 服务 API 请求 Claim；Platform 仍在自身数据库事务中校验设备身份、项目绑定、资格、Scheduling Shield、并发互斥并签发 Lease/Generation。SEM 只有在成功 Claim 后才可通过 WSS 派发执行授权。Harness 继续通过 Platform MCP 使用业务工具。
+
+控制通道唯一归属：Claim、Runner 监督心跳、Lease Renewal、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Agent Activity 不续租；Lease Renewal 只由 Runner Supervisor 经 WSS 发起、SEM 转 Platform API。Runner 不得绕过 SEM 直接 Claim 或轮询命令。
 
 ## 原始交付索引
 
