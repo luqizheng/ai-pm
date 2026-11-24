@@ -484,7 +484,8 @@ pub async fn reconcile_orphans(
 ) -> Result<usize, RunDispatchError> {
     // P3（I1，B-1 默认并入）：超窗残留进程告警——running 且租约过期超过 1 小时
     // 仍非终态的 Run，落 `run.orphan_suspected` 审计（1 小时去重）+ warn 日志。
-    // 清理仍走既有 claim 路径的 isolate_started_run / 兜底回收；此处只补「可见性」。
+    // B06-D3：确认即回收——首次检出的孤儿（租约过期 >1h 且从未被回收）直接
+    // 执行回收（Run=timed_out + 任务回 Ready），不再停留于「只告警」。
     let orphans: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT r.id, r.project_id \
            FROM delivery.task_run r \
@@ -492,8 +493,7 @@ pub async fn reconcile_orphans(
             AND r.lease_expires_at < now() - interval '1 hour' \
             AND NOT EXISTS ( \
                  SELECT 1 FROM governance.audit_log a \
-                  WHERE a.action = 'run.orphan_suspected' AND a.target_id = r.id \
-                    AND a.created_at > now() - interval '1 hour')",
+                  WHERE a.action = 'run.orphan_reclaimed' AND a.target_id = r.id)",
     )
     .fetch_all(pool)
     .await?;
