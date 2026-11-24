@@ -52,3 +52,13 @@ Fault injection must prove every ambiguous failure results in no automatic secon
 - Outbound evidence/ACKs are persisted in SEM `platform_delivery` and retried with the same idempotency key.
 - Device revocation events close active WSS sessions; periodic authorization revalidation bounds missed-event exposure. If Platform cannot revalidate before the configured freshness deadline, stop dispatch and close the connection.
 - SEM DB loss or WSS disconnection does not prove process death. Uncertain active Runs remain shielded and enter E4/E5/HIR handling.
+
+## 8. Corrective review recovery rules（Review Pending）
+
+- **Runner natural exit**：Runner 先写本地 process evidence spool，再上报 WSS；SEM 幂等持久化后转 Platform。不能只记录日志并丢弃 active。
+- **Lease-loss local kill**：Runner 可在 Lease 已失效时上报旧 Generation 的进程退出事实；该接口只接收证据，不授予 Run 写权限。命令轮询被屏蔽时，证据 spool 仍可在 reconnect 后送达。
+- **Runner restart**：同设备 reconnect sync → boot/process identity reconcile → current Lease/Generation check → Active reattach / E3 terminalization / E5 quarantine。仅 start_wait continuation 恢复不足以覆盖执行中途失联。
+- **Workspace/PID/logs loss**：若 Run 曾 stage=started，缺失执行资产只说明证据丢失，必须 E5；不得将 `Done{Lost}` 当作终止证明。
+- **E4/E5 human path**：Phase 0 HIR 必须可见、可通知、可处置；Phase 4 只增加跨 Runner 高级 handoff。没有 HIR 操作落点不能进入下一 Phase。
+- **E6 risk acceptance**：有权限操作者可授权一个绑定 successor，但旧 Barrier 保持 risk_accepted_unconfirmed；后续只有 E1/E2/E3 才能释放旧 Barrier。
+- **Interaction**：terminate/continue 必须路由到 Run 实际执行位置的唯一 adapter（Runner WSS 或 SEM-local CodexExecutor）；Continue 注入回复和进程退出证据是不同事件。
