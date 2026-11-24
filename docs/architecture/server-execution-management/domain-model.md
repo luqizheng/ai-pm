@@ -74,3 +74,21 @@ The shield is a durable scheduling invariant, not an audit-only event or lease e
 ## 7. Runner resource capacity (ADR-SEM-26 — approved)
 
 Runner reports CPU, memory, and the actual Workspace volume's free space to SEM. SEM owns the latest resource snapshot and per-Run+Generation admission reservations; Platform remains authoritative for Claim, Lease, Generation, and business Run state. Candidate tasks carry a conservative resource profile (CPU units, peak memory budget, Workspace growth budget, profile class). SEM atomically reserves capacity before requesting Platform Claim, retains reservations through ambiguous Claim outcomes and active execution, and releases only after safe terminal/termination handling. Unknown or stale metrics block new work but never imply that active processes have exited. Resource pressure does not automatically kill or migrate running tasks in V1.
+
+
+## 8. Interaction / HIR / Continuation / Cleanup 分域（Review Pending）
+
+- Interaction 表达 Agent 向人提问及响应链；其 scheduling_shield 四值保持原样。
+- Continuation 表达 checkpoint + response 投递、执行端注入和新 Session 启动；consumed 不证明旧进程退出。
+- HIR 表达执行异常、失联、风险处置和 handoff；Phase 0 最小可操作，Phase 4 扩展高级流程。
+- Cleanup Need 表达 Workspace/进程清理失败；仅在伴随执行不确定性时关联 HIR/Barrier。
+- Execution Barrier 表达 Run+Generation 的物理执行不确定性；Detached 是生命周期投影，不是 shield 枚举值。
+- Notification 必须有明确 recipient 与 delivery 状态；Interaction/HIR 事务各自 Outbox 触发通知。
+
+## 9. E6 Human Risk Acceptance
+
+E6 是授权事实，不是进程终止事实。它允许一个被精确绑定的 successor Attempt 在明确披露旧进程仍可能运行的残余风险后启动；旧 Barrier 保持 `risk_accepted_unconfirmed`，不能标记 released。只有 E1/E2/E3 才能证明进程终止并释放 Barrier。自动重派仍严格要求 E1/E2/E3。
+
+## 10. Dispatchability
+
+Platform 统一 dispatchability predicate 必须检查 Interaction shield 与 Execution Barrier，并覆盖 queued claim、B3-1/B3-2、B06-D3、retry/requeue、orphan reconciliation、handoff 和 E6 successor。候选 SQL 过滤不能代替事务锁内重验。
