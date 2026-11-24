@@ -175,6 +175,8 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 ### ADR-SEM-26：Runner 资源感知与同机并发准入
 
+统一设计规范：[`resource-aware-runner-scheduling.md`](./resource-aware-runner-scheduling.md)。
+
 Runner Supervisor 通过 WSS 上报 CPU、内存和 Workspace 所在磁盘卷容量；SEM 结合任务资源画像与原子资源预留决定同一台 PC 是否可并发承载多个任务。资源报告过期/未知时停止新派发，不终止现有任务，也不作为进程退出证据。详细规范见 `sem-02d-closure-design-proposal.md` §15 和 `protocol-contracts.md`。
 
 ## SEM-02D 最终架构审查结论
