@@ -182,3 +182,13 @@ Runner Supervisor 通过 WSS 上报 CPU、内存和 Workspace 所在磁盘卷容
 ## SEM-02D 最终架构审查结论
 
 最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。原始审查识别 12 项实施前设计阻断项；后续新增 D-13 资源感知调度提案，当前有 12 项待关闭设计事项（D-01–D-12）；D-13 已由 ADR-SEM-26 冻结，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
+
+
+## SEM-02D 批量设计评审状态（2026-11-25）
+
+- 完整评审入口：[`sem-02d-review-package.md`](./sem-02d-review-package.md)。
+- D-01–D-12 的候选设计已一次性补齐，统一为 **Review Pending**，等待项目负责人集中评审；提交文档不等于批准 ADR。
+- D-13 已由用户确认并冻结为 ADR-SEM-26，不列入待批准清单。
+- 专题细节仍以 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md) 及其引用的协议、安全、状态机、数据库、执行安全和验收文档为准。
+- D-12 的凭据边界设计已完成；当前 Harness 启动链路的逐项凭据注入/继承/泄漏面盘点是 Phase 0 前的强制只读门槛。
+- 当前状态：**Design In Progress / Review Pending；Phase 0 Not Started**。未修改业务代码、Migration、Dockerfile、Compose、API 或 Runner/Worker 实现。
