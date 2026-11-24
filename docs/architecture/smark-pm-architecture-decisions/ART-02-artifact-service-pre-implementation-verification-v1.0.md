@@ -754,7 +754,7 @@ ART-02E 在 2026-11-24 对本机 full-dev 环境执行只读核验，确认该�
 4. 新实现切换前，先移除旧表的全部应用代码依赖；切换完成后通过后续 AI-PM migration 删除四张旧表及专属数据库对象。
 5. 删除旧表前必须确认旧 handler/service/query/repository/worker/SQL/test fixture 均已移除或改写，并通过全仓搜索、构建、测试和 migration 顺序验证。不能只 DROP 表而保留旧代码。
 6. 两个 P0 仍然有效：Artifact delegation 必须有认证保护、正确 audience/tenant/project/action scope 和越权负例；File Service 必须具备 upload-intent、checksum、finalize、对象验证及清理/补偿协议。
-7. 允许 ART-03 创建独立仓库并进行不承载生产流量的基础开发；两个 P0 未关闭前不得投入生产使用。
+7. 允许进入 ART-02：创建独立仓库并进行不承载生产流量的基础 Web Server、数据库迁移、API/SDK 与独立 CI 建设；两个 P0 未关闭前不得投入生产使用。ART-03 专指 Mermaid Adapter 实现。
 
 ### 15.4 下一阶段实施工作包
 
