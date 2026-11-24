@@ -16,16 +16,17 @@ Status: normative design target. Exact route/function names must be reconciled w
 ### 2.1 Direction and responsibilities
 
 - Platform → SEM: dispatch notification, cancellation request, policy/configuration changes, and authorized control requests.
-- SEM → Platform: claim request, execution lifecycle updates, result/error reports, termination evidence, Runner/connection telemetry and HIR-related execution evidence.
-- Platform remains the only authority that grants a Run lease or changes the authoritative Run/Generation state. SEM cannot self-assign a Run.
+- SEM → Platform: target-Runner claim request, lease renewal, execution lifecycle updates, result/error reports, termination evidence and Runner/connection telemetry.
+- SEM is the sole Runner dispatch/handoff coordinator. Runner does not poll Platform MCP for Claim, command delivery, ACK or recovery control.
+- Platform remains the only authority that grants a Run lease or changes authoritative Run/Generation state. SEM cannot self-assign a Run; it requests a claim for a specifically authenticated target Runner.
 
 ### 2.2 Dispatch and recovery
 
 1. Platform commits the business change and an Outbox event in the same database transaction.
 2. Outbox delivery calls the versioned SEM HTTPS API. Delivery is at-least-once; each event has a stable event_id/idempotency key.
 3. SEM durably records receipt before acknowledging acceptance; duplicate event delivery returns the prior outcome.
-4. SEM requests claim through Platform API. Platform performs authorization, eligibility checks, concurrency control, generation increment, lease issuance and audit in one authoritative transaction.
-5. SEM sends the execution command to the selected Runner over WSS only after successful claim.
+4. SEM selects an eligible Runner (or obtains explicit user selection for `supervised`) and requests Claim through Platform API with the authenticated target Runner/device identity. Platform independently validates device registration, tenant/project binding, authorization, supervision policy, Scheduling Shield and concurrency, then performs generation increment, lease issuance and audit in one authoritative transaction.
+5. SEM sends the execution command and Platform-issued lease material to that exact Runner over its authenticated WSS connection only after successful Claim. Runner never calls Claim directly.
 6. SEM reports state and evidence through Platform APIs. On timeout/restart, SEM retries idempotently and periodically reconciles outstanding operations with Platform.
 7. Outbox notification is a wake-up/trigger, not the task payload authority. API query/reconciliation is the recovery path for missed or delayed notifications.
 
@@ -56,17 +57,25 @@ A successful claim is requested by SEM through the Platform HTTPS API and execut
 
 User selection of a Runner is not a claim and grants no execution ownership. The Runner may start only after a successful claim response.
 
-## 5. Heartbeat
+## 5. Runner liveness, Lease Renewal and Agent Activity
 
-Runner sends Heartbeat to SEM over WSS; SEM forwards the authenticated heartbeat/renewal request to Platform API. Platform alone validates and commits lease renewal. Heartbeat proves only that the Runner supervisor loop is alive:
+These are three distinct signals and must never be conflated:
+
+1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence.
+2. **Lease Renewal**: Runner Supervisor sends a dedicated renewal message over WSS. SEM forwards it to Platform HTTPS API. Platform alone validates the exact Runner/device owner, lease proof/token, Run and Generation, and commits renewal. This is the only Lease Renewal path for Client Runner execution.
+3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools. It records business/execution activity but does not renew the Lease.
+
+Renewal constraints:
 - renew only for exact current owner, token proof and generation;
 - never clear Scheduling Shield;
-- stale heartbeat cannot resurrect an old generation;
-- heartbeat does not prove Harness activity or user presence.
+- stale heartbeat/renewal cannot resurrect an old generation;
+- WSS liveness alone never renews a Lease;
+- Agent Activity never renews a Lease;
+- no duplicate renewal path may remain in Platform MCP after migration.
 
 ## 6. Cancellation and E3
 
-Carry cancellation commands and ACKs over the authenticated Runner↔SEM WSS channel. Do not use Platform database polling or add a separate MCP tool solely for cancellation.
+Carry cancellation commands and ACKs over the authenticated Runner↔SEM WSS channel. Runner does not poll Platform MCP for commands or ACKs. Platform retains `worker_command` business state; SEM stores only transport delivery facts. Do not use Platform database polling or add a separate MCP tool solely for cancellation.
 
 A cancel command carries command ID, Run ID, generation and target process identity.
 - Command receipt acknowledgement is separate from termination confirmation.
@@ -87,3 +96,18 @@ Distinct error categories include stale_generation, lease_owner_mismatch, lease_
 ## 8. Versioning
 
 Persist protocol version in command/event payloads. Unknown mandatory versions fail closed for destructive actions. Exact wire fields and status codes are implementation tasks requiring code-level reconciliation.
+
+
+## 9. Runner control-channel ownership (ADR-SEM-20)
+
+| Operation | Sole path | Authority |
+|---|---|---|
+| Runner selection / supervised user confirmation | SEM scheduler + SEM user-notification flow | User intent and SEM coordination; no execution right |
+| Claim | SEM HTTPS → Platform Claim API, then WSS dispatch | Platform transaction grants Lease/Generation |
+| Runner Supervisor Heartbeat | Runner → SEM WSS | SEM connection/liveness record only |
+| Lease Renewal | Runner → SEM WSS → SEM HTTPS → Platform | Platform validates and commits renewal |
+| Command delivery / command ACK / cancel / E3 | Platform command intent → SEM WSS → Runner; ACK returns WSS → SEM → Platform API | Platform command business state; SEM transport ledger; Runner OS process observation for E3 |
+| Run/Task context, Agent Activity, Interaction, delivery/result | Harness → Platform MCP | Platform business application services |
+| Recovery / handoff coordination | SEM scheduler + Platform API Claim/recovery operations + WSS | Platform owns lease/generation; HIR and business audit remain Platform |
+
+After migration, remove Runner MCP polling/write paths for Claim, Lease Renewal, command polling/ACK and recovery. Do not retain duplicate control paths. Keep MCP tools needed by Harness for business operations.
