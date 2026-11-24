@@ -61,17 +61,16 @@ User selection of a Runner is not a claim and grants no execution ownership. The
 
 These are three distinct signals and must never be conflated:
 
-1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence.
-2. **Lease Renewal**: Runner Supervisor sends a dedicated renewal message over WSS. SEM forwards it to Platform HTTPS API. Platform alone validates the exact Runner/device owner, lease proof/token, Run and Generation, and commits renewal. This is the only Lease Renewal path for Client Runner execution.
-3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools. It records business/execution activity but does not renew the Lease.
+1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence, and does not automatically renew a Lease.
+2. **Lease Renewal**: The exact initiating actor and transport path remain an open design item. The final design must select exactly one path, with Platform alone validating and committing renewal for the exact Runner/device owner, lease proof/token, Run and Generation.
+3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools. It records business/execution activity. Whether this signal participates in the single Lease Renewal path remains to be decided; it must not create a second renewal path.
 
 Renewal constraints:
 - renew only for exact current owner, token proof and generation;
 - never clear Scheduling Shield;
 - stale heartbeat/renewal cannot resurrect an old generation;
 - WSS liveness alone never renews a Lease;
-- Agent Activity never renews a Lease;
-- no duplicate renewal path may remain in Platform MCP after migration.
+- exactly one renewal path must be selected before implementation; no dual renewal authority may remain.
 
 ## 6. Cancellation and E3
 
