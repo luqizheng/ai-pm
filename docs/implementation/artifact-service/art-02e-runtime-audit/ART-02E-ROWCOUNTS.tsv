@@ -1,0 +1,5 @@
+table_name	row_count	status	checked_at_utc	database	container
+viz.artifact	0	VERIFIED	2026-11-24T06:59:05Z	postgres	superpowers-full-postgres-1
+viz.approval	0	VERIFIED	2026-11-24T06:59:05Z	postgres	superpowers-full-postgres-1
+viz.render_output	0	VERIFIED	2026-11-24T06:59:05Z	postgres	superpowers-full-postgres-1
+viz.slot_config	0	VERIFIED	2026-11-24T06:59:05Z	postgres	superpowers-full-postgres-1

@@ -79,6 +79,7 @@
 - `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分和迁移边界。
 
 - ART-02D 现有 viz.* 数据、读写路径与迁移依赖核验（并入 [ART-02 第 14 节](architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md)）：包含历史 full-dev 快照与当前运行态未验证项。
+- ART-02E 目标环境运行态核验（[implementation/artifact-service/art-02e-runtime-audit/](implementation/artifact-service/art-02e-runtime-audit/ART-02E-RUNTIME-AUDIT.md)）：full-dev 库实时身份、migrations 59/59、viz.* 四表 0 行、schema 与 0020 零 drift；结论 A+B（ART-03 可启动、开发可开始），迁移/退役仍以生产与外部消费者确认为前置。
 
 通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 与 ART-01 为准；ART-00 是静态审计证据，ART-02 是实施前置核验记录。未完成的运行态核验不能以静态代码、设计文档或历史快照替代。
 
