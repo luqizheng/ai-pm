@@ -365,21 +365,24 @@ Artifact Service 必须独立验证身份和授权，不能因为请求来自 pm
 - **ADR-VIZ-002**：保留 SeeCode Adapter 与 SVG-only 安全签收约束；本 ADR 增加 Mermaid 作为 V1 正式 Generator。旧文档中 Mermaid 仅作为 Fallback 的表述，在 Artifact Service 的生成产物范围内由本 ADR 取代。
 - **ADR-VIZ-003/004/005/007/008/009 及其余业务语义、安全、权限、Registry、零业务写路径约束**：继续有效，除非未来 ADR 明确修订。
 
-### 11.2 命名与迁移红线
+### 11.2 命名、切换与旧表清理规则
 
-当前代码库中 artifact 一词已有多个历史语义。禁止直接将现有 viz.artifact 表改名或复用为通用 Artifact Service 数据表。
+当前代码库中 artifact 一词已有多个历史语义。禁止直接将现有 `viz.artifact` 表改名或复用为通用 Artifact Service 数据表。
 
-迁移前必须：
+**产品负责人已确认的项目状态（2026-11-24）：AI-PM 尚未向真实用户开放，没有真实用户使用，也没有产生真实业务数据。因此本项目不实施旧 Visualization 数据迁移，不为不存在的历史业务数据设计长期兼容机制。** 该信息属于产品负责人确认，不应伪装成数据库审计结论。ART-02E 的数据库证据仅证明其核验的 full-dev 环境四张 `viz.*` 表在核验时均为 0 行。
 
-1. 盘点全仓 Artifact / Deliverable / Document / Attachment / Render Output 的表、API、代码和 UI 语义；
-2. 建立旧 Visualization Artifact 到通用 Artifact / Version / Reference 的字段映射；
-3. 明确审批记录、槽位配置、source_hash、provenance 与 Render Output 的归属；
-4. 设计单向、可验证、可回滚的数据迁移；
-5. 避免长期双写；切换完成后确定唯一写入权威；
-6. 更新文档、代码和 API 中容易混淆的命名。
+后续切换按以下规则执行：
 
-在迁移方案批准前，既有 viz.* 表和 API 按当前行为运行，不得在本 ADR 下直接删除或改写。
+1. 新 Artifact Service 使用全新 schema / migration，不复用或改名现有 `viz.*` 表。
+2. AI-PM 继续拥有 Visualization 的审批、Slot Config、VizSpec、Relation Registry、项目授权和业务引用语义；这些职责在新实现中按 AI-PM 新模型实现，不迁入 Artifact Service。
+3. `viz.artifact` 与 `viz.render_output` 不做历史数据回填；新实现切换后，历史开发数据不作为兼容负担。需要保留的设计样例应以受控测试 fixture 或重新生成的 Artifact 表达。
+4. 先在 AI-PM 中移除旧表的所有 handler、service、query、repository、worker、测试 fixture 和 SQL 依赖，再通过后续数据库 migration 删除旧表及相关索引、函数和触发器。
+5. `viz.approval` 与 `viz.slot_config` 的业务职责不得随旧表删除而丢失；应先由新的 AI-PM 业务模型承接。旧表本身不要求迁移或长期保留。
+6. 清理前必须完成代码搜索、构建、测试和 migration 顺序验证；部署顺序必须保证旧代码不再访问旧表后才执行 DROP。不得仅 DROP 表而保留旧代码调用。
+7. 不建立新旧表双写、不做历史 backfill、不建立旧 ID 映射或历史下载兼容层，除非未来出现新的、经产品负责人确认的真实数据需求并另行修订本 ADR。
+8. 更新文档、代码和 API 中容易混淆的命名。
 
+旧表删除属于新实现完成代码切换后的正常 schema 清理，不是历史数据迁移项目。
 ## 12. 测试与发布治理
 
 ### 12.1 Artifact Service 自有测试
