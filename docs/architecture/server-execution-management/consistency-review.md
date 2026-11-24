@@ -1,7 +1,7 @@
 # SEM V1 Architecture Consistency Review
 
-- Review stage: SEM-02B document-set review.
-- Result: **Document set expanded and major user decisions synchronized; architecture is not yet marked Design Complete.**
+- Review stage: SEM-02C code-contract mapping (initial pass).
+- Result: **Initial code-contract map added; major service-boundary gaps and Runner/MCP/WSS overlap identified. Architecture is not yet marked Design Complete.**
 - Scope: documentation-only review. No business code, migrations, Docker, Compose, Worker loops, API or Runner implementation changed.
 
 ## 1. Cross-document invariants checked
@@ -36,13 +36,13 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-05 HIR schema | Exact FK/tenant constraints, active-HIR uniqueness, concurrency versioning, indexes and audit transaction boundaries are designed before Phase 4 migration |
 | G-06 Session Resume | Exact Harness and CLI version passes a repeatable real process/session restoration test; otherwise supports_resume remains false |
 | G-07 Empty database | Full migration chain initializes all SEM schema and constraints from an empty database |
-| G-08 Deployment | Independent SEM host can access PostgreSQL and runtime volume; startup/readiness gates prevent claim when prerequisites fail |
+| G-08 Deployment | Independent SEM host can access Platform HTTPS API, its own SEM database and runtime volume; startup/readiness gates prevent dispatch when prerequisites fail |
 | G-09 Documentation/code alignment | All cited code anchors and current behavior are rechecked against the implementation HEAD immediately before Phase 0 |
 | G-10 Service API boundary | Route/version/auth schemas, service identity, idempotency, timeout/retry, Outbox→SEM inbox delivery, reconciliation and failure semantics are specified; SEM has no Platform DB credentials |
 | G-11 Data ownership | Every persisted field/table has one owning service; Run/Lease/Generation writes remain Platform-only; SEM DB contains execution-private records only |
-| G-12 Cross-service failure handling | No distributed transaction; dispatch loss, duplicate delivery, API outage, SEM restart and partial success have deterministic retry/reconciliation behavior |
+| G-12 Cross-service failure handling | No distributed transaction; dispatch loss, duplicate delivery, API outage, SEM restart and partial success have deterministic retry/reconciliation behavior |\n| G-13 Runner channel ownership | Every current Runner MCP operation is assigned to exactly one path (Platform MCP or SEM WSS); no duplicate Claim, Lease Renewal, command delivery or ACK authority remains |\n| G-14 Service and Runner authentication | Platform–SEM service identity and Runner WSS identity/connection revocation are defined; service tokens do not enter ordinary human-principal flow; cpk device binding is preserved |\n| G-15 Runtime/data ownership mapping | Every existing PgPool/SQL operation in run_executor, claim, lease, worker_command, run_events and cleanup is assigned to Platform API or SEM-local process state; SEM has no Platform DB pool |
 
-## 3. Known design details still requiring code-level reconciliation
+## 3. Initial SEM-02C code findings\n\n1. Current ai-pm-worker creates a Platform PgPool from DATABASE_URL and runs Outbox plus Run execution loops in one process; there is no SEM role/DB boundary in current code.\n2. Current RunExecutor trait abstracts only local process start/poll/terminate. run_executor and claim/lease/command/event modules still execute direct Platform SQL.\n3. Current Runner uses Streamable HTTP MCP to Platform for Claim, Lease Renewal, command polling/ACK, recovery and interaction reporting; Harness receives AI_PM_MCP_URL and Lease Token directly. No WSS client/listener exists.\n4. Current pm-api mounts PmMcpServer with a Platform PgPool. Current auth explicitly rejects roles=[service] on ordinary business endpoints; cpk credentials are accepted only on /mcp.\n5. Current reconcile_orphans contains a >1h Lease-expiry path that changes a running Run back to queued and releases the Task without first proving process death. This remains a Phase 0 blocker.\n\n## 4. Known design details still requiring code-level reconciliation
 
 1. The exact physical representation of Scheduling Shield (dedicated columns/table versus a carefully constrained existing field) must be chosen only after tracing every candidate and recovery query. The invariant is fixed; physical schema is not yet frozen.
 2. The exact HIR physical schema and API surface are target designs, not existing endpoints.
@@ -51,7 +51,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 5. OS-specific process identity and termination observation must be verified on supported SEM host OS/runtime.
 6. Exact Harness Resume behavior is an empirical gate, not a paper-only capability flag.
 
-## 4. Explicit non-goals
+## 5. Explicit non-goals
 
 - No Workspace, Worktree or Git Mirror backup/snapshot system.
 - No RPO/RTO for those ephemeral execution assets.
@@ -61,7 +61,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 - No new SEM microservice or binary is implied by this document set.
 - No code implementation is authorized by this review.
 
-## 5. Exit criteria for SEM-02C
+## 6. Exit criteria for SEM-02C
 
 SEM-02C may mark the architecture Design Complete only after:
 - every design decision has a single authoritative definition;
@@ -71,4 +71,4 @@ SEM-02C may mark the architecture Design Complete only after:
 - every Phase has bounded scope, test plan, acceptance and rollback;
 - no unresolved product-level choice remains.
 
-Until then README status must remain Architecture Review / Design In Progress, not Design Complete.
+Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval.
