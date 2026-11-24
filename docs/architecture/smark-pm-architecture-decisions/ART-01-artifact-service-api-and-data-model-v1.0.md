@@ -479,37 +479,39 @@ GeneratorDescriptor 至少包含 generator_id、version、supported_input_format
 
 Metrics 至少包括 API latency/error rate、Job queue depth、Job duration/failure/timeout、Worker saturation、Storage error/latency、孤儿对象数量、quarantine 数量和版本提交失败数。日志以 request_id、trace_id、tenant/project、artifact_id、job_id 关联；不得记录凭证或完整敏感源文件。
 
-## 9. Visualization 旧模型迁移映射
+## 9. Visualization 旧模型职责承接与清理
 
-### 9.1 目标归属
+### 9.1 新旧职责边界
 
-| 现有对象 | 目标归属 | 处理原则 |
+本项目没有真实用户和历史业务数据（产品负责人于 2026-11-24 确认）。因此本节定义的是**新实现的职责承接与旧结构清理**，不是数据迁移方案。
+
+| 现有对象 | 新实现归属 | 处理原则 |
 |---|---|---|
-| viz.artifact | Artifact + ArtifactVersion | 映射通用身份和版本；VizSpec 语义快照仍由 AI-PM 保管/解释 |
-| viz.render_output | ArtifactOutput + file-service object | 文件迁移/复制后校验 hash；保留旧 ID 到新 ID 映射 |
-| viz.approval | AI-PM Visualization | 审批主体、状态机、业务含义留在业务域；不迁入 Artifact Service |
-| viz.slot_config | AI-PM Visualization | 槽位配置和策略继续留在 AI-PM |
+| `viz.artifact` | Artifact Service 的 Artifact + ArtifactVersion | 不迁移旧行；新产物直接写入新服务 |
+| `viz.render_output` | Artifact Service 的 ArtifactOutput + file-service object | 不迁移旧文件/行；新输出按新协议生成 |
+| `viz.approval` | AI-PM Visualization 业务模型 | 审批主体、状态机、业务含义继续归 AI-PM；在新模型中实现，不迁移旧记录 |
+| `viz.slot_config` | AI-PM Visualization 业务策略模型 | 槽位配置和策略继续归 AI-PM；在新模型中实现，不迁移旧记录 |
 | source_hash / provenance | 双侧分工 | Artifact 保存输入快照/hash 元数据；AI-PM 负责业务来源解析和 stale 判定 |
-| SeeCode render job 状态 | GenerationJob | 迁移技术生成状态；业务审批状态不混入 Job |
+| SeeCode render job 状态 | GenerationJob | 新生成任务使用 Artifact Service 生命周期；不迁移旧任务记录 |
 
-### 9.2 迁移阶段
+### 9.2 切换与旧表清理顺序
 
-1. **Inventory**：核验所有读写 API、后台任务、UI、数据量、外键、触发器和保留策略；输出字段级 mapping。
-2. **Compatibility**：在 AI-PM 增加 Artifact Client / Anti-Corruption Layer；旧 API 暂时适配新服务，但不双写。
-3. **Backfill rehearsal**：对生产数据副本执行只读映射与对象复制演练；记录总量、失败项、hash 对账。
-4. **Cutover**：选择维护窗口或受控冻结写入；按批次迁移并验证；切换唯一写入权威。
-5. **Read verification**：旧 ID 映射、版本数、审批关系、引用、Hash 和 Viewer 读路径逐项验收。
-6. **Rollback window**：切换失败时恢复 AI-PM 原有读写路径；迁移期间 Artifact Service 新写入需冻结或通过反向补偿导出，不能长期双写。
-7. **Retirement**：观察期通过后停止旧产物写路径；旧表按独立审批和保留策略归档/删除，不在首轮迁移直接 DROP。
+1. **Build new authority**：先实现 Artifact Service 新 schema/API，以及 AI-PM 侧 Approval、Slot Config 等业务模型。
+2. **Cut consumers over**：将 AI-PM 的 Artifact/Output 调用切换到 Artifact Service Client；业务审批与项目授权仍由 AI-PM 执行。
+3. **Remove legacy dependencies**：删除旧 `viz.artifact` / `viz.approval` 读写 handler、service、query、repository、worker、旧 SQL 和不再需要的测试 fixture；确认 `render_output`、`slot_config` 没有残留运行时引用。
+4. **Verify**：全仓搜索旧表名和旧 SQL；运行相关 crate 测试、API/集成测试、migration 测试；确认应用启动和请求路径不再依赖旧表。
+5. **Drop legacy schema**：在代码已不访问旧表之后，通过 AI-PM 后续 migration 删除 `viz.artifact`、`viz.approval`、`viz.render_output`、`viz.slot_config` 及仅服务于这些旧表的索引、函数、触发器。清理 migration 必须与移除代码依赖的版本顺序匹配。
+6. **No backfill / no dual-write**：不执行历史数据 backfill，不建立旧新表双写，不构建旧 ID 映射或历史兼容窗口。若未来产品状态发生变化，必须先修订架构决策再实施。
 
-### 9.3 迁移红线
+### 9.3 清理红线
 
-- ART-01 不授权立即执行数据迁移。
-- 不直接改名或复用 viz.* 表作为通用 Artifact Service 表。
-- 不迁移审批和槽位配置到 Artifact Service。
-- 不因迁移把 VizSpec、Relation Registry、Live Graph 搬离 AI-PM。
-- 不以“两个系统都写成功”为一致性方案。
-- 不删除旧数据，除非对账、备份恢复和回滚演练均通过且另行批准。
+- 不直接改名或复用 `viz.*` 表作为 Artifact Service 新表。
+- 不把 Approval、Slot Config、VizSpec、Relation Registry、Live Graph 或项目授权搬入 Artifact Service。
+- 不因删除旧表而丢失 Approval / Slot Config 的业务职责；先实现新的 AI-PM 业务模型。
+- 不允许 DROP 表后仍保留 handler、SQL、worker 或测试代码依赖。
+- 不做历史数据迁移、长期兼容或新旧双写。
+- Artifact Service 的新数据权威和 file-service 对象提交协议必须先实现并通过测试；旧表清理不是两个 P0 的替代项。
+
 
 ## 10. SDK、部署、健康检查和发布
 
