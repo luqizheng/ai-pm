@@ -20,12 +20,11 @@
 | ADR-SEM-11 | Greenfield 政策适用：可直接重构 Schema/接口，不为未发布行为保留兼容层；执行安全不降低 | `engineering-lifecycle-policy.md` | 项目进入有客户/生产数据阶段时复审 |
 | ADR-SEM-12 | HIR 使用独立实体 `governance.human_intervention_request`，关联 Run/Attempt/Project/Runner；不复用审计事件承载业务生命周期 | 需要可查询、可处置、可统计的独立生命周期 | HIR 被证明不需要独立查询/状态/授权时 |
 | ADR-SEM-13 | Harness Resume 能力默认关闭；能力声明与真实恢复成功分离，未完成版本化实测不得启用 | 当前没有充分实测证据；失败必须降级为 Fresh Attempt | 对具体 Harness 版本完成可重复恢复验收 |
-| ADR-SEM-14 | Runner 终止 ACK 复用现有 Runner 命令 poll/ack 通道；ACK 必须绑定 run/attempt/generation，并由 Runner 在 OS 进程句柄确认退出后发送 | 不增加第二套控制通道；普通 HTTP 成功或命令送达不构成终止证据 | 现有通道无法满足可靠性/认证要求时另立 ADR |
+| ADR-SEM-14 | Runner 命令与 ACK 通过 Runner 主动建立的认证 WSS 长连接传输；ACK 必须绑定 run/attempt/generation，并由 Runner 在 OS 进程句柄确认退出后发送 | WSS 是 SEM↔Runner 的唯一实时控制通道；普通消息 ACK/命令送达不构成终止证据 | 若 WSS 在特定环境不可用，需另立 ADR 定义安全降级通道 |
 | ADR-SEM-15 | Runner 默认 `unattended`；仅显式配置为 `supervised` 才要求领取前用户确认 | 用户明确决策；监督模式与在线/忙碌状态正交 | 用户明确改变产品默认值 |
 | ADR-SEM-16 | E4 Run 进入持久化 scheduling shield：不进入普通 claim 候选集、不因租约过期自动重派；由 HIR 处置；只允许受控人工/证据驱动解除 | 避免 E4 被其他回收路径重新领取；必须有可审计解除条件 | 状态模型重构时，以等价或更强的持久化隔离替代 |
 | ADR-SEM-17 | Workspace/Worktree/Git Mirror 不做备份；运行期间仍使用持久卷，丢失后按 E4/E5 安全隔离，不得推断进程死亡 | 用户明确决策；这些内容可由唯一 origin 重建，运行现场不作为备份目标 | 产品未来明确要求灾难恢复现场 |
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
-
 | ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |
 
 ## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
@@ -39,7 +38,7 @@
 |---|---|---|
 | OQ-1 HIR 载体 | **关闭：采用独立表** `governance.human_intervention_request` | Phase 4 定义字段、唯一活动请求约束、状态迁移与审计；HIR 不替代 `task_interaction` |
 | OQ-2 Codex Resume | **设计关闭，能力验证门槛保留**：默认 `supports_resume=false` | 每个 Harness/版本需在真实环境通过采集、重启、恢复、上下文连续性测试后，才可单独启用；未通过一律 Fresh Attempt |
-| OQ-3 E3 ACK | **关闭：扩展现有 Runner 命令 poll/ack 通道** | ACK 绑定 run_id、attempt/run 行、lease_generation、command_id、process identity、exit observation；仅在 OS wait/handle 确认进程退出后发送；送达/接收 ACK 不等于终止 ACK |
+| OQ-3 E3 ACK | **关闭：通过认证 WSS 承载 Runner 命令/ACK** | ACK 绑定 run_id、attempt/run 行、lease_generation、command_id、process identity、exit observation；仅在 OS wait/handle 确认进程退出后发送；送达/接收 ACK 不等于终止 ACK |
 | OQ-4 监督模式 | **关闭：默认 `unattended`** | 注册持久化字段；首次注册未提供值时取 unattended；supervised 必须在领取前取得用户确认；在线状态不推导监督模式 |
 | OQ-5 E4 租约卫生 | **关闭：持久化 scheduling shield** | shield 是 claim 与所有自动回收路径共同遵守的 DB 条件；E4 期间不得因 lease expiry 回 queued；不无限续租伪装健康；只通过证据确认死亡或经授权的人工处置解除 |
 | OQ-6 凭据面 | **关闭：纳入执行安全基线并前移至 Phase 0** | 最小权限、短时凭据、可撤销、日志脱敏；终止旧进程后才可确认其进程内凭据失效；无法即时撤销的凭据必须按最坏情况评估外部副作用 |
