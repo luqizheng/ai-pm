@@ -619,3 +619,104 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 6. 在目标环境确认 backend、endpoint、bucket policy、对象数量/容量、保留策略、备份位置和恢复证据之前，ART-02C 运行态仍为 OPEN。
 
 **当前状态：ART-02C 仓库配置/文档静态核验已完成；用户实际环境 backend、RustFS 配置、备份与恢复状态仍 NOT VERIFIED。**
+
+
+## 14. ART-02D — 现有 viz.* 数据、读写路径与迁移依赖核验
+
+### 14.1 核验范围与证据基线
+
+本节只核验 AI-PM 仓库中的迁移、Rust 应用层、pm-api handler、测试和历史数据库盘点；不连接当前数据库，不读取真实业务行、密钥或环境变量值。
+
+| 项 | 基准 / 结果 |
+|---|---|
+| 当前代码基线 | `master` commit `3a50c7cdee3b2ef0d7e19b241b64764a52515fb8` |
+| 本文档分支 | `docs/artifact-service-baseline-v1`，写入前 HEAD `bbd8a0db81800567ac6f496da310f045ddc317f9` |
+| 历史数据库快照 | `full-dev`：Docker 容器 `superpowers-full-postgres-1`，database `postgres`，user `postgres` |
+| 历史快照对应代码 | commit `05ce33d8dfbd70a672b27c1a6ce20a1ee5d405c6`（2026-11-15 19:18 +0800） |
+| 历史盘点时间 | 2026-11-15 19:41 起；当时记录 migrations 1~24 已执行 |
+| 当前生产/目标环境实时行数 | **NOT VERIFIED** |
+
+历史快照来源：`docs/audit/four-domain-2026-11-15/00_evidence_baseline.md` 与 `raw/inv_rowcounts.tsv`。该证据明确指向 full-dev，而非生产数据库；其数据不能外推为当前环境状态。
+
+### 14.2 Schema、约束与关系
+
+四张表均由 `migrations/0020_visualization_artifact.sql` 创建：
+
+| 表 | 当前职责与关键结构 | 主要约束 |
+|---|---|---|
+| `viz.artifact` | 图形 Spec、来源指纹、版本号、状态、生成者与 renderer 元数据 | 状态 CHECK；`(project_id, slot_key, version_no)` 唯一；published Spec 不可改写，published 只能转 stale，stale 为终态 |
+| `viz.approval` | 独立发布审批记录、目标 hash、预期版本、裁决人/原因 | pending/approved/rejected/cancelled 状态；每项目槽位最多一条 pending；artifact_id FK |
+| `viz.render_output` | 按 artifact + format 保存 HTML/SVG 文本或 PNG bytes、hash、大小及 renderer 信息 | format/content 组合 CHECK；`(artifact_id, format)` 唯一；artifact_id FK |
+| `viz.slot_config` | 每项目槽位的审批、允许 nature、版本上限和保留天数策略 | slot_key、nature、max_versions、retention_days CHECK；`(project_id, slot_key)` 唯一 |
+
+数据库约束核验结果：
+
+- `viz.approval` 与 `viz.render_output` 只建立了指向 `viz.artifact(id)` 的外键。
+- `viz.artifact`、`viz.slot_config` 没有指向 `core.project` / `core.tenant` 的数据库外键；viz 表也没有对 `core.principal` 的创建者/裁决者外键。
+- approval/render_output 的外键只保证 artifact 存在，未用复合外键强制子记录的 tenant_id/project_id 与父 artifact 一致。当前主要依靠应用层项目可见性校验和写入路径维持该关系。
+- 业务对象来源主要保存在 Spec / provenance JSONB 内，不存在可由数据库外键自动发现的业务对象依赖。迁移前必须扫描这些引用并核验引用有效性。
+- `render_output` 对同一 artifact+format 采用唯一键；应用代码的 UPSERT 会覆盖该组合的内容与 renderer 元数据。因此它不是独立不可变版本历史，不能直接等同于 ART-01 的 immutable Artifact Version。
+
+### 14.3 应用层读写路径矩阵
+
+基于当前仓库源码搜索与文件复核：
+
+| 表 | 读路径 | 写路径 | 当前接线状态 |
+|---|---|---|---|
+| `viz.artifact` | `artifact_service::get_artifact`；`queries::{list_slot_summaries,count_artifacts,list_artifacts_page}`；`viz_handlers` 详情/列表/槽位接口 | `artifact_service::create_draft` 插入；`decide_approval` 更新 published/rejected；`mark_stale` 更新 stale | 已接入 pm-api REST 路由 |
+| `viz.approval` | `queries::approval_project`；`decide_approval` 行锁读取 | `request_approval` 插入；`decide_approval` 更新裁决状态 | 已接入审批请求与裁决 REST 路由 |
+| `viz.render_output` | 本次未发现 pm-api 生产读取 SQL；集成测试会读取验证渲染结果 | `render_job::render_artifact` 在传入 PgPool 时 INSERT，并按 artifact+format UPSERT | 函数与测试存在；全仓调用点搜索只发现函数定义和测试，未发现 pm-api route 或 worker 的生产调用链 |
+| `viz.slot_config` | 未发现应用层读取 SQL | 未发现应用层 INSERT/UPDATE/DELETE | 当前只有 migration/schema 与设计文档，未发现运行时消费者 |
+
+补充观察：
+
+1. `apps/pm-api/src/viz_handlers.rs` 当前路由包含槽位摘要、Artifact 详情/列表/创建、审批请求/裁决、refresh 和 Live Graph；没有发现 render_output 的读取/下载路由。
+2. 当前 `artifact_refresh` 只调用 `mark_stale`，源码注释明确源对象 hash 重算仍待 V0-3 接线；不能把 refresh 路由视为已完成的 stale 检测 worker。
+3. `render_job` 的持久化函数本身可写 render_output，但没有发现当前生产调用方；这与“表结构存在”或“测试通过”是不同层级的证据。
+4. `slot_config` 的审批开关、允许 nature、max_versions 和 retention_days 尚未发现应用层消费路径；不能假定这些配置当前已经控制生产行为。
+5. pm-api handler 对项目执行 `require_project_visible`；写操作另执行 `ensure_trusted_context`。这说明当前业务权限仍在 AI-PM，迁移后不应把这些规则隐式复制到 Artifact Service。
+
+### 14.4 历史行数证据
+
+历史 full-dev 精确行数快照记录如下：
+
+| 表 | 2026-11-15 full-dev 行数 |
+|---|---:|
+| `viz.artifact` | 0 |
+| `viz.approval` | 0 |
+| `viz.render_output` | 0 |
+| `viz.slot_config` | 0 |
+
+**解释边界：** 这是有明确容器/database/user 标识的 full-dev 历史快照，优于没有环境标识的裸 rowcount，但仍不是生产数据，也不是当前实时状态。不能据此直接 DROP、TRUNCATE、跳过数据映射或宣布迁移零风险。
+
+### 14.5 对 Artifact Service 迁移的影响
+
+- **Artifact / Version：** `viz.artifact` 是最直接的候选数据来源。迁移时需保留每条 Spec、slot/version、state、source_hash、provenance、renderer 信息与时间戳；必须先确定 draft/rejected/stale 的历史保留策略，以及目标 Artifact Version 的映射。
+- **Render Output：** 只有在确认真实数据和实际读取者后，才决定将 HTML/SVG/PNG 内容迁移为 Artifact Version Output 或可重建产物。旧表按 artifact+format UPSERT 的覆盖语义必须显式处理，不能假设存在多次渲染历史。
+- **Approval：** 继续由 AI-PM 保持业务审批权威，不搬入通用 Artifact Service。迁移后应以稳定的 artifact/version 引用关联审批，保留原审批记录与裁决审计。
+- **Slot Config：** 继续属于 AI-PM 业务策略，不迁移为 Artifact Service 通用配置。由于当前未发现应用层消费者，应先确认其目标语义和未来消费者，再决定保留、补齐实现或废弃。
+- **业务引用：** JSONB Spec/provenance 内可能含 requirement/design/task/knowledge 等对象引用；必须做结构化提取、有效性校验和迁移映射，数据库外键清单不足以覆盖这些依赖。
+- **切换策略：** 先建立旧表到 Artifact Service 的只读映射与校验工具，再分阶段切换写入和读取；不得长期双写。旧表保留到回滚窗口关闭、引用审计完成、对象 hash/数量核对通过后，才可另行批准退役。
+
+### 14.6 ART-02D 核验矩阵与决定
+
+| 检查项 | 状态 | 结论 |
+|---|---|---|
+| 四张表的 DDL / CHECK / UNIQUE / FK / trigger | VERIFIED-CODE | 已从 migration 与历史 catalog 导出核对 |
+| 当前 Rust 应用层 Artifact / Approval 读写路径 | VERIFIED-CODE | 已定位 service、query 与 handler |
+| render_output 生产调用链 | NOT FOUND IN REVIEWED TREE | 写入函数存在，但未发现生产调用方或 pm-api 读取路由 |
+| slot_config 应用层消费者 | NOT FOUND IN REVIEWED TREE | 当前仅确认 schema 与设计定义 |
+| 2026-11-15 full-dev 行数 | VERIFIED-HISTORICAL | 四表均为 0；仅适用于该历史 full-dev 快照 |
+| 当前目标环境 / 生产实时行数 | NOT VERIFIED | 本次未连接数据库 |
+| JSONB 业务引用的实际数据分布 | NOT VERIFIED | 未读取业务行内容 |
+| 外部消费者、运维脚本或人工 SQL 依赖 | NOT VERIFIED | 仓库静态搜索不能证明仓库外不存在调用者 |
+
+**ART-02D 决定：**
+
+1. 当前代码证据足以确认 Artifact 与 Approval 的应用层读写边界；render_output 与 slot_config 目前存在“Schema 已建、生产接线未证实”的实现缺口。
+2. 历史 full-dev 快照中四表为 0 行，但不能将其作为生产清空证明或当前迁移批准依据。
+3. 继续冻结真实数据迁移与旧表退役；下一步必须取得目标环境脱敏只读 rowcount、表结构/约束快照、应用版本/迁移版本，以及仓库外消费者确认。
+4. ART-01 的职责分工维持：Artifact/Version/Output 归通用 Artifact Service；Approval、Slot Config、项目授权和业务引用语义继续由 AI-PM 持有。
+5. ART-02D 完成的是仓库静态核验与历史证据复核，不代表生产数据核验、迁移演练或退役批准已完成。
+
+**当前状态：ART-02D 静态核验完成；目标环境实时数据、仓库外消费者与迁移演练仍 OPEN。**
