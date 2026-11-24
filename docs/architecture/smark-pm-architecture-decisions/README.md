@@ -68,3 +68,8 @@ ADR-ART-001 定义 AI-PM 通用 Artifact Service 的独立部署与数据权威�
 ## 基线状态说明
 
 本文件集整理截至 2026-11-24 的架构决策。PA-03 至 PA-07 按各自文档状态执行。ART-01 为本次新增的基础服务架构基线；具体数据模型、API、IAM 适配、对象存储部署和旧数据迁移仍须经过 ART-00 / ART-01 实施设计，不代表已经完成。
+
+
+### ART-00 审计结论摘要
+
+ART-00 已完成仓库静态代码与文档审计：现有 RustFS/file-service、docproc ArtifactStore、Visualization Artifact 和 SeeCode 沙箱可复用，但尚无通用独立 Artifact Web Service。建议新建独立 Repository 以获得独立 Cargo workspace、CI、镜像与发布；物理文件存储继续复用 file-service/RustFS。生产数据量、项目授权委托和 GitHub Actions 运行态仍需 ART-01/ART-02 前核验。详见 [ART-00 审计报告](ART-00-artifact-service-current-state-audit-v1.0.md)。
