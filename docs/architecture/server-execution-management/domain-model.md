@@ -67,7 +67,7 @@ The shield is a durable scheduling invariant, not an audit-only event or lease e
 - Every claim and automatic requeue/recovery path excludes shielded Runs.
 - Lease may expire naturally while shield remains active.
 - Late heartbeat does not clear the shield or revive an old generation.
-- Only evidence-backed termination or authorized audited human resolution may release it.
+- Only E1/E2/E3 evidence-backed termination may release it. E6 may authorize one risk-accepted successor but leaves the original Barrier unresolved.
 - A shielded Run must have an actionable HIR or explicit operational escalation record.
 
 
