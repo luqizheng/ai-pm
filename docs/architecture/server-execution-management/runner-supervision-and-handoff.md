@@ -116,7 +116,7 @@ sequenceDiagram
 SEM 负责 Runner 注册后的在线连接管理、候选选择、通知、派发、命令路由、执行监督和接管协调。Runner 只与 SEM 建立 WSS 控制连接；不得并行维护 Platform MCP 控制轮询。
 
 - Claim：SEM → Platform HTTPS Claim API（包含目标 Runner 身份），Platform 原子签发 Lease/Generation。
-- Lease Renewal：唯一发起方/传输路径尚待冻结；Platform 是唯一校验和提交方。WSS liveness 不续租；Harness Agent Activity 是否承担续租仍待决定。
+- Lease Renewal：唯一正式路径为 Runner Supervisor → SEM WSS → Platform HTTPS API（ADR-SEM-21）；Platform 是唯一校验和提交方。WSS liveness 与 Harness Agent Activity 均不续租。
 - Command/Cancel/ACK/E3：经 WSS；Platform 保留命令业务状态，SEM 仅保存投递账本。
 - 业务上下文、Agent Activity、Interaction、结果/交付：Harness → Platform MCP。
 - 接管：SEM 协调停止/隔离旧执行端，等待 E3 或按 E4/E5 保持 shield/HIR；随后通过 Platform 正常 Claim 流程为目标 Runner 申请新 Generation。不得改写 lease owner 或绕过 `lease_client_id`。
