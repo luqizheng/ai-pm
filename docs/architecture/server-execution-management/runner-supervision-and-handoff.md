@@ -37,10 +37,7 @@ stateDiagram-v2
     Created --> Closed: 源 Run 自愈（心跳恢复 / 迟到证据确认死亡后按证据回收）
 ```
 
-- **HIR 载体（Greenfield 最小化）**：HIR 是一条带状态字段的记录。候选载体二选一（决策记入 `decision-record.md` 待裁）：
-  - 方案甲：新表 `governance.human_intervention_request`（显式、可查询、可统计 Q3 频次）；
-  - 方案乙：复用审计事件 + `scheduling_shield` 状态（零新表，但 Q3 频次统计要扫审计，弱）。
-  **倾向方案甲**（Q3 需要频次聚合，审计扫描不可取）。
+- **HIR 载体（已定稿）**：采用独立表 `governance.human_intervention_request`。HIR 是具有独立 ID、状态、触发原因、责任主体、时间戳和审计历史的业务实体；审计事件只记录变更，不代替 HIR 当前状态。HIR 不替代 `delivery.task_interaction`。
 - HIR 与 Run 的关联：`task_run_id` + 触发证据类型（E3/E4/E5）+ `harness_session_id`（可恢复时）。
 - **HIR 是 Phase 0 证据模型的兜底**：E4/E5 挂起的 Run 必须有出路，HIR 就是那条出路。
 
@@ -87,9 +84,18 @@ sequenceDiagram
 - 「接管」在协议上是**新设备的一次全新合法 claim**——旧执行权自然过期/被证据终止，新执行权走正门。没有任何代码路径「把 A 的租约改绑给 B」。
 - 若未来出现「预授权转移」需求（把 claim 权指定给设备 B），必须以新迁移+新校验实现，不走放宽路线（记入 `decision-record.md` 未决）。
 
-## 5. 有人监督 Runner 的任务接收通知（Q2=B）
+## 5. Runner 监督模式与任务接收通知
 
-- 触发点：Runner 调 `pm_claim_task_run_as_client` **之前**（现状 runner 是自动领取循环）。设计取向：领取前插入「通知 + 用户确认」门（runner 侧 UI/交互，平台侧提供 HIR 状态查询命令）；用户选择后 runner 才发起 claim。
+### 5.1 默认值与配置
+
+- **默认 `supervision_mode=unattended`**。注册请求未提供该字段时，服务端持久化默认值为 `unattended`。
+- 只有用户/管理员明确设置 `supervised` 才启用有人监督流程；不得把缺省、未知值或配置读取失败解释为 supervised。
+- 监督模式是 Runner 注册/运行属性，与 online/offline/busy/unavailable 状态正交；心跳不能证明用户在设备旁。
+- 模式修改必须经过有权限的用户操作并审计；变更不追溯改变已领取 Run 的监督语义，建议在该 Runner 下一次空闲且未持有租约时生效。
+
+### 5.2 有人监督 Runner 的任务接收通知（Q2=B）
+
+- 仅当 Runner 明确配置为 `supervised` 时，Runner 调 `pm_claim_task_run_as_client` **之前**插入「通知 + 用户确认」门（Runner 侧 UI/交互）；用户选择后 Runner 才发起 claim。`unattended` 是默认模式，按平台授权自动领取。
 - 平台不感知「用户何时点确认」——那是设备端交互；平台只认 claim 请求本身（前置③）。
 - Q3=A：HIR 高频项目只产出提示事件（审计/告警面），**不**自动 shield、不自动换 Runner、不自动改 retry 策略。
 
