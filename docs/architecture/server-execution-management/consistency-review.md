@@ -112,3 +112,8 @@ The next architecture task is to close D-01/D-02 first, then freeze the API/WSS/
 A detailed proposed resolution for D-01–D-12 is now recorded in `sem-02d-closure-design-proposal.md`. It supplies candidate physical models for the execution barrier and minimum HIR, versioned HTTPS routes/error semantics, WSS envelope and lifecycle messages, seven SEM table structures, application ports/adapters, key lifecycle, encrypted Claim idempotency retention, E3 process identity, command state mapping, HIR transitions, and credential boundaries.
 
 **Status remains Proposed, not ratified.** The proposal does not silently close any D item or change ADR-SEM-01–25. User confirmation is required for the explicitly listed choices. D-12 also requires a fresh implementation-level credential inventory before its gate can be marked complete. No code, migrations, Docker, Compose, Worker loops, API or Runner implementation changed. Phase 0 remains not started.
+
+
+## 10. D-13 resource-aware Runner admission proposal (2026-11-25)
+
+The closure proposal now includes D-13: Runner Supervisor reports CPU utilization/capacity, memory total/available/pressure, and free space on the actual Workspace volume over the existing WSS connection. SEM uses fresh snapshots plus task resource profiles and atomic per-Runner reservations to decide whether the same PC can accept concurrent Runs. Stale/unknown metrics stop new dispatch; they do not terminate active work or count as E1/E2/E3 evidence. The proposed V1 reuses `runner_connection` for the latest snapshot and `dispatch_operation` for reservation lifecycle, avoiding an additional mandatory SEM table. D-13 remains Proposed and requires explicit user ratification.
