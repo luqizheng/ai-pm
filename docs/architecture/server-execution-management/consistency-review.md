@@ -23,7 +23,7 @@ The following rules are now stated consistently across the overview, decision re
 13. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
 14. Harness Resume remains disabled until exact-version real-world acceptance.
 15. SEM is the sole Runner dispatch/handoff coordinator; Runner does not poll Platform MCP for Claim/control commands. Platform alone grants Lease/Generation.
-16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals. Proposed Lease Renewal path is Runner Supervisor WSS → SEM → Platform HTTPS; WSS liveness and Harness Agent Activity do not renew. This remains a proposed baseline pending user confirmation.
+16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals. ADR-SEM-21 freezes the only Lease Renewal path as Runner Supervisor WSS → SEM → Platform HTTPS; WSS liveness and Harness Agent Activity do not renew. Design decision is closed; implementation acceptance remains open.
 
 ## 2. Required pre-implementation closure gates
 
@@ -65,7 +65,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 
 The following decisions are closed: (a) Claim is requested by SEM for a specific target Runner; (b) Runner control operations use WSS, while Harness business operations retain Platform MCP; (c) Runner does not poll Platform MCP for Claim, commands, ACK or recovery. Platform remains the only Lease/Generation authority. These decisions require implementation and acceptance evidence; they are not current-code facts.
 
-Lease Renewal via Runner Supervisor WSS → SEM → Platform HTTPS is a proposed baseline, not yet a user-ratified decision. Service JWT authentication, WSS connect-ticket/revocation and SEM DB schema are likewise proposals pending review.
+Lease Renewal via Runner Supervisor WSS → SEM → Platform HTTPS, service JWT authentication, WSS connect-ticket/revocation, SEM private DB schema and cross-service idempotency are ratified by ADR-SEM-21–25. G-18–G-21 design decisions are closed; their implementation and fault-injection acceptance evidence remains outstanding.
 
 ## 5. Known design details still requiring code-level reconciliation
 
