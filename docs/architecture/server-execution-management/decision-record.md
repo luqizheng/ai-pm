@@ -95,3 +95,10 @@
 5. Runner 不得直接轮询 Platform MCP Claim、命令、ACK 或恢复控制接口。迁移完成后删除这些旧控制写路径，不保留双通道；Harness MCP 业务能力不受影响。
 6. `supervised` Runner 的用户确认由 SEM 调度流程收集；用户选择只是授权意图，Platform Claim 成功才授予执行权。默认 `unattended`，按策略自动选择。
 7. SEM DB 仅保存 Runner 连接、Inbox、WSS 投递账本、进程观察和本地执行协调状态；不复制 Run/Lease/Generation/worker_command 的业务权威状态。
+
+
+## H. SEM-02D 批量设计评审状态（2026-11-25）
+
+用户要求将剩余设计一次性提交、后续集中评审。D-01–D-12 已形成完整候选设计包，统一为 Review Pending，详见 `sem-02d-review-package.md` 与 `sem-02d-closure-design-proposal.md`。本节不是 ADR，不改变 A 节已裁决项，也不把候选设计标记为 Ratified。D-13 已由用户批准并登记为 ADR-SEM-26。
+
+评审通过后，仅将用户明确批准的项目登记为新的 ADR；如用户要求修订，先更新设计和所有引用，再记录批准状态。Phase 0 仍未启动。D-12 的代码级凭据注入/继承/泄漏面盘点是 Phase 0 前的强制只读门槛。
