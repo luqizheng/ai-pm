@@ -57,7 +57,7 @@
 - Runner E3 ACK：Phase 0 可先让远程 Runner 全部走 E4 安全挂起；E3 通道实现必须满足 OQ-3 的证明标准后才允许作为 E3。
 - E4 scheduling shield：必须通过并发 claim、过期租约、迟到心跳、重启恢复和人工解除测试。
 
-## D. 政策合规自查（`engineering-lifecycle-policy.md` §3/§4）
+## F. 政策合规自查（`engineering-lifecycle-policy.md` §3/§4）
 
 - ✅ 事务完整性与并发安全：Phase 0 全部走现有 `claim_core` 事务模板/锁序，不新开旁路。
 - ✅ 唯一执行权与安全进程/工作区生命周期：ADR-SEM-04/05 即为此设立。
