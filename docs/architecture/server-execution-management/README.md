@@ -147,7 +147,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：代码契约映射初审已完成，全量一致性审查与 10 项接口门槛关闭仍在进行。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。
+- **SEM-02C：代码契约映射初审已完成，全量一致性审查与 18 项接口门槛关闭仍在进行。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
 - 本轮仅新增 `code-contract-mapping.md` 并更新架构索引；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
