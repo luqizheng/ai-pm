@@ -26,6 +26,7 @@
 | ADR-SEM-17 | Workspace/Worktree/Git Mirror 不做备份；运行期间仍使用持久卷，丢失后按 E4/E5 安全隔离，不得推断进程死亡 | 用户明确决策；这些内容可由唯一 origin 重建，运行现场不作为备份目标 | 产品未来明确要求灾难恢复现场 |
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
 | ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |
+| ADR-SEM-20 | **SEM 是 Runner 控制面的唯一派发与接管协调者。** Runner 不再主动轮询 Platform MCP Claim、命令或恢复接口；SEM 选择/确认目标 Runner 后，代表该 Runner 调用 Platform HTTPS API 请求 Claim，Platform 在权威事务中校验目标设备/项目授权/可执行性并签发 Lease、Generation。成功后 SEM 才能经 WSS 派发。Harness 保留 Platform MCP 业务访问。 | 用户于 2026-11-24 明确确认；避免 Runner 直连 Claim 与 SEM 调度形成双控制面 | 若未来需 Runner 直连 Platform 控制面，必须另立 ADR；不得静默恢复双路径 |
 
 ## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
 
@@ -75,3 +76,14 @@
 - ✅ 关键状态迁移可审计：HIR/回收/接管全链路审计行（`runner-supervision-and-handoff.md` §4.2 ⑧）。
 - ✅ 空库完整初始化：Phase 2/3 的 Schema 增量走迁移链，验收含空库初始化。
 - ✅ 本政策不授权实施：本文档仅为设计，实施待架构复审批准。
+
+
+## ADR-SEM-20 的强制协议约束
+
+1. SEM 是唯一 Runner 调度入口；Platform 是唯一执行权授予者。SEM 的调度选择不构成执行权，必须等待 Platform Claim 成功响应。
+2. Claim 请求必须包含经认证的目标 Runner/device identity。Platform 自行校验设备注册、租户/项目绑定、权限、监督策略、Scheduling Shield 与并发条件；不得信任 SEM 或 Runner 自报的裸 device_id。
+3. Runner WSS 控制面唯一承载 Claim 协调、Runner Supervisor Heartbeat、Lease Renewal 请求、命令投递/ACK、取消、恢复/接管控制。Harness Platform MCP 保留业务上下文、Agent Activity、交互和交付/结果操作。
+4. Lease Renewal 只由 Runner Supervisor 经 WSS 发起，SEM 通过服务 API 转发给 Platform 校验并提交；Harness Agent Activity 不续租。WSS liveness、Lease Renewal、Harness Activity 是三种不同事实。
+5. Runner 不得直接轮询 Platform MCP Claim、命令、ACK 或恢复控制接口。迁移完成后删除这些旧控制写路径，不保留双通道；Harness MCP 业务能力不受影响。
+6. `supervised` Runner 的用户确认由 SEM 调度流程收集；用户选择只是授权意图，Platform Claim 成功才授予执行权。默认 `unattended`，按策略自动选择。
+7. SEM DB 仅保存 Runner 连接、Inbox、WSS 投递账本、进程观察和本地执行协调状态；不复制 Run/Lease/Generation/worker_command 的业务权威状态。
