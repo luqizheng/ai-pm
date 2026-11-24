@@ -32,7 +32,7 @@ Status: normative design target. Exact route/function names must be reconciled w
 
 ### 2.3 API contract requirements
 
-- Version prefix (for example `/internal/sem/v1/`); exact routes are finalized during SEM-02C code mapping.
+- Version prefix (for example `/internal/sem/v1/`); exact routes, DTOs, status codes and error envelopes must be frozen in SEM-02D before Phase 1 implementation.
 - Service-to-service authentication, TLS, least-privilege scopes, request correlation ID, idempotency key, timeout and bounded retry policy.
 - Mutating calls carry Run ID and expected generation where applicable; stale generation and mismatched ownership fail closed.
 - No distributed transaction across Platform and SEM databases. Use outbox/inbox, idempotency, explicit operation state and reconciliation/compensation.
@@ -62,7 +62,7 @@ User selection of a Runner is not a claim and grants no execution ownership. The
 These are three distinct signals and must never be conflated:
 
 1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence, and does not automatically renew a Lease.
-2. **Lease Renewal（建议方案）**: Runner Supervisor 通过专用 WSS `lease.renew` 消息发起，SEM 转发到 Platform HTTPS API。Platform 独立校验并提交续租。该方案已由用户确认并由 ADR-SEM-21 冻结。
+2. **Lease Renewal（ADR-SEM-21 唯一正式路径）**: Runner Supervisor 通过专用 WSS `lease.renew` 消息发起，SEM 转发到 Platform HTTPS API。Platform 独立校验并提交续租。该路径已由用户确认并由 ADR-SEM-21 冻结。
 3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools。它只记录业务/执行活动，不续租。
 
 Renewal constraints:
