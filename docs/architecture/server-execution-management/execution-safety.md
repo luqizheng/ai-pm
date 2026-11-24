@@ -67,12 +67,12 @@ sequenceDiagram
 |---|---|---|---|---|
 | E1 | 进程退出码（poll 三证据之一：exit status） | SEM（同主机） | worker spawn | **已死，可回收** |
 | E2 | pid 文件存在但 OS 进程不存在（pid + children map 双证） | SEM（同主机） | worker spawn | **已死，可回收** |
-| E3 | Runner 终止 ACK（cancel 命令被 ack / runner 自报 exit） | Client Runner | runner spawn | **已死，可回收** |
+| E3 | Runner Supervisor 对精确进程身份的 OS 退出观察并认证上报（自然退出/主动终止/清理/boot transition） | Client Runner | runner spawn | **已死，可回收** |
 | E4 | 心跳死亡超过宽限窗（≥ N 个心跳周期，`heartbeat*2 < lease_secs` 已在 runner 侧成立） | DB | runner / mcp | **疑似死亡，只允许隔离，不允许重派** |
 | E5 | `Uncertain`（三证据不可确证，T1 语义） | SEM | worker spawn | **疑似存活，保留 + 告警** |
 
 **规则 R-SAFE-1**：重派（新建/回 queued 可再领）只允许在 E1/E2/E3 之上。
-**规则 R-SAFE-2**：仅有 E4 时允许做的是「隔离」（旧 Run 终态化/挂起 + 建 HIR），**不允许**自动重派。
+**规则 R-SAFE-2**：仅有 E4 时默认只允许隔离、建 HIR，**不允许自动重派**；如需人工风险接受，必须单独走 E6，不能把风险接受写成终止证据。
 **规则 R-SAFE-3**：E5 永不回收，沿用 T1 语义。
 
 ## 3. 修复设计（Phase 0 内容，两处）
