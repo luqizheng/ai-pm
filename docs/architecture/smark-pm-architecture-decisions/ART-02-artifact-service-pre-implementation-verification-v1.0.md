@@ -689,14 +689,17 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 
 **解释边界：** 这是有明确容器/database/user 标识的 full-dev 历史快照，优于没有环境标识的裸 rowcount，但仍不是生产数据，也不是当前实时状态。不能据此直接 DROP、TRUNCATE、跳过数据映射或宣布迁移零风险。
 
-### 14.5 对 Artifact Service 迁移的影响
+### 14.5 对 Artifact Service 新实现的影响
 
-- **Artifact / Version：** `viz.artifact` 是最直接的候选数据来源。迁移时需保留每条 Spec、slot/version、state、source_hash、provenance、renderer 信息与时间戳；必须先确定 draft/rejected/stale 的历史保留策略，以及目标 Artifact Version 的映射。
-- **Render Output：** 只有在确认真实数据和实际读取者后，才决定将 HTML/SVG/PNG 内容迁移为 Artifact Version Output 或可重建产物。旧表按 artifact+format UPSERT 的覆盖语义必须显式处理，不能假设存在多次渲染历史。
-- **Approval：** 继续由 AI-PM 保持业务审批权威，不搬入通用 Artifact Service。迁移后应以稳定的 artifact/version 引用关联审批，保留原审批记录与裁决审计。
-- **Slot Config：** 继续属于 AI-PM 业务策略，不迁移为 Artifact Service 通用配置。由于当前未发现应用层消费者，应先确认其目标语义和未来消费者，再决定保留、补齐实现或废弃。
-- **业务引用：** JSONB Spec/provenance 内可能含 requirement/design/task/knowledge 等对象引用；必须做结构化提取、有效性校验和迁移映射，数据库外键清单不足以覆盖这些依赖。
-- **切换策略：** 先建立旧表到 Artifact Service 的只读映射与校验工具，再分阶段切换写入和读取；不得长期双写。旧表保留到回滚窗口关闭、引用审计完成、对象 hash/数量核对通过后，才可另行批准退役。
+产品负责人已于 2026-11-24 确认 AI-PM 尚无真实用户使用、没有真实业务数据。因此不执行旧数据迁移。ART-02E 的 full-dev 四表 0 行证据与该产品状态相符，但两者证据来源不同。
+
+旧表结构只用于识别新实现需要承接的职责，不作为数据 backfill 来源：
+
+- **Artifact / Version / Output：** 新产物直接进入 Artifact Service 新 schema；不复制旧 `viz.artifact` 或 `viz.render_output` 行/文件，不建立旧 ID 映射。
+- **Approval：** 审批权威继续归 AI-PM；在新 AI-PM 业务模型中实现，不迁移旧审批记录。
+- **Slot Config：** 槽位策略继续归 AI-PM；在新 AI-PM 业务模型中实现，不迁移旧配置记录。
+- **业务引用：** 新 VizSpec / provenance 使用正式的 AI-PM 业务引用契约；无需扫描或转换不存在的历史业务行。
+- **旧代码清理：** 先移除旧表的 handler、service、query、repository、worker、SQL 和测试依赖，再通过后续 AI-PM migration 删除旧表及专属数据库对象。
 
 ### 14.6 ART-02D 核验矩阵与决定
 
@@ -707,19 +710,21 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 | render_output 生产调用链 | NOT FOUND IN REVIEWED TREE | 写入函数存在，但未发现生产调用方或 pm-api 读取路由 |
 | slot_config 应用层消费者 | NOT FOUND IN REVIEWED TREE | 当前仅确认 schema 与设计定义 |
 | 2026-11-15 full-dev 行数 | VERIFIED-HISTORICAL | 四表均为 0；仅适用于该历史 full-dev 快照 |
-| 当前目标环境 / 生产实时行数 | NOT VERIFIED | 本次未连接数据库 |
-| JSONB 业务引用的实际数据分布 | NOT VERIFIED | 未读取业务行内容 |
-| 外部消费者、运维脚本或人工 SQL 依赖 | NOT VERIFIED | 仓库静态搜索不能证明仓库外不存在调用者 |
+| 2026-11-24 full-dev 行数与 schema | VERIFIED-RUNTIME（ART-02E） | 四表均为 0；Schema 与 migration 0020 一致；仅适用于被核验的 full-dev 环境 |
+| 产品是否存在真实用户和业务数据 | PRODUCT-OWNER-CONFIRMED | 产品负责人确认无真实用户使用、无真实业务数据；不是数据库查询结论 |
+| 生产环境实时行数 | NOT VERIFIED | 未连接生产数据库；该项不再构成历史迁移阻断，因为迁移已取消 |
+| 外部消费者、运维脚本或人工 SQL 依赖 | NOT VERIFIED | 仓库静态搜索不能证明仓库外不存在调用者；删除前仍须完成部署代码版本与仓库内依赖清理检查 |
 
 **ART-02D 决定：**
 
-1. 当前代码证据足以确认 Artifact 与 Approval 的应用层读写边界；render_output 与 slot_config 目前存在“Schema 已建、生产接线未证实”的实现缺口。
-2. 历史 full-dev 快照中四表为 0 行，但不能将其作为生产清空证明或当前迁移批准依据。
-3. 继续冻结真实数据迁移与旧表退役；下一步必须取得目标环境脱敏只读 rowcount、表结构/约束快照、应用版本/迁移版本，以及仓库外消费者确认。
-4. ART-01 的职责分工维持：Artifact/Version/Output 归通用 Artifact Service；Approval、Slot Config、项目授权和业务引用语义继续由 AI-PM 持有。
-5. ART-02D 完成的是仓库静态核验与历史证据复核，不代表生产数据核验、迁移演练或退役批准已完成。
+1. 当前代码证据确认 Artifact 与 Approval 的应用层读写边界；render_output 与 slot_config 当前未发现生产接线。
+2. ART-02E 已确认被核验的 full-dev 数据库四表均为 0 行；产品负责人另行确认 AI-PM 没有真实用户和业务数据。两项证据分别记录，不相互冒充。
+3. 正式取消旧 viz.* 数据迁移、backfill、旧 ID 映射、历史文件复制和兼容层。
+4. Artifact/Version/Output 由 Artifact Service 新实现承接；Approval、Slot Config 和其他 Visualization 业务语义仍由 AI-PM 新模型承接。
+5. 旧表必须在新实现切换、旧代码依赖移除、构建与测试通过后，通过后续 AI-PM migration 删除；不能只 DROP 表而保留旧代码调用。
+6. 两个 P0（安全 Artifact delegation、File Service 可验证 upload-intent/finalize/checksum/object verification/cleanup-compensation）仍阻断生产使用，但不阻断独立仓库和非生产基础开发。
 
-**当前状态：ART-02D 静态核验完成；目标环境实时数据、仓库外消费者与迁移演练仍 OPEN。**
+**当前状态：ART-02D 静态核验与 ART-02E full-dev 运行态核验已完成；ART-02F 已确认无历史数据迁移。进入 ART-03 独立仓库建设与 P0 契约实现。**
 
 
 ## 15. ART-02F — 产品使用状态与旧数据处理决策
