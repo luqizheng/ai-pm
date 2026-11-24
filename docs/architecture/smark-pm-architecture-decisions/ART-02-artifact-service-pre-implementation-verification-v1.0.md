@@ -388,3 +388,115 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 2. 建立可验证 checksum 和 finalize 的通用文件提交协议。
 
 下一步 ART-02B 应在真实测试环境验证 Service JWT 的签发身份、`aud=file-service`、tenant scope、bootstrap owner allowlist，以及 File Service 上传/预签名/下载/删除的跨租户负例。ART-02C/02D 仍分别核验 RustFS 运维与目标数据库实时数据。
+
+
+---
+
+## 12. ART-02B：File Service 契约与测试证据复核（2026-11-24）
+
+> **核验对象：** `luqizheng/lmms`，Tag `v1.8.1`，peeled commit `7c382118e267ad7b9f7d3457c8648e78e662da41`。  
+> **范围：** File Service routes/service/storage、OpenAPI、Rust SDK、迁移与测试源码静态复核。  
+> **重要限制：** 本阶段没有连接用户正在运行的 token-service、file-service、RustFS 或数据库；没有使用生产凭据，也没有执行真实上传/下载/删除。因此本节的 VERIFIED 均指 VERIFIED-CODE / VERIFIED-TEST-SOURCE，不代表 VERIFIED-RUNTIME。
+
+### 12.1 API 与 SDK 能力矩阵
+
+| 能力 | v1.8.1 代码证据 | 结论 |
+|---|---|---|
+| 服务端 multipart 上传 | `routes/file.rs::upload_file` → `FileService::upload` | VERIFIED-CODE |
+| 文件元数据查询 | `GET /file/{id}/info` | VERIFIED-CODE |
+| 文件下载 | `GET /file/{id}` | VERIFIED-CODE |
+| 文件删除 | `DELETE /file/{id}` | VERIFIED-CODE |
+| 列表查询 | `GET /file/list` | VERIFIED-CODE；查询过滤参数的实现仍需独立核验 |
+| GET/PUT 预签名 | `POST /file/presign` → `ObjectStore::presign_get/presign_put` | VERIFIED-CODE |
+| Rust SDK multipart / presign / list / info / download | `sdk/rust/file-service-sdk/src/client.rs` | VERIFIED-CODE |
+| Rust SDK delete 方法 | 当前检查的 `FileClient` 未发现 | NOT FOUND IN REVIEWED SDK |
+| Upload Intent / Finalize / Commit | OpenAPI、routes、service 与 SDK 检查范围内未发现 | NOT FOUND IN REVIEWED V1.8.1 PATHS |
+| 服务端 SHA-256 / checksum attestation | 上传流程未实现；`FileInfo.hash` 被设为 `None` | VERIFIED-CODE：缺失 |
+| Multipart 流式写入 | handler 使用 `field.bytes()`，service 接收完整 `Bytes` | VERIFIED-CODE：当前路径全量缓冲 |
+| S3/RustFS 流式读取 | ObjectStore 存在 `get_stream` | VERIFIED-CODE；不等于上传支持流式 |
+
+### 12.2 上传、对象提交与一致性
+
+**VERIFIED-CODE：**
+
+1. `upload_file` 读取 multipart 的 metadata 与 file 字段；文件字段通过 `field.bytes()` 读成完整内存缓冲。
+2. `FileService::upload` 先调用 `ObjectStore::put(storage_path, data)`，再调用 `save_file_info` 插入 `file_files`。
+3. `storage_path` 使用服务端 UUID，不再拼接客户端 filename；这是正确的路径隔离方向。
+4. `FileInfo.hash` 当前明确写入 `None`，没有服务端 checksum 计算或上传后对象校验。
+5. 对象写入与元数据 INSERT 不在同一事务，也未看到失败补偿删除对象的逻辑。对象写成功、数据库写失败时可能留下孤儿对象。
+6. 删除流程先删除对象，再删除元数据；若元数据删除失败，会留下指向已删除对象的记录。
+7. 当前 presign handler 先按 `file_id` 查询既有 FileInfo，再对其 `storage_path` 生成 URL。PUT 预签名不是创建上传意图的接口；没有独立 pending 状态、一次性 upload token、完成回调或 finalize 校验。
+8. PUT 预签名对既有 storage_path 授权写入；在当前实现下，它不证明上传内容与元数据 size/hash 一致，也不具备 Artifact Version 的不可变提交语义。
+
+**ART-01 影响：** 不能直接把当前 PUT presign 当作 Artifact Version 上传协议。若未来复用 PUT，必须新增通用的 upload intent、短 TTL/单对象/单操作约束、内容长度与 checksum 约束、finalize 时服务端对象 HEAD/校验、状态转换与失败清理；Artifact Service 不应自行绕过 file-service 写 RustFS。
+
+### 12.3 预签名与 API 契约风险
+
+**VERIFIED-CODE：**
+
+- `CreatePresignUrl.operation` 在 OpenAPI 中是普通 string；service 仅对精确值 `put` 走 PUT，其余所有值都走 GET，没有严格枚举校验。
+- `expires_in_seconds` 默认 3600 秒；当前路径将负值传给存储层时以 `max(0)` 转换，但没有发现明确的业务 TTL 上限策略。
+- 生成的 presigned URL 会被写入 `file_presign_urls.url`；应评估数据库日志、审计与备份对短时签名 URL 的暴露面，并考虑仅存摘要/元数据而非完整 bearer-like URL。
+- OpenAPI 文件 `info.version` 标记为 `1.8.0`，但本次核验的 Git Tag 是 `v1.8.1`。需要确认该 OpenAPI 是生成产物未更新，还是服务契约版本独立管理；不要仅凭文件内版本号判断实际服务版本。
+
+**建议：** 对 operation 使用严格 enum（get/put），拒绝未知值；对 TTL 设置服务端最大值；对 PUT presign 限定专用 intent 记录与一次性状态；避免长期保存完整签名 URL。
+
+### 12.4 租户身份与隔离测试
+
+**VERIFIED-CODE：**
+
+- `routes/mod.rs` 对 `/file/*` 使用 `verify_aud_principal_middleware("file-service")`，要求固定 audience 的 service JWT。
+- `upload_file` 从 `TenantScope` 传入 service；`FileService::upload` 的 tenant_id 从 scope 派生，而不是信任 multipart 中的 tenant_id。
+- `get_file_info`、download、delete 与 presign 均通过 `get_file_info(id, scope)` 路径取得文件记录；查询构造器使用 `and_tenant(scope)`。
+- `sdk/rust/file-service-sdk/src/model.rs` 的 `UploadFileMeta` 不包含 tenant_id，并明确注释租户来自 service JWT 的 `tid` claim。这是正确的信任边界。
+- `tenant_isolation_test.rs` 构造 `aud=file-service` 的 service JWT，验证租户 A 不能读取租户 B 的 file info、跨租户主体可读取两边，并验证 user JWT（aud=coder-micro-services）被拒绝。
+
+**测试覆盖边界：** 当前专门的 tenant isolation test 主要验证 file info 读取和 user-JWT audience 拒绝；没有在该测试中逐项验证跨租户 upload/list/download/delete/presign。不能把单个 info 读取负例扩大解释为所有端点均已通过运行态测试。
+
+### 12.5 生命周期、过期与存储配置
+
+**VERIFIED-CODE：**
+
+- `S3Storage` 通过统一 S3-compatible driver 支持 RustFS path-style；启动配置从环境变量读取 endpoint、bucket、region 与凭据。
+- bucket 自动创建是异步 best-effort；失败只记录 warning，不阻止服务启动。部署必须显式检查 bucket 已存在且权限正确，不能把服务启动成功当作 bucket 可用证明。
+- 文件下载会检查 `expires_at` 并将过期文件表现为 not found。
+- 本次检查的 file-service `main.rs` 未发现过期文件后台清理 worker；README 对“临时文件自动清理”的描述需要在运行环境/其他调度组件中确认，不能仅凭 README 认定服务本身会清理对象。
+- 配置源码默认 backend 为 local；生产必须明确设置 `FILE_STORAGE_BACKEND=rustfs`、endpoint、bucket、path-style 和凭据来源。没有读取任何实际凭据值。
+
+### 12.6 ART-02B 结论
+
+| 检查项 | 状态 | 结论 |
+|---|---|---|
+| File Service API 基础能力 | VERIFIED-CODE | 上传、下载、删除、info、list、presign 已存在 |
+| service JWT audience gate | VERIFIED-CODE | 路由要求 `aud=file-service` |
+| TenantScope 代码隔离 | VERIFIED-CODE | 核心读写通过 scope 派生租户条件 |
+| 租户隔离测试 | VERIFIED-TEST-SOURCE / PARTIAL | 已验证 info 读隔离与 user JWT 拒绝；端点覆盖不完整 |
+| SHA-256 / checksum attestation | VERIFIED-CODE：缺失 | 当前 hash=NULL |
+| Upload Intent / Finalize | NOT FOUND IN REVIEWED PATHS | 不能作为 Artifact 上传提交协议 |
+| 上传流式处理 | VERIFIED-CODE：缺失 | multipart 当前全量缓冲 |
+| 对象与元数据原子提交/补偿 | VERIFIED-CODE：缺失 | 存在孤儿对象/元数据不一致窗口 |
+| Presign operation/TTL 限制 | VERIFIED-CODE：不足 | operation 非枚举；未发现明确 TTL 上限 |
+| RustFS 运行态、bucket 权限与恢复 | NOT VERIFIED | 需部署环境验证 |
+| 真实跨租户 API 负例 | NOT VERIFIED | 本轮没有连接实际部署环境 |
+
+**ART-02B 决定：**
+
+1. 保留 file-service 作为 Artifact Service 的唯一对象存储控制面；Artifact Service 不直接持有 RustFS 长期凭据，也不绕过 file-service。
+2. 当前 file-service 可用于受控的普通文件存取，但**不得直接作为 Artifact Version 的最终提交协议**。
+3. 继续将“通用 upload-intent + checksum + finalize + 对象状态验证 + 清理补偿”列为 P0 存储契约阻断项。该能力应在 file-service 通用层实现，不在 Artifact Service 内重复实现。
+4. 先完成运行态验证，再冻结 ART-01 的 file-service adapter contract；不能用源码单测代替真实 token-service/file-service/RustFS 联调。
+
+### 12.7 运行态验证清单（需要部署环境）
+
+以下项目必须由连接到目标测试环境的执行者完成；只需提供脱敏结果，不要提交 token、Authorization header、签名 URL、密钥或用户文件内容：
+
+- [ ] 使用受控 bootstrap owner 签发 service JWT；确认调用者身份、`aud=file-service`、`tid`、`ct` 与有效期。
+- [ ] 用 tenant-A token 上传测试文件；确认返回 tenant_id 来自 token，而不是请求 metadata。
+- [ ] tenant-B token 对 tenant-A 文件执行 info、download、presign、delete，全部应返回统一的 not-found/deny 结果；并验证 tenant-A 文件仍完整可读。
+- [ ] 普通 user JWT（错误 audience）访问所有 file routes，应在路由层被拒绝。
+- [ ] 验证 GET/PUT presign 的实际 TTL、operation 行为、签名 URL 过期后不可用；不要把 URL 本身写入报告。
+- [ ] 模拟对象写成功但 metadata insert 失败、对象删除成功但 metadata 删除失败，确认补偿/告警/修复策略。
+- [ ] 验证 RustFS bucket、service access policy、持久卷、备份和恢复；至少完成一次独立恢复演练。
+- [ ] 记录部署镜像 digest、服务版本、测试时间、测试用例 ID 与脱敏结果。
+
+**当前状态：ART-02B 源码/测试证据复核已完成；真实运行态验证仍 OPEN。** 在拿到上述脱敏测试证据前，ART-02B 不得标记为 runtime PASS，ART-03 也不得据此解除 P0。
