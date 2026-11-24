@@ -46,7 +46,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 
 1. The exact physical representation of Scheduling Shield (dedicated columns/table versus a carefully constrained existing field) must be chosen only after tracing every candidate and recovery query. The invariant is fixed; physical schema is not yet frozen.
 2. The exact HIR physical schema and API surface are target designs, not existing endpoints.
-3. The current Runner command poll/ack implementation must be traced to prove it can carry E3 evidence securely. If not, document the minimal protocol extension before implementation.
+3. The Runner WSS command/ACK implementation must be traced to prove it can carry authenticated E3 termination evidence bound to Run, generation, command and process identity. Existing HTTP poll/ack paths must not remain an alternate authority channel unless explicitly retained as a documented fallback.
 4. The current executor credential path must be inventoried per Harness; do not assume every credential can be revoked while a child process is running.
 5. OS-specific process identity and termination observation must be verified on supported SEM host OS/runtime.
 6. Exact Harness Resume behavior is an empirical gate, not a paper-only capability flag.
