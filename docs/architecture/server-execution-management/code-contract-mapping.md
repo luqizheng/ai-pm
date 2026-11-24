@@ -4,7 +4,7 @@
 >
 > 审计基线：master @ 702593fc6a17abeb3378c11c5885ade4566e7bff
 >
-> 本文区分三类信息：现状事实由当前 master 代码直接确认；目标约束由 ADR-SEM-19 规定；待定契约必须在 SEM-02C 设计阶段明确，不能当作已实现。
+> 本文区分三类信息：现状事实由当前 master 代码直接确认；目标约束由 ADR-SEM-19/20 规定；待定契约必须在 SEM-02C 设计阶段明确，不能当作已实现。
 
 ## 1. 审计结论
 
@@ -88,15 +88,15 @@ SEM 可以持有执行侧私有事实，例如本机 PID/进程句柄、进程�
 
 | 当前 Runner 动作 | 当前路径 | SEM-02C 要求 |
 |---|---|---|
-| Claim 指定 Task | pm_claim_task → Platform MCP | 明确由 Runner 直接请求 Platform，还是经 WSS 由 SEM 协调后调用 Platform Claim API；只能有一个 Claim 权威入口 |
+| Claim 指定 Task | 当前 pm_claim_task → Platform MCP | **已关闭：SEM 唯一调度入口；SEM 通过 Platform HTTPS API 代表目标 Runner 请求 Claim，Platform 原子授权；Runner 不再直接 Claim** |
 | Run Context | pm_get_run_context → Platform MCP | 评估保留 Harness 直连 MCP，或由 Runner/SEM 代理读取；授权语义不变 |
 | Agent Progress / Result | Harness → Platform MCP | 默认保留业务工具语义；任何代理路径都必须由 Platform 校验 Lease Token 与 Generation |
-| Runner Supervisor Heartbeat | 当前 pm_report_progress → Platform MCP | WSS Heartbeat 应只证明 Runner 监督循环存活；不得等同 Agent Activity 或进程存活 |
-| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | 明确唯一续租主体与路径，避免 Runner WSS 与 Harness MCP 双重续租 |
+| Runner Supervisor Heartbeat | 当前 pm_report_progress → Platform MCP | **迁至 Runner→SEM WSS；只记录 Runner supervisor liveness，不等同 Agent Activity 或进程存活** |
+| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | **已关闭：Runner Supervisor→SEM WSS→Platform HTTPS API 是唯一续租路径；Harness Agent Activity 不续租** |
 | Interaction Marker | Runner → pm_report_interaction | 可保留 Platform 业务 API/MCP；若经 SEM 转发，需保持事件幂等与租约校验 |
-| Command Delivery | pm_poll_commands → Platform MCP | WSS 推送/投递；SEM 保存传输账本，Platform 保留 worker_command 状态权威 |
-| Command ACK / Termination ACK | pm_ack_command → Platform MCP | WSS 回传 ACK，SEM 转 Platform API；E3 终止证据必须绑定 Run、Generation、Command、进程身份 |
-| Lease Reacquire / Recovery | pm_reacquire_lease → Platform MCP | 仍由 Platform 原子签发新 Generation；WSS 仅传输请求/结果，不可自行接管 |
+| Command Delivery | pm_poll_commands → Platform MCP | **迁至 SEM WSS 推送/投递；SEM 保存传输账本，Platform 保留 worker_command 状态权威；Runner 不再 MCP 轮询** |
+| Command ACK / Termination ACK | pm_ack_command → Platform MCP | **迁至 WSS 回传，SEM 转 Platform API；E3 终止证据绑定 Run、Generation、Command、进程身份** |
+| Lease Reacquire / Recovery | pm_reacquire_lease → Platform MCP | **由 SEM 协调并调用 Platform API；Platform 原子签发新 Generation；Runner 不自行恢复/接管** |
 | Consumption Receipt | pm_report_consumption → Platform MCP | 保留 Platform 证据校验，不得由 SEM 伪造消费证据 |
 
 ### 5.1 身份与撤销
@@ -171,3 +171,18 @@ Runner 当前通过 MCP 做 Claim、Lease Renewal、命令轮询/ACK、恢复和
 10. 现有 ai-pm-worker 各循环如何拆分；哪些循环继续留在 Platform，哪些执行事实必须在 SEM 主机采集？
 
 **本阶段结论：** 当前代码能够提供业务状态机、Claim 事务、Lease/Generation fencing、Outbox、命令状态机和本机执行器的基础能力；但 Platform–SEM 服务 API、SEM 私有持久化、Runner WSS、服务认证和跨服务恢复均尚未实现。完成上述 10 项契约关闭后，才具备开始 Phase 1 实施的条件。
+
+
+## 10. ADR-SEM-20 已关闭的控制通道契约
+
+用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。此前 §9 中 Claim 发起方、Lease Renewal 唯一路径和 Runner 控制轮询归属不再是开放问题：
+
+- SEM Scheduler 选择目标 Runner；`supervised` 必须先完成用户通知与明确选择，`unattended` 默认自动选择。
+- SEM 使用专用 service identity 调用 Platform HTTPS Claim API，并显式传入目标 Runner/device identity。Platform 不能信任裸 device_id，必须从注册/绑定记录验证身份、租户、项目、权限、监督策略、Scheduling Shield 和并发条件。
+- Claim 成功前禁止向 Runner 派发可执行命令；Claim 成功响应是 Platform 授予执行权的唯一事实。
+- Runner WSS 是控制通道唯一入口：Supervisor Heartbeat、Lease Renewal 请求、命令、ACK、取消、E3、重连同步和接管控制。
+- Lease Renewal 唯一路径：Runner Supervisor → WSS → SEM → Platform HTTPS API。Harness MCP 的 Agent Activity/Progress 只记录活动，不续租；WSS liveness 也不自动续租。
+- Harness Platform MCP 保留业务面：项目/任务上下文、Agent Activity、Interaction、交付/结果与知识业务操作。不得将业务 MCP 整体迁到 SEM。
+- 删除 Runner 对 Platform MCP 的 Claim、Lease Renewal、命令轮询/ACK、恢复/接管控制路径；不保留双控制面。迁移必须一次性关闭旧写路径并有集成测试证明无旁路。
+
+当前代码仍未实现上述目标；此处为冻结后的设计契约，不得描述为已交付功能。
