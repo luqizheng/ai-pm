@@ -10,13 +10,13 @@ Status: normative design target. Exact route/function names must be reconciled w
 - Runner supervises its local Harness process through OS process APIs.
 - Platform and SEM have no RPC coupling. Runner does not connect directly to the SEM host. No message broker is introduced.
 
-## 2. Common execution envelope
+## 2. Platform–SEM service API\n\n### 2.1 Direction and responsibilities\n\n- Platform → SEM: dispatch notification, cancellation request, policy/configuration changes, and authorized control requests.\n- SEM → Platform: claim request, execution lifecycle updates, result/error reports, termination evidence, Runner/connection telemetry and HIR-related execution evidence.\n- Platform remains the only authority that grants a Run lease or changes the authoritative Run/Generation state. SEM cannot self-assign a Run.\n\n### 2.2 Dispatch and recovery\n\n1. Platform commits the business change and an Outbox event in the same database transaction.\n2. Outbox delivery calls the versioned SEM HTTPS API. Delivery is at-least-once; each event has a stable event_id/idempotency key.\n3. SEM durably records receipt before acknowledging acceptance; duplicate event delivery returns the prior outcome.\n4. SEM requests claim through Platform API. Platform performs authorization, eligibility checks, concurrency control, generation increment, lease issuance and audit in one authoritative transaction.\n5. SEM sends the execution command to the selected Runner over WSS only after successful claim.\n6. SEM reports state and evidence through Platform APIs. On timeout/restart, SEM retries idempotently and periodically reconciles outstanding operations with Platform.\n7. Outbox notification is a wake-up/trigger, not the task payload authority. API query/reconciliation is the recovery path for missed or delayed notifications.\n\n### 2.3 API contract requirements\n\n- Version prefix (for example `/internal/sem/v1/`); exact routes are finalized during SEM-02C code mapping.\n- Service-to-service authentication, TLS, least-privilege scopes, request correlation ID, idempotency key, timeout and bounded retry policy.\n- Mutating calls carry Run ID and expected generation where applicable; stale generation and mismatched ownership fail closed.\n- No distributed transaction across Platform and SEM databases. Use outbox/inbox, idempotency, explicit operation state and reconciliation/compensation.\n- API acceptance is not proof of process start or process termination; process evidence has separate semantics.\n\n## 3. Common execution envelope
 
 Every execution-control message must be scoped to tenant/project/task as applicable, task_run_id, lease_generation, client/Runner identity, command/event ID, timestamp and idempotency key.
 
 Stale generation, mismatched client identity or missing required scope is rejected. Duplicate delivery is idempotent.
 
-## 3. Claim
+## 4. Claim
 
 A successful claim atomically:
 1. verifies tenant/project/device authorization and candidate eligibility;
@@ -29,7 +29,7 @@ A successful claim atomically:
 
 User selection of a Runner is not a claim and grants no execution ownership. The Runner may start only after a successful claim response.
 
-## 4. Heartbeat
+## 5. Heartbeat
 
 Heartbeat proves only that the Runner supervisor loop is alive:
 - renew only for exact current owner, token proof and generation;
@@ -37,7 +37,7 @@ Heartbeat proves only that the Runner supervisor loop is alive:
 - stale heartbeat cannot resurrect an old generation;
 - heartbeat does not prove Harness activity or user presence.
 
-## 5. Cancellation and E3
+## 6. Cancellation and E3
 
 Extend the existing Runner command poll/ack channel; do not add a second MCP tool solely for cancellation.
 
@@ -51,12 +51,12 @@ A cancel command carries command ID, Run ID, generation and target process ident
 
 HTTP 2xx, successful polling, command receipt or request acceptance is never proof of process termination.
 
-## 6. Result and error contract
+## 7. Result and error contract
 
-Results are accepted only after checking current lease verifier, generation and client identity. Stale results may be retained as diagnostic evidence but cannot mutate authoritative task state. Secrets are redacted before persistence.
+Results are accepted by Platform only after checking current lease verifier, generation and client identity. SEM forwards evidence through the authenticated service API; it does not write Run state directly. Stale results may be retained as diagnostic evidence but cannot mutate authoritative task state. Secrets are redacted before persistence.
 
 Distinct error categories include stale_generation, lease_owner_mismatch, lease_expired, scheduling_shield_active, run_not_claimable, process_identity_mismatch, termination_not_observed and authorization_denied. Map them to existing API conventions rather than inventing a parallel error system.
 
-## 7. Versioning
+## 8. Versioning
 
 Persist protocol version in command/event payloads. Unknown mandatory versions fail closed for destructive actions. Exact wire fields and status codes are implementation tasks requiring code-level reconciliation.
