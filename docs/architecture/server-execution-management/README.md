@@ -5,7 +5,7 @@
 - 本文档基于 master `50804ca7` 复核后定稿
 - 性质：**架构设计与迁移方案定稿**。本阶段只读代码、只写文档，未修改任何业务代码 / 迁移 / Dockerfile / Compose / Worker 主循环。
 - 工程政策：Greenfield（`docs/architecture/engineering-lifecycle-policy.md`，AGENTS.md 第 7 条引用；
-  政策源于 GitHub master `f640cc07`/`9465c55a`，已合并本地 master `4ecb2985`）。
+  政策文件与 AGENTS.md 引用均已进入 master；以当前 master 文件内容为准）。
   核心约束：无历史生产数据/客户/正式版本，可直接重构 Schema、Session 数据模型、Worker 角色装配与内部接口，
   废弃表/字段可提删除方案，不留兼容层；但**不降低执行安全要求**（事务完整性、唯一执行权、
   进程/工作区安全生命周期、凭据安全、关键状态可审计、全新库可完整初始化）。
@@ -114,5 +114,5 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 ## 本阶段状态
 
-- Git HEAD：`4ecb2985`（本地 master = origin/master + github/master 政策合并；见最终报告）
-- 本目录文档为本阶段唯一产出；**SEM-02B 决策更新中；未开始 Phase 0 实施**。
+- Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
+- 本目录文档为本阶段唯一产出；**SEM-02B 决策与契约文档补齐中；未开始 Phase 0 实施**。
