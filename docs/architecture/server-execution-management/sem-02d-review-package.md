@@ -1,9 +1,9 @@
-# SEM-02D — 完整设计评审包（D-01–D-13）
+# SEM-02D — 架构评审包（D-01–D-13 + Corrective Findings）
 
-- 状态：**Design Package Complete — Review Pending**
+- 状态：**Design In Progress — Corrective Design Review Pending**
 - 日期：2026-11-25
 - 仓库：`luqizheng/ai-pm`，分支：`master`
-- 性质：完整架构设计基线，等待项目负责人评审；不是实施授权。
+- 性质：候选架构设计与评审记录；上一轮完整性结论已撤回，修正设计仍待评审；不是实施授权。
 - 适用范围：SEM V1 的 Platform、Server Execution Management（SEM）、Client Runner、Harness 之间的服务边界、数据权威、协议、安全、故障恢复、资源调度和分阶段实施。
 - 当前状态：**只写设计文档；没有修改业务代码、数据库 Migration、Dockerfile、Compose、API、WSS 实现或 Runner/Worker 主循环；Phase 0 未启动。**
 
