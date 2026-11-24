@@ -10,12 +10,12 @@ flowchart LR
         API[pm-api :port]
         PW[pm-worker]
         WP[ai-pm-worker role=platform]
-        PG[(PostgreSQL<br/>+ 卷)]
+        PG[(Platform PostgreSQL<br/>业务权威)]
     end
     subgraph HostE["SEM 主机（新增，独立 Docker）"]
         WE[ai-pm-worker role=execution]
         CODEX[codex CLI / 其他 harness]
-        VOL[(workspace 卷<br/>AI_PM_WORKSPACE_ROOT)]
+        SDB[(SEM DB<br/>执行侧私有状态)]\n        VOL[(workspace 卷<br/>AI_PM_WORKSPACE_ROOT)]
     end
     API <--> PG
     PW <--> PG
@@ -36,7 +36,7 @@ flowchart LR
 
 - 单库共享：`delivery.task_run` 等表是三方共识的仲裁点。
 - SEM 对 DB 的写入范围：Run 状态机迁移、租约/generation、run_events、审计、执行证据（终止确认）。全部经现有 `run_dispatch`/`run_transition_guard` 通道，**不开直写旁路**（AGENTS/项目惯例：项目属性直写 SQL 的历史债不新增）。
-- Greenfield：SEM 主机部署不要求独立数据库；但全新库必须可完整初始化（政策 §3）——现有迁移链即初始化路径，本设计不新增表以外的硬依赖。
+- Greenfield：SEM 主机部署使用独立 SEM 数据库；但全新库必须可完整初始化（政策 §3）——现有迁移链即初始化路径，本设计不新增表以外的硬依赖。
 
 ## 3. Workspace 卷结构（`AI_PM_WORKSPACE_ROOT`）
 
@@ -78,7 +78,7 @@ $AI_PM_WORKSPACE_ROOT/
 
 - 卷内容（pid/日志/事件）**禁止**包含凭据明文；执行端 env 由 spawn 时注入，进程退出即消失。
 
-## 7. 启动 / 关闭顺序与健康检查
+## 7. 网络 API、认证与可用性\n\n- Platform 到 SEM：HTTPS，内部服务身份认证；API 版本化、幂等、限流并记录 request_id/event_id。\n- Runner 到 SEM：WSS，Runner 主动建立连接；断线重连后必须先同步当前命令/Generation，不得盲目重放旧命令。\n- SEM 不可达时，Platform Outbox 保留未成功投递事件并重试；SEM 恢复后通过 API 对账。SEM 不可达不影响 Platform 业务服务。\n- SEM 无法访问 Platform API 时，不得自行签发 Lease 或改变权威 Run 状态；在途执行按执行安全模型处理。\n\n## 8. 启动 / 关闭顺序与健康检查
 
 **启动**：PostgreSQL → Platform（api/worker）→ SEM（execution worker）。
 - SEM 健康检查 = 进程存活 + DB 连通 + `AI_PM_WORKSPACE_ROOT` 可写 + 执行器（codex CLI）存在。任一失败 → 容器不 ready，不领 Run（领取门控天然停摆，在途 Run 由证据模型保护，不会被误回收——`execution-safety.md` 的 E4/E5 挂起语义保证 SEM 宕机是**安全的**）。
@@ -91,7 +91,7 @@ $AI_PM_WORKSPACE_ROOT/
 - DB 不可达：worker 轮询报错退避（现状），无新行为。
 - Platform 宕机：SEM 继续按租约语义收尾在途 Run（写 DB 失败则退避重试），不产生孤儿——租约与证据都在 DB，恢复后语义自洽。
 
-## 8. Greenfield 部署基线
+## 9. Greenfield 部署基线
 
 - Phase 2 的 compose 变更允许**直接改写**现有 `docker-compose.ai-pm.yml` / 新增独立执行主机 compose 文件，不需要保留旧部署形态的兼容开关——但默认 `AI_PM_WORKER_ROLE=all` 的单机形态必须继续可用（开发态零漂移是工程惯例，不是兼容包袱）。
 - 全新环境初始化 = 起库跑迁移 → 起 Platform → 起 SEM，无手工步骤（政策 §3「Complete initialization from an empty database」）。
