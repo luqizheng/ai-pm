@@ -4,7 +4,7 @@
 >
 > 审计基线：master @ 702593fc6a17abeb3378c11c5885ade4566e7bff
 >
-> 本文区分三类信息：现状事实由当前 master 代码直接确认；目标约束由 ADR-SEM-19/20 规定；待定契约必须在 SEM-02C 设计阶段明确，不能当作已实现。
+> 本文区分三类信息：现状事实由当前 master 代码直接确认；目标约束由 ADR-SEM-19–25 规定；尚未冻结的契约必须在 SEM-02D 设计阶段明确，不能当作已实现。
 
 ## 1. 审计结论
 
@@ -92,7 +92,7 @@ SEM 可以持有执行侧私有事实，例如本机 PID/进程句柄、进程�
 | Run Context | pm_get_run_context → Platform MCP | 评估保留 Harness 直连 MCP，或由 Runner/SEM 代理读取；授权语义不变 |
 | Agent Progress / Result | Harness → Platform MCP | 默认保留业务工具语义；任何代理路径都必须由 Platform 校验 Lease Token 与 Generation |
 | Runner Supervisor Heartbeat | 当前 pm_report_progress → Platform MCP | **迁至 Runner→SEM WSS；只记录 Runner supervisor liveness，不等同 Agent Activity 或进程存活** |
-| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | **建议路径：Runner Supervisor 专用 WSS `lease.renew` → SEM → Platform HTTPS API；Platform 唯一校验/提交者；WSS Heartbeat 和 Harness Agent Activity 均不续租。待用户确认** |
+| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | **正式路径（ADR-SEM-21）：Runner Supervisor 专用 WSS `lease.renew` → SEM → Platform HTTPS API；Platform 唯一校验/提交者；WSS Heartbeat 和 Harness Agent Activity 均不续租。代码尚未迁移** |
 | Interaction Marker | Runner → pm_report_interaction | 可保留 Platform 业务 API/MCP；若经 SEM 转发，需保持事件幂等与租约校验 |
 | Command Delivery | pm_poll_commands → Platform MCP | **迁至 SEM WSS 推送/投递；SEM 保存传输账本，Platform 保留 worker_command 状态权威；Runner 不再 MCP 轮询** |
 | Command ACK / Termination ACK | pm_ack_command → Platform MCP | **迁至 WSS 回传，SEM 转 Platform API；E3 终止证据绑定 Run、Generation、Command、进程身份** |
@@ -157,11 +157,11 @@ Runner 当前通过 MCP 做 Claim、Lease Renewal、命令轮询/ACK、恢复和
 | Phase 3 | ai-pm-worker 角色化装配；SEM role 仅有 SEM DB + Platform API Client + WSS listener | Platform 与 SEM 服务 API 契约通过集成测试 |
 | Phase 4 | 独立 Docker 部署、空库初始化、故障恢复与多 Runner 验收 | Workspace 仍只作可重建执行资产，不做备份 |
 
-## 9. SEM-02C 必须关闭的设计门槛
+## 9. SEM-02C 初审时列出的设计门槛（由 SEM-02D 继续关闭）
 
 1. Runner 的 Claim 由谁发起：Runner 直接调 Platform，还是 SEM 代表目标 Runner 调 Platform？
 2. Runner WSS 承载哪些控制动作；Harness 的 Platform MCP 业务工具保留哪些？
-3. Lease Renewal 唯一权威路径是什么；Runner liveness 与 Agent activity 如何分离？
+3. Lease Renewal 路径已由 ADR-SEM-21 冻结；仍需定义精确 API/WSS DTO、校验与失败语义。
 4. worker_command 业务状态留 Platform 后，SEM Delivery Ledger 的最小字段是什么？
 5. SEM DB 的最小表集合与字段所有权是什么？
 6. Platform Service Token 的签发、audience、scope、轮换和撤销机制是什么？
