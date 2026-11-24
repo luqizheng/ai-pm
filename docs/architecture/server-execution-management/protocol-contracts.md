@@ -130,3 +130,8 @@ These are ratified target design constraints, not current implementation facts.
 - A lost Claim response must never cause a second Claim or a new target Runner assignment. Recovery is bound to the original target Runner and current Platform lease validity.
 - SEM may hold the opaque Lease Token only in bounded process memory for dispatch/renewal relay; it must never persist it in DB, delivery ledger, logs, traces or error payloads.
 - Inbox acceptance is acknowledged only after the SEM Inbox transaction commits; duplicate event IDs are acknowledged idempotently.
+
+
+## 12. Resource-aware Runner reporting (D-13 — proposed)
+
+Runner Supervisor may send `runner.resource.report` over the authenticated WSS control channel. The report contains `boot_id`, monotonic `sample_seq`, `observed_at`, CPU logical count and normalized utilization windows, memory total/available/pressure, and free/total bytes for the configured Workspace volume. Runner identity is derived from the authenticated connection, not trusted from payload. Resource reports are separate from Heartbeat and never renew Lease. Stale, out-of-order, invalid, or unavailable samples make the Runner resource state `unknown` and block new dispatch; they do not prove process termination. SEM persists the latest snapshot in `runner_connection` and associates resource-profile/reservation metadata with `dispatch_operation`. Exact sampling intervals and admission thresholds are deployment-tuned and must be validated under Windows load tests; no unsupported fixed CPU/memory/disk threshold is assumed.
