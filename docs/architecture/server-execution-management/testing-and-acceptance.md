@@ -98,3 +98,17 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 
 
 > ADR-SEM-21–25 are approved architecture decisions. The tests in §§8–10 are implementation/acceptance gates and remain unpassed until the actual services and integrations exist and pass them.
+
+
+## 11. Resource-aware Runner admission (ADR-SEM-26)
+
+- Runner Supervisor reports CPU logical capacity and normalized utilization windows, memory total/available/pressure, and total/free bytes for the actual Workspace volume.
+- Resource reports use authenticated WSS identity, boot_id, monotonic sample_seq and observed_at; stale, duplicate, out-of-order or invalid samples cannot overwrite a newer snapshot.
+- Resource reporting is independent from Heartbeat and Lease Renewal; neither resource values nor resource-report loss can be interpreted as process termination evidence.
+- Task resource profiles include CPU budget, peak memory budget and expected Workspace growth; unknown profiles use conservative defaults or single-task admission, never zero-cost assumptions.
+- Concurrent dispatch attempts against one Runner cannot oversubscribe capacity: resource reservation is atomic and bound to dispatch operation / Run+Generation before Platform Claim.
+- Claim rejection releases reservation only when the Platform result is definitive; timeout/unknown outcome retains reservation and retries/query with the same claim_request_id.
+- Stale/unknown resource state blocks new dispatch but does not stop active Runs or release their reservations.
+- Memory pressure and Workspace-volume low-space thresholds reject new dispatch; CPU saturation may lower scheduling priority or pause new admission according to configured policy.
+- Reservations release only after safe terminal/termination handling; WSS disconnect, heartbeat loss, Workspace loss or resource sample expiry alone is insufficient.
+- Windows Runner long-duration concurrent load tests calibrate thresholds and verify no runaway memory/disk consumption; Linux/macOS implementations must satisfy the same normalized contract before being enabled.
