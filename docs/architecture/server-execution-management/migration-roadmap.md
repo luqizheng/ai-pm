@@ -108,3 +108,43 @@ flowchart LR
 - D-13：已批准 ADR-SEM-26。
 - D-12：Phase 0 任何凭据相关代码改动前，必须完成当前 Harness 启动链路的只读凭据注入/继承/泄漏面盘点。
 - Phase 0：Not Started。设计评审通过不自动启动实施；仍需用户明确授权开始实施。
+
+
+## 12. 评审问题修正后的阶段约束（规范性覆盖，Review Pending）
+
+本节覆盖前文 Phase 表中“HIR 到 Phase 4 才可操作”“Runner 重启平台侧无需变更”“Phase 2 只验收普通 Run”等不完整表述。详细方案见 [SEM-02D 评审问题核验与修正设计](./sem-02d-review-findings-corrective-design.md)。
+
+### Phase 0 — Safety + Minimum Human Intervention
+
+Phase 0 不再是“只修 B3-2/B06-D3”。它必须同时交付：
+- 正式 Execution Barrier Migration、最小 HIR Migration、通知收件人/投递模型；
+- HIR 最小可操作闭环：创建、查询、责任人、通知、证据追加、hold/安全处置、审计；
+- 统一 dispatchability predicate，覆盖普通 queued claim、B3-1/B3-2、B06-D3、retry/requeue、orphan reconciliation；
+- `Done{Lost}` 卷丢失误判修复，started Run 证据缺失进入 E5；
+- Execution Control Port：Runner 与 SEM-local CodexExecutor 都有明确 terminate/continue/reply-injection 消费者；
+- Interaction created 即时通知，不能只写 Audit；120 秒是 response deadline，不是通知等待。
+
+Phase 0 必须有 Migration；“无 Schema 变更”不适用于正式 Barrier/HIR/通知收件人模型。Phase 0 未实施前，E4/E5 只能安全隔离，不能假装已具备人工处置闭环。
+
+### Phase 1 — SEM Control Plane + Runner E3 + Detached Recovery
+
+- 建立 Platform–SEM HTTPS、Runner–SEM WSS、Ticket 与连接 epoch。
+- Runner process evidence spool + 自然退出/主动终止/租约丢失清理/启动清理/重启对账上报。
+- 建立 Detached → Reconciling → Active/Terminated/Quarantined。
+- 迁移后删除 Runner MCP Claim/command poll/ACK/recovery 控制旁路；Harness MCP 仅保留业务通道。
+
+### Phase 2 — 独立部署 + Full Interaction Acceptance
+
+部署验收必须包含普通任务、Interaction terminate → 用户回复 → continue → checkpoint/reply 注入 → consumed、HIR 通知/处置、E3、Runner 重启/网络分区、资源准入和 SEM 重启。不能只以一条普通 delivery Run 成功作为验收完成。
+
+### Phase 3 — Session Continuity
+
+Session Manager 只做跨执行位置生命周期仲裁。Native Session ID 在真实 Harness 执行主机采集；SEM 不读取远端 Runner 的 CODEX_HOME。Process Reattachment、Interaction Continuation、Harness Native Resume 三种能力分开验收；Native Resume 默认关闭。
+
+### Phase 4 — Advanced HIR / Cross-Runner Handoff / E6
+
+Phase 4 扩展跨 Runner 选择、supervised 通知和 E6 Human Risk Acceptance，不再首次创建 HIR、首次做通知或首次提供人工处置入口。E6 是风险授权，不是终止证据；旧 Barrier 保持未证实状态。
+
+### Phase 5 — Multi-Runner Chaos Acceptance
+
+增加 E3 spool 重放、boot transition、E5 卷丢失、E6 单次 successor、Interaction 双执行位置、通知无收件人/死信、shielded queued Run 等测试。
