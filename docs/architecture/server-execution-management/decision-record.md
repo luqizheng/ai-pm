@@ -27,6 +27,11 @@
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
 | ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |
 | ADR-SEM-20 | **SEM 是 Runner 控制面的唯一派发与接管协调者。** Runner 不再主动轮询 Platform MCP Claim、命令或恢复接口；SEM 选择/确认目标 Runner 后，代表该 Runner 调用 Platform HTTPS API 请求 Claim，Platform 在权威事务中校验目标设备/项目授权/可执行性并签发 Lease、Generation。成功后 SEM 才能经 WSS 派发。Harness 保留 Platform MCP 业务访问。 | 用户于 2026-11-24 明确确认；避免 Runner 直连 Claim 与 SEM 调度形成双控制面 | 若未来需 Runner 直连 Platform 控制面，必须另立 ADR；不得静默恢复双路径 |
+| ADR-SEM-21 | **Lease Renewal 唯一路径：Runner Supervisor → WSS → SEM → Platform HTTPS API。** WSS Heartbeat 与 Harness Agent Activity 均不续租；只有 Platform 校验通过并提交后才更新 Lease。 | 用户于 2026-11-24 确认；区分 Runner 存活、执行权续租和 Agent 业务活动 | 若未来更换监督/租约模型，另立 ADR；不得增加第二续租通道 |
+| ADR-SEM-22 | **Platform↔SEM 使用双向独立服务身份与短时非对称签名 JWT。** TLS、issuer/audience/scope/kid/jti 校验、密钥轮换；服务身份不得映射为 human principal；mTLS 可作为额外防护。 | 最小权限、可撤销、避免共享静态密钥和服务身份混入用户身份 | 若部署身份基础设施发生变化，另立 ADR；不得退回无身份内网信任 |
+| ADR-SEM-23 | **Runner 使用 Platform 签发的短时、一次性、绑定设备的 WSS connect ticket。** SEM 原子消费 jti；撤权通过 Outbox 事件主动关闭连接，并以有界周期 API 重验证兜底；授权新鲜度过期则 fail closed。 | 设备身份由 Platform 权威验证；长连接必须支持持续撤权 | 若连接认证/撤权协议升级，另立 ADR；不得仅依赖握手时认证 |
+| ADR-SEM-24 | **SEM DB 采用最小执行/传输私有数据模型。** `inbox_event`、`runner_connection`、`runner_ticket_use`、`dispatch_operation`、`command_delivery`、`platform_delivery`、`process_observation`；不复制 Platform Run/Lease/Generation/HIR/命令业务权威。 | 独立数据库和单一业务权威；SEM 只持有传输与执行侧事实 | 表结构可在不改变所有权边界前提下调整；新增业务状态副本须另立 ADR |
+| ADR-SEM-25 | **Claim 与跨服务副作用必须幂等、持久化并可恢复。** SEM 先持久化 dispatch operation；Platform Claim 与幂等结果同事务；丢失响应使用同一 `claim_request_id` 取回同一结果；SEM 不持久化明文 Lease Token。 | 避免网络超时/SEM 重启造成重复 Claim、重复执行或秘密泄漏 | 若采用具备等价保证的新协议，另立 ADR 并通过故障注入验收 |
 
 ## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
 
@@ -87,18 +92,3 @@
 5. Runner 不得直接轮询 Platform MCP Claim、命令、ACK 或恢复控制接口。迁移完成后删除这些旧控制写路径，不保留双通道；Harness MCP 业务能力不受影响。
 6. `supervised` Runner 的用户确认由 SEM 调度流程收集；用户选择只是授权意图，Platform Claim 成功才授予执行权。默认 `unattended`，按策略自动选择。
 7. SEM DB 仅保存 Runner 连接、Inbox、WSS 投递账本、进程观察和本地执行协调状态；不复制 Run/Lease/Generation/worker_command 的业务权威状态。
-
-
-## F. SEM-02C 服务协议与安全方案（建议基线，待用户确认）
-
-以下方案已形成可评审的完整建议，但尚不登记为用户已确认的 ADR；用户确认后再转入 A 节正式决策：
-
-| 建议编号 | 建议结论 | 主要约束 |
-|---|---|---|
-| ADR-SEM-21（Proposed） | Lease Renewal 唯一路径为 Runner Supervisor → WSS → SEM → Platform HTTPS API | WSS Heartbeat 与 Harness Agent Activity 均不续租；Platform 是唯一校验和写入者；SEM 不持久化 Lease Token |
-| ADR-SEM-22（Proposed） | Platform↔SEM 使用双向独立 service identity + 短时非对称签名 JWT | TLS；audience/scope/kid/jti；建议 JWT 有效期不超过 5 分钟；不进入 human principal；mTLS 可作为附加防护 |
-| ADR-SEM-23（Proposed） | Runner 使用 Platform 签发的短时、一次性 WSS connect ticket 连接 SEM | ticket 绑定 device/credential、SEM audience、scope、jti；SEM 原子消费 jti；Outbox 撤权事件 + 有界周期重验证；失去授权新鲜度则关闭连接 |
-| ADR-SEM-24（Proposed） | SEM DB 采用最小执行/传输私有表集合 | Inbox、Runner Connection、Ticket Use、Dispatch Operation、Command Delivery、Platform Delivery、Process Observation；不复制 Run/Lease/Generation/HIR/命令业务状态 |
-| ADR-SEM-25（Proposed） | Claim 与跨服务副作用必须幂等可恢复 | SEM 先持久化 dispatch operation；Platform Claim 与幂等结果同事务；丢失响应时以同一 claim_request_id 取回同一结果；SEM 不存明文 Lease Token |
-
-完整字段建议、消息、事务边界和故障矩阵见 `service-protocol-security-and-persistence.md`。
