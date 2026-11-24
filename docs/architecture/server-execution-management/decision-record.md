@@ -33,6 +33,9 @@
 | ADR-SEM-24 | **SEM DB 采用最小执行/传输私有数据模型。** `inbox_event`、`runner_connection`、`runner_ticket_use`、`dispatch_operation`、`command_delivery`、`platform_delivery`、`process_observation`；不复制 Platform Run/Lease/Generation/HIR/命令业务权威。 | 独立数据库和单一业务权威；SEM 只持有传输与执行侧事实 | 表结构可在不改变所有权边界前提下调整；新增业务状态副本须另立 ADR |
 | ADR-SEM-25 | **Claim 与跨服务副作用必须幂等、持久化并可恢复。** SEM 先持久化 dispatch operation；Platform Claim 与幂等结果同事务；丢失响应使用同一 `claim_request_id` 取回同一结果；SEM 不持久化明文 Lease Token。 | 避免网络超时/SEM 重启造成重复 Claim、重复执行或秘密泄漏 | 若采用具备等价保证的新协议，另立 ADR 并通过故障注入验收 |
 
+
+| ADR-SEM-26 | **Runner 资源感知与同机并发准入。** Runner Supervisor 通过认证 WSS 定期上报 CPU、内存及 Workspace 实际所在磁盘卷容量；SEM 使用新鲜资源快照、任务资源画像和原子资源预留，决定同一台 PC 是否接收多个并发 Run。资源未知/过期时停止新派发；资源压力不自动终止现有 Run；资源数据绝不作为 E1/E2/E3 进程终止证据。 | 用户于 2026-11-25 明确要求统一 Runner CPU、内存、磁盘资源上报，并让 SEM 据此决定同机多任务派发；资源预留避免并发调度超额承诺 | 任务资源画像、采样策略或准入算法可随真实压测调整，但不得取消原子预留、资源未知 fail-closed、新任务准入与进程终止证据分离 |
+
 ## B. SEM-01 结论修正（相对 SEM-01 文本的两处精化）
 
 1. **outbox「handler 集合一致」→「单消费者」**：SEM-01 的表述是必要不充分条件的保守版；本 V1 收敛为单消费者约束（更强、更简单）。SEM-01 无错误，属精度提升。
