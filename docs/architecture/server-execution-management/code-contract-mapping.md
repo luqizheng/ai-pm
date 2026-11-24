@@ -175,25 +175,25 @@ Runner 当前通过 MCP 做 Claim、Lease Renewal、命令轮询/ACK、恢复和
 
 ## 10. ADR-SEM-20 已关闭的控制通道契约
 
-用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。Claim 发起方和 Runner 控制轮询归属已关闭；Lease Renewal 已形成建议路径，仍待用户确认：
+用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。Claim 发起方和 Runner 控制轮询归属已关闭；Lease Renewal 唯一路径已由 ADR-SEM-21 冻结：
 
 - SEM Scheduler 选择目标 Runner；`supervised` 必须先完成用户通知与明确选择，`unattended` 默认自动选择。
 - SEM 使用专用 service identity 调用 Platform HTTPS Claim API，并显式传入目标 Runner/device identity。Platform 不能信任裸 device_id，必须从注册/绑定记录验证身份、租户、项目、权限、监督策略、Scheduling Shield 和并发条件。
 - Claim 成功前禁止向 Runner 派发可执行命令；Claim 成功响应是 Platform 授予执行权的唯一事实。
 - Runner WSS 是控制通道唯一入口：Supervisor Heartbeat、Lease Renewal 请求、命令、ACK、取消、E3、重连同步和接管控制。
-- Lease Renewal 建议采用 Runner Supervisor WSS → SEM → Platform HTTPS API；WSS liveness 和 Harness Agent Activity 均不续租。该路径见 `service-protocol-security-and-persistence.md`，待用户确认后冻结。
+- Lease Renewal 唯一路径为 Runner Supervisor WSS → SEM → Platform HTTPS API；WSS liveness 和 Harness Agent Activity 均不续租。该路径已由 ADR-SEM-21 冻结，详见 `service-protocol-security-and-persistence.md`。
 - Harness Platform MCP 保留业务面：项目/任务上下文、Agent Activity、Interaction、交付/结果与知识业务操作。不得将业务 MCP 整体迁到 SEM。
 - 删除 Runner 对 Platform MCP 的 Claim、Lease Renewal、命令轮询/ACK、恢复/接管控制路径；不保留双控制面。迁移必须一次性关闭旧写路径并有集成测试证明无旁路。
 
 当前代码仍未实现上述目标；此处为冻结后的设计契约，不得描述为已交付功能。
 
 
-## 11. Proposed SEM-02C security and persistence baseline
+## 11. Ratified SEM-02C security and persistence baseline (ADR-SEM-21–25)
 
-A complete proposed design is recorded in `service-protocol-security-and-persistence.md`:
+The user-ratified target design is recorded in `service-protocol-security-and-persistence.md`:
 - Platform↔SEM uses independent service identities, short-lived asymmetric JWTs, audience/scope checks and key rotation; service tokens are not human principals.
 - Runner obtains a short-lived single-use WSS ticket from Platform using registered device credentials; SEM consumes the ticket ID and continuously revalidates authorization via Outbox revocation events plus bounded API checks.
 - SEM minimum private persistence: Inbox, Runner Connection, Ticket Use, Dispatch Operation, Command Delivery, Platform Delivery and Process Observation.
 - Claim dispatch is idempotent across lost HTTP responses; SEM does not persist plaintext Lease Tokens.
 
-These are design proposals, not current-code facts or user-ratified ADRs.
+These are ratified target architecture decisions, not current-code facts; implementation remains outstanding.
