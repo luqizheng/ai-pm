@@ -97,3 +97,12 @@ SEM-02C may mark the architecture Design Complete only after:
 - no unresolved product-level choice remains.
 
 Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership. User has now ratified ADR-SEM-21–25, closing the design decisions for G-18–G-21. Their implementation and acceptance evidence remains outstanding; design approval does not mean the code gates have passed.
+
+
+## 8. SEM-02D final review result
+
+SEM-02D re-read the current master architecture set and the key implementation paths. The overall ADR-SEM-19–25 direction remains coherent; no new product-level architecture reversal is required. However, the architecture is **not Design Complete**. Twelve pre-implementation blockers are recorded in `sem-02d-final-architecture-review.md` (D-01–D-12): execution-safety guard physical model, Phase 0 HIR dependency, exact HTTPS and WSS wire contracts, SEM seven-table DDL, application ports/adapters for independent DB ownership, service key lifecycle, encrypted Claim idempotency result, E3 trust/process identity, command transport/business state mapping, HIR state machine, and Harness credential inventory.
+
+The review also verified current-code blockers: B3-2 still recovers an expired started Run without E1/E2/E3; `reconcile_orphans` still directly requeues a >1h expired running Run; Runner still uses Platform MCP for Claim/renewal/command polling; `ai-pm-worker` still constructs a Platform PgPool and application services directly depend on it. No Phase 0 implementation has started.
+
+The next architecture task is to close D-01/D-02 first, then freeze the API/WSS/SEM DDL and application-port contracts as a single design batch. No new ADR is created by this review.
