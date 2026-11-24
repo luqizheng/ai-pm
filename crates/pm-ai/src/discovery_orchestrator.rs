@@ -1342,6 +1342,7 @@ impl DiscoveryOrchestratorWorker {
                     }
                 }
                 self.invalid_streaks.remove(&session.id);
+                self.clear_round_error(session).await;
                 report.applied += 1;
                 report.findings_added += summary.outcome.findings_added;
                 report.questions_added += summary.outcome.questions_added;
@@ -1374,6 +1375,8 @@ impl DiscoveryOrchestratorWorker {
                     "orchestrator: no LLM provider resolved for this interview; \
                      skipping the round — nothing is written and no state is advanced"
                 );
+                self.record_round_error(session, &format!("no_provider: {reason}"))
+                    .await;
                 self.cooldowns.insert(session.id, Instant::now());
                 report.skipped_no_provider += 1;
             }
@@ -1383,6 +1386,8 @@ impl DiscoveryOrchestratorWorker {
                     error = %err,
                     "orchestrator: model call failed; retrying after cooldown"
                 );
+                self.record_round_error(session, &format!("model_error: {err}"))
+                    .await;
                 self.cooldowns.insert(session.id, Instant::now());
                 report.failed += 1;
             }
@@ -1401,6 +1406,9 @@ impl DiscoveryOrchestratorWorker {
                     "orchestrator: round persistence failed and was rolled back; \
                      retrying after cooldown"
                 );
+                // 尽力而为：DB 本身故障时这次落库也会失败，只留日志。
+                self.record_round_error(session, &format!("db_error: {err}"))
+                    .await;
                 self.cooldowns.insert(session.id, Instant::now());
                 report.failed += 1;
             }
@@ -1417,6 +1425,8 @@ impl DiscoveryOrchestratorWorker {
                     "orchestrator: model output is not usable; round dropped (nothing written), \
                      the session stays where it was"
                 );
+                self.record_round_error(session, &format!("invalid_output: {reason}"))
+                    .await;
                 report.invalid_rounds += 1;
                 if streak >= MAX_INVALID_STREAK {
                     self.halted.insert(session.id, session.last_message_id);
@@ -1458,6 +1468,39 @@ impl DiscoveryOrchestratorWorker {
             DiscoveryError::InvalidTransition { .. } => Ok(()),
             other => Err(other),
         })
+    }
+
+    /// 失败落库（B03-01：编排轮失败对用户可见）。尽力而为：落库失败只留日志，
+    /// 不影响既有冷却/重试语义。
+    async fn record_round_error(&self, session: &PendingSession, reason: &str) {
+        if let Err(err) = pm_application::discovery::record_round_error(
+            &self.pool,
+            session.tenant_id,
+            session.id,
+            reason,
+        )
+        .await
+        {
+            tracing::warn!(
+                session_id = %session.id,
+                error = %err,
+                "orchestrator: failed to persist round error for UI visibility"
+            );
+        }
+    }
+
+    /// 成功即清除失败标记（`last_round_error` 回 `NULL`）。
+    async fn clear_round_error(&self, session: &PendingSession) {
+        if let Err(err) =
+            pm_application::discovery::clear_round_error(&self.pool, session.tenant_id, session.id)
+                .await
+        {
+            tracing::warn!(
+                session_id = %session.id,
+                error = %err,
+                "orchestrator: failed to clear round error after successful round"
+            );
+        }
     }
 
     async fn try_round(

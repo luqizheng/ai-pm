@@ -9,6 +9,9 @@ export interface DiscoverySession {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** 最近一轮编排失败原因（成功一轮即清除；B03-01 失败可见性）。 */
+  last_round_error: string | null;
+  last_round_error_at: string | null;
 }
 
 export interface DiscoveryMessage {

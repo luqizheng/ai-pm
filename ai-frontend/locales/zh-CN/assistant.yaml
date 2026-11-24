@@ -20,6 +20,14 @@ assistant:
   interviewNotice: 已进入需求澄清
   interviewSegmentLabel: 需求澄清访谈
   interviewStatus: 访谈状态
+  reviewRequiredNotice: >-
+    访谈已进入待人工复核：发现已全部裁决，等你确认结果。复核前 AI
+    不会继续处理这个访谈里的新消息；退回或完结后才会恢复。
+  needsInputNotice: 访谈在等你输入：回答上方待答问题后 AI 会继续；确认结束后可完结会话。
+  resumeInterview: 退回继续访谈
+  completeInterview: 复核通过并完结
+  lastRoundError: 最近一轮处理失败（系统会自动重试）
+  transitionConflict: 访谈状态已被其他操作推进，已刷新为最新状态。
   todoTitle: 待办
   openQuestions: 待回答问题
   whyBlockingPrefix: 为什么需要问

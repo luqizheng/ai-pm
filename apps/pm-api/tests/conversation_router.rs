@@ -961,3 +961,62 @@ async fn concurrent_threads_on_one_session_never_collide_on_seq(pool: PgPool) {
         "seq 连续无重复"
     );
 }
+
+// ── B03-01（R1）：REVIEW_REQUIRED 会话不再是死信 ──────────────────────
+
+/// 续接进 `REVIEW_REQUIRED` 会话的发送 201 且回执如实携带 `interview_status`：
+/// 消息照常落访谈（记录不丢），调用方据此提示「等待人工复核」；人工退回
+/// `IN_PROGRESS` 后会话回到编排扫描集（恢复消费未处理消息）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn send_into_review_required_interview_reports_status(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let (r, _) = routing(RouterMode::Off, hit(Intent::ChitChat, 0.99));
+    let cid = new_conversation(app(pool.clone(), r.clone()), fx.project).await;
+
+    // 升级成访谈：回执即带访谈状态（此时 IN_PROGRESS）。
+    let (_, v) = send(
+        app(pool.clone(), r.clone()),
+        fx.project,
+        cid,
+        json!({"content": REQUIREMENT, "mode": "interview"}),
+    )
+    .await;
+    assert_eq!(v["landed"], "interview");
+    assert_eq!(v["interview_status"], "IN_PROGRESS", "{v}");
+    let sid = sid_of(&v);
+
+    // 人工推进到 REVIEW_REQUIRED（编排器三条件全绿时的同一状态）。
+    pm_application::discovery::transition_session(&pool, fx.tenant, sid, "REVIEW_REQUIRED")
+        .await
+        .unwrap();
+
+    // 等待复核期间再发送：201、消息落访谈（记录不丢）、回执如实告知状态。
+    let (status, v) = send(
+        app(pool.clone(), r.clone()),
+        fx.project,
+        cid,
+        json!({"content": QUERY}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(v["landed"], "interview", "{v}");
+    assert_eq!(v["interview_status"], "REVIEW_REQUIRED", "{v}");
+    let msgs = interview_rows(&pool, sid).await;
+    assert_eq!(msgs.last().unwrap().2, QUERY);
+
+    // 编排器不消费该消息（扫描谓词不含 REVIEW_REQUIRED——前提不变）。
+    let mut worker = pm_ai::ConversationReplyWorker::new(pool.clone());
+    let report = worker.reply_round().await.unwrap();
+    assert_eq!(report.skipped_no_provider, 0, "线程不在 chat 扫描集");
+    assert_eq!(
+        interview_rows(&pool, sid).await.last().unwrap().2,
+        QUERY,
+        "消息仍在，无人消费"
+    );
+
+    // 人工退回 IN_PROGRESS：会话回编排扫描集（此后编排器恢复消费）。
+    pm_application::discovery::transition_session(&pool, fx.tenant, sid, "IN_PROGRESS")
+        .await
+        .unwrap();
+    assert_eq!(session_status(&pool, sid).await, "IN_PROGRESS");
+}

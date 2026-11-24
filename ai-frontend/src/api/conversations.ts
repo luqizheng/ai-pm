@@ -101,6 +101,12 @@ export interface SendMessageOutcome extends ConversationMessage {
   landed?: "chat" | "interview" | string;
   discovery_session_id?: string | null;
   handoff?: ConversationHandoff | null;
+  /**
+   * 落点访谈会话的当前状态（landed=interview 时有值；B03-01）。
+   * `REVIEW_REQUIRED` = 访谈在等人工复核：消息已记录但 AI 不会消费，
+   * 需要人工在访谈面板退回/完结后才会继续处理。
+   */
+  interview_status?: string | null;
 }
 
 export interface ListMessagesQuery {

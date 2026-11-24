@@ -463,3 +463,59 @@ async fn session_listing_returns_created_sessions(pool: PgPool) {
     assert_eq!(list["total"], 2);
     assert_eq!(list["items"].as_array().unwrap().len(), 2);
 }
+
+/// B03-01（R1）：人工处理动作（完结/退回复核）留审计痕——跃迁与审计同事务，
+/// `after_data` 记录 from→to；会话详情如实暴露失败标记列（初始为 null）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn human_transition_writes_audit_and_exposes_round_error_fields(pool: PgPool) {
+    let project_id = seed_project(&pool).await;
+    let app = router(pool.clone());
+    let (status, body) = start_session(&app, project_id, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let session_id = body["session"]["id"].as_str().unwrap().to_string();
+    // 新列出现在会话视图（失败可见性契约）。
+    assert!(body["session"]["last_round_error"].is_null());
+    assert!(body["session"]["last_round_error_at"].is_null());
+    let base = format!("/v1/pm/projects/{project_id}/discovery/sessions/{session_id}");
+
+    let (status, moved) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("{base}/status"),
+                json!({ "status": "NEEDS_USER_INPUT" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["status"], "NEEDS_USER_INPUT");
+
+    // 复核通过并完结（B03-01 的人工处理动作）→ 审计行记录 from→to。
+    let (status, moved) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("{base}/status"),
+                json!({ "status": "COMPLETED" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+
+    let (action, after): (String, Value) = sqlx::query_as(
+        "SELECT action, after_data FROM governance.audit_log \
+         WHERE target_type = 'discovery_session' AND target_id = $1 \
+         ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(Uuid::parse_str(&session_id).unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(action, "discovery_session_transitioned");
+    assert_eq!(after["from"], "NEEDS_USER_INPUT");
+    assert_eq!(after["to"], "COMPLETED");
+}

@@ -17,6 +17,16 @@ discovery:
   questionsTitle: Blocking questions ({open} open / {total} total)
   questionsEmpty: This session has no question yet.
   answerNote: The in-page answer entry is not open yet; answers and status appear here once submitted.
+  sessionActionsTitle: Session actions
+  reviewRequiredNotice: >-
+    This session is awaiting human review: findings have all been decided and
+    your confirmation is needed. Until reviewed, the AI will not process new
+    messages in this session; resume or complete it to continue.
+  needsInputNotice: This session is waiting for your input. Answer the blocking questions and the AI continues; complete the session once you are done.
+  lastRoundError: Last processing round failed (the system retries automatically)
+  resumeSession: Resume interview
+  completeSession: Approve and complete
+  transitionConflict: The session status was changed by another action; refreshed to the latest state.
   verification:
     PENDING: Pending
     CONFIRMED: Confirmed

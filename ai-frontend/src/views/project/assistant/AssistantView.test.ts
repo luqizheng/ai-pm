@@ -52,12 +52,15 @@ vi.mock("@/api/conversations", async importOriginal => {
 // DK-F 访谈段接线：页面经 @/api/discovery 读 discovery 段（详情），
 // 这里 mock IO，断言访谈分隔条/访谈时间线/待办块的呈现。
 const getDiscoverySession = vi.fn();
+const transitionDiscoverySession = vi.fn();
 
 vi.mock("@/api/discovery", async importOriginal => {
   const actual = await importOriginal<typeof import("@/api/discovery")>();
   return {
     ...actual,
-    getDiscoverySession: (...args: unknown[]) => getDiscoverySession(...args)
+    getDiscoverySession: (...args: unknown[]) => getDiscoverySession(...args),
+    transitionDiscoverySession: (...args: unknown[]) =>
+      transitionDiscoverySession(...args)
   };
 });
 
@@ -111,7 +114,9 @@ function discoveryDetail(
       status: "NEEDS_USER_INPUT",
       created_by: "prc-1",
       created_at: "2026-11-08T10:05:00Z",
-      updated_at: "2026-11-08T10:06:00Z"
+      updated_at: "2026-11-08T10:06:00Z",
+      last_round_error: null,
+      last_round_error_at: null
     },
     messages: [
       {
@@ -719,6 +724,111 @@ describe("AssistantView（会话接线）", () => {
     expect(wrapper.text()).not.toContain(t("assistant.interviewNotice"));
     // 既有时间线不受影响
     expect(wrapper.findAll('[data-role="user"]')).toHaveLength(2);
+  });
+
+  // ────────────────────────────── B03-01（R1）访谈人工处理入口 ──────────────
+
+  it("B03-01 REVIEW_REQUIRED 访谈给出复核提示与退回/完结入口", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "REVIEW_REQUIRED",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: null,
+          last_round_error_at: null
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    expect(
+      wrapper.find('[data-testid="interview-review-banner"]').exists()
+    ).toBe(true);
+    expect(wrapper.text()).toContain(t("assistant.reviewRequiredNotice"));
+    expect(wrapper.find('[data-testid="interview-resume"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-testid="interview-complete"]').exists()).toBe(
+      true
+    );
+  });
+
+  it("B03-01 退回/完结调真实跃迁命令（带项目与会话 id）", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "REVIEW_REQUIRED",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: null,
+          last_round_error_at: null
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    await wrapper.find('[data-testid="interview-resume"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "IN_PROGRESS"
+    );
+
+    await wrapper.find('[data-testid="interview-complete"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "COMPLETED"
+    );
+  });
+
+  it("B03-01 编排失败标记在访谈段可见（自动重试提示）", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "IN_PROGRESS",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: "no_provider: general_policy_missing",
+          last_round_error_at: "2026-11-08T10:06:00Z"
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    expect(
+      wrapper.find('[data-testid="interview-round-error"]').exists()
+    ).toBe(true);
+    expect(
+      wrapper.find('[data-testid="interview-round-error"]').text()
+    ).toContain("no_provider: general_policy_missing");
   });
 });
 
