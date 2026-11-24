@@ -200,17 +200,17 @@
 | 编号 | 项目 | 本轮状态 | 结论 / 下一步 |
 |---|---|---|---|
 | A02-01 | pm-api JWT / JWKS 验签链 | VERIFIED-CODE | 已知使用 JWKS 本地验签；当前调用未指定预期 audience |
-| A02-02 | Artifact 专用 project/action delegation | BLOCKED | 未证明 token-service 有可用 resource scoped capability；必须取上游源码/运行态证据 |
+| A02-02 | Artifact 专用 project/action delegation | BLOCKED（上游代码已核验） | lmms v1.8.1 的 resource token 路由无鉴权挂载，且签发 claims 缺 aud/tid；不可复用，需先修复并补安全测试 |
 | A02-03 | file-service per-tenant service JWT | VERIFIED-CODE | AI-PM 已使用 ServiceJwtCache；新 artifact-service caller 是否允许仍待核验 |
 | A02-04 | upload/download/info/delete/presign | VERIFIED-CODE | AI-PM 已通过 digua_file_sdk 使用；当前调用路径存在 |
-| A02-05 | upload intent/checksum/finalize/multipart | NOT-VERIFIED | 读取 lmms 1.8.1 file-service OpenAPI/SDK 并做真实契约测试 |
+| A02-05 | upload intent/checksum/finalize/multipart | PARTIAL（上游代码已核验） | multipart / presign 存在；hash 未计算（None），未发现 intent/finalize/checksum-attestation；P0 协议仍未关闭 |
 | A02-06 | viz.* 表结构/状态机 | VERIFIED-CODE | 迁移 0020 可确认；真实当前行数未核验 |
 | A02-07 | viz.* 历史数据行数 | HISTORICAL-SNAPSHOT | 2026-11-15 样本 0 行；环境归属未知，不能作生产结论 |
 | A02-08 | SeeCode 子进程与 SVG 安全 | VERIFIED-CODE + VERIFIED-DOC | 既有资产可复用；部署层网络/CPU/内存隔离需单独配置 |
 | A02-09 | Mermaid 独立 Renderer | NOT-VERIFIED | 只发现 importer；V1 Generator 需实现 |
 | A02-10 | Rust CI 独立隔离 | VERIFIED-CODE | 当前 workspace workflow 执行全 workspace；新仓库是长期方案 |
 | A02-11 | RustFS 生产 bucket/备份/恢复 | NOT-VERIFIED | 需要运维配置与恢复演练 |
-| A02-12 | lmms 1.8.1 上游源码与运行态 | BLOCKED | 本轮 GitHub 连接未能读取对应上游源码路径；需提供源码路径或 API/OpenAPI 导出 |
+| A02-12 | lmms v1.8.1 上游源码与 API/SDK | VERIFIED-CODE（仅静态源码） | 已读取 Tag v1.8.1 的 token-service、file-service、Rust SDK 与 OpenAPI；运行态 claims、服务主体权限和存储部署仍未验证 |
 
 ## 8. 实施前必须关闭的阻断项
 
@@ -256,3 +256,135 @@
 ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份与对象存储集成模式，也可以复用 SeeCode 的安全实现基础；但不能直接复用 AI-PM 当前的项目授权 SQL，也不能把现有文件上传接口视为已具备完整版本提交协议。
 
 **当前不批准进入生产实现/迁移。** 首先关闭授权委托与 file-service 上传协议两个 P0。其余待核验项应在 ART-02A~D 中取得真实证据，不得用历史快照、设计文档或代码注释替代。
+
+
+---
+
+## 11. ART-02A：lmms v1.8.1 上游源码核验（2026-11-24）
+
+> **核验对象：** `luqizheng/lmms`，Git Tag `v1.8.1`。  
+> **版本证据：** 根 `Cargo.toml` 的 `workspace.package.version = "1.8.1"`；Tag 下可读取。  
+> **范围：** GitHub 源码、OpenAPI 与 Rust SDK 静态核验；没有连接运行中的 token-service/file-service，也没有读取密钥、令牌或业务数据。  
+> **审计性质：** VERIFIED-CODE 不等于 VERIFIED-RUNTIME。
+
+### 11.1 Token Service：普通 Service JWT
+
+**VERIFIED-CODE：** `services/token-service/src/routes/service_jwt.rs`
+
+- `POST /tokens/service-jwt` 使用 bootstrap bearer token 查找 active owner。
+- 请求字段为 `aud`、`tid`、可选 `ct`；签发 claims 包含 `iss`、`sub`、`aud`、`tid`、`iat`、`exp`、`roles=["service"]`、`purpose="service"`。
+- TTL 在该路由中固定为 3600 秒。
+- owner 由 bootstrap token 数据库记录决定，不是请求体任意指定。
+- token-service 支持 keystore active key/kid 与 JWKS；本轮只确认源码路径，不验证生产轮换状态。
+
+**结论：** 现有 Service JWT 能满足服务到服务的 audience + tenant 基础隔离，但没有 project ID、action allowlist、resource ID、delegation ID 等 Artifact 操作级授权约束；1 小时固定 TTL 也不是 ART-01 预期的短时能力凭证。可作为服务身份调用 file-service 的基础，不可替代项目授权委托。
+
+证据：
+- [service_jwt.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/routes/service_jwt.rs)
+- [token-service main.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/main.rs)
+- [token-service lib.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/lib.rs)
+
+### 11.2 Token Service：Resource Token 当前不可用于 Artifact Service
+
+**VERIFIED-CODE：** `services/token-service/src/main.rs` 将 `POST /tokens/resource` 直接挂载在主 Router；该路由没有附加 `verify_aud_principal_middleware` 或其他身份验证层。
+
+**VERIFIED-CODE：** `services/token-service/src/routes/resource.rs`：
+
+- 请求体包含 `resource_type`、`resource_id`、`permission`、可选 `ttl_sec`。
+- handler 没有提取或验证调用者身份，也没有验证调用者是否拥有该资源权限。
+- handler 调用 `issue_resource_token("resource-service", ...)`。
+
+**VERIFIED-CODE：** `services/token-service/src/issuer.rs` 的 `issue_resource_token`：
+
+- 写入 `scope="resource"`、`resource_type`、`resource_id`、`permission`、`purpose="resource"`，以及标准 subject/jti/issuer/expiry。
+- 没有写入 `aud` 和 `tid`。
+- 因此该 Token 既缺少 Artifact Service 需要的 audience/tenant 绑定，也没有证明资源授权来自可信 AI-PM 授权边界。
+
+**P0 安全发现：** 当前 resource token endpoint 的挂载方式存在未鉴权签发风险。即使服务网络在部署层限制访问，也不能将其作为安全边界。必须先修复路由鉴权与签发授权，再考虑扩展 claims；修复前禁止 Artifact Service 使用该 endpoint。
+
+**建议修复验收：**
+1. 签发接口必须要求可信调用者身份（至少固定 audience 的 service JWT），并验证调用者具有签发权限。
+2. 资源权限必须由可信授权边界确认；不能仅根据请求体中的 resource_type/resource_id/permission 直接签发。
+3. 新凭证必须绑定 `aud=artifact-service`、tenant、project、action allowlist、resource（如适用）、短 TTL、jti/delegation ID。
+4. 明确撤销/过期策略和签发审计。
+5. 增加未认证、错误 audience、跨 tenant、跨 project、越权 action、越权 resource、过期、重放等负例测试。
+6. 不应让 Artifact Service 直接调用当前未鉴权的 resource endpoint。
+
+证据：
+- [resource.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/routes/resource.rs)
+- [token-service main.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/main.rs)
+- [issuer.rs](https://github.com/luqizheng/lmms/blob/v1.8.1/services/token-service/src/issuer.rs)
+
+### 11.3 File Service：已存在的能力
+
+**VERIFIED-CODE：**
+
+- `services/file-service/src/routes/file.rs`：`POST /file/upload` multipart 上传；`GET /file/list`；`GET /file/{id}` 下载；`DELETE /file/{id}`；`GET /file/{id}/info`。
+- `services/file-service/src/routes/presign.rs`：`POST /file/presign`。
+- `services/file-service/src/routes/mod.rs`：`/file/*` 路由要求 `aud=file-service` 的有效 JWT。
+- `services/file-service/src/services/file.rs`：租户范围来自已验证的 `TenantScope`；上传时 tenant_id 从 token scope 派生，而非信任 multipart metadata。
+- `services/file-service/src/storage/object_store.rs` 与 `storage/s3.rs`：抽象支持 put/get/get_stream/delete/exists/size 和 S3 预签名；S3-compatible driver 可连接 RustFS。
+- `sdk/rust/file-service-sdk`：提供 multipart upload、presign、list、info、download 等客户端能力。
+
+证据：
+- [file routes](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/routes/file.rs)
+- [presign routes](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/routes/presign.rs)
+- [route auth](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/routes/mod.rs)
+- [file service implementation](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/services/file.rs)
+- [object store abstraction](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/storage/object_store.rs)
+- [Rust SDK](https://github.com/luqizheng/lmms/tree/v1.8.1/sdk/rust/file-service-sdk)
+
+### 11.4 File Service：Artifact Version 提交协议缺口
+
+**VERIFIED-CODE：**
+
+- `FileService::upload` 将文件写入对象存储，再写入元数据；`FileInfo.hash` 明确赋值为 `None`，未观察到服务端 checksum 计算。
+- 当前 multipart handler 通过 `field.bytes()` 将完整文件读入内存；不是流式上传路径。
+- `create_presign_url` 先通过 `file_id` 查询既有元数据，再为该记录的 storage_path 生成 GET/PUT URL；它不是先创建受限 upload intent 再 finalize 的两阶段提交。
+- 未观察到 finalize/commit endpoint、上传后 checksum attestation、对象状态校验或不可变对象提交机制。
+- SDK 的 `UploadFileMeta` 不包含 tenant_id，且注释明确租户归属来自 service JWT 的 tid；这是正确的信任边界方向。
+
+**结论：** File Service 可继续作为通用对象存储和文件元数据服务，但当前公开接口不足以直接承担 ART-01 所要求的不可变 Artifact Version 原子提交协议。P0 上传协议仍然开放。
+
+**建议：** 优先在 file-service 增加通用、非 Artifact 专属的 upload-intent / bounded presign / checksum / finalize 能力；Artifact Service 只消费该通用契约。若短期沿用 multipart 服务端上传，必须先定义大小上限、流式处理、内存/超时/重试和 hash 计算，不能将当前全量缓冲路径视为长期方案。
+
+证据：
+- [file service implementation](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/services/file.rs)
+- [file routes](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/routes/file.rs)
+- [file models](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/src/models/file_info.rs)
+- [file-service OpenAPI](https://github.com/luqizheng/lmms/blob/v1.8.1/services/file-service/openapi.yaml)
+- [Rust SDK client](https://github.com/luqizheng/lmms/blob/v1.8.1/sdk/rust/file-service-sdk/src/client.rs)
+
+### 11.5 上游身份与租户验证机制
+
+**VERIFIED-CODE：**
+
+- `libs/authz/src/verify_aud.rs` 通过 `Principal::from_token(..., Some(expected_aud))` 强制 audience 匹配。
+- File Service 对业务路由采用 `verify_aud_principal_middleware("file-service")`。
+- `libs/jwt-ctx/src/scope.rs` 从已验证 Principal 派生 Single tenant 或 CrossTenant scope。
+- 因此 Artifact Service 应采用相同的明确 audience 验证模式，但还需自行校验 Artifact 专用 project/action claims。
+
+证据：
+- [audience middleware](https://github.com/luqizheng/lmms/blob/v1.8.1/libs/authz/src/verify_aud.rs)
+- [JWT principal](https://github.com/luqizheng/lmms/blob/v1.8.1/libs/jwt-ctx/src/principal.rs)
+- [tenant scope](https://github.com/luqizheng/lmms/blob/v1.8.1/libs/jwt-ctx/src/scope.rs)
+
+### 11.6 ART-02A 结论与更新后的阻断项
+
+| 项目 | 状态 | 结论 |
+|---|---|---|
+| lmms v1.8.1 Tag / 版本基准 | VERIFIED-CODE | Tag 可读取，workspace version 为 1.8.1 |
+| Service JWT | VERIFIED-CODE | aud + tid + ct；固定 3600 秒；没有 project/action delegation |
+| Resource Token | VERIFIED-CODE / P0 SECURITY BLOCKER | endpoint 无鉴权挂载；claims 无 aud/tid；不可复用 |
+| File Service tenant isolation | VERIFIED-CODE | file routes 强制 aud=file-service；TenantScope 从已验证 token 派生 |
+| Multipart upload | VERIFIED-CODE | 存在，但全量缓冲；hash=None |
+| Presigned URL | VERIFIED-CODE | 已有 GET/PUT presign；PUT 依赖既有 file record |
+| Upload intent / finalize / checksum | NOT FOUND IN REVIEWED V1.8.1 PATHS | 未发现对应 API/SDK/handler；不能据此宣称全仓绝对不存在 |
+| 运行态 JWT claims / bootstrap allowlist | NOT VERIFIED | 需连接实际部署环境做无秘密暴露的契约验证 |
+| RustFS bucket / retention / backup / restore | NOT VERIFIED | 需部署配置与恢复演练 |
+
+**ART-02A 决定：** 保留“复用 token-service 信任根、复用 file-service/RustFS”的总体方向，但不复用当前 resource token endpoint。两个 P0 继续阻断 Artifact Service 生产实现：  
+1. 修复并验证受限 Artifact delegation 签发与验证；  
+2. 建立可验证 checksum 和 finalize 的通用文件提交协议。
+
+下一步 ART-02B 应在真实测试环境验证 Service JWT 的签发身份、`aud=file-service`、tenant scope、bootstrap owner allowlist，以及 File Service 上传/预签名/下载/删除的跨租户负例。ART-02C/02D 仍分别核验 RustFS 运维与目标数据库实时数据。
