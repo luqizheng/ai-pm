@@ -122,7 +122,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | operational-runbook.md | 启停、监控、排障和卷丢失处置 |
 | testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
 | migration-roadmap.md | Phase 0–5 实施路线图 |
-| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
+| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |\n| code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
 
 ## 原始交付索引
 
@@ -139,7 +139,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：尚待完成代码契约映射与全量一致性审查。** 服务 API 边界已由 ADR-SEM-19 确认；详细门槛见 `consistency-review.md`。
+- **SEM-02C：代码契约映射初审已完成，全量一致性审查与 10 项接口门槛关闭仍在进行。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
-- 未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
+- 本轮仅新增 `code-contract-mapping.md` 并更新架构索引；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
