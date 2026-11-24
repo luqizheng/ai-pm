@@ -110,3 +110,10 @@ ART-02 第一轮结论：独立服务与复用 file-service 的方向成立，�
 - [ART-02C（并入 ART-02 报告第 13 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验 lmms v1.8.1 标准 Compose、prod/remote override、File Service storage backend、named volume、RustFS adapter 与备份 Runbook。
 
 **ART-02C 关键结论：** v1.8.1 标准 Compose 未配置 `FILE_STORAGE_BACKEND`，代码默认值为 `local`；文件落在 `superpowers_file-storage` named volume。prod/remote override 未切换 RustFS。现有备份 Runbook 未覆盖该卷或 RustFS 对象数据，并且数据库章节描述 MySQL，与当前 PostgreSQL 部署文件存在漂移。实际部署 backend、bucket policy、备份介质和恢复能力仍须在目标环境验证。
+
+
+### ART-02D 现有 viz.* 数据与迁移依赖核验
+
+- [ART-02D（并入 ART-02 报告第 14 节）](ART-02-artifact-service-pre-implementation-verification-v1.0.md)：核验四张 viz 表的 DDL/约束、应用层读写方、render_output 与 slot_config 的生产接线，以及历史 full-dev 行数快照。
+
+**ART-02D 结论：** Artifact 与 Approval 的读写路径已定位；render_output 写入函数存在但未发现生产调用方，slot_config 未发现应用层消费者。2026-11-15 的 full-dev PostgreSQL 历史快照中四表均为 0 行，但当前生产/目标环境实时行数仍 NOT VERIFIED。不得据此批准生产迁移或旧表退役。
