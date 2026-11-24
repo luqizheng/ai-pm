@@ -167,6 +167,12 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 详细协议与故障语义见 `service-protocol-security-and-persistence.md`。上述是已确认的架构决策，不代表代码已经实现。
 
+## SEM-02D 阻断项关闭提案
+
+- 新增 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md)，对 D-01–D-12 给出可审阅的物理模型、HTTPS/WSS 契约、SEM 七表结构、Ports/Adapters、安全与阶段依赖提案。
+- 该文件是 **Proposed / 待用户确认**，不是新 ADR，不改变 ADR-SEM-01–25 的已冻结状态。
+- 当前仍为 `Design In Progress`；Phase 0 未启动。只有用户确认提案并完成跨文档同步复核后，才可将相关 D 项转为 Ratified。
+
 ## SEM-02D 最终架构审查结论
 
 最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。本轮发现 12 项实施前设计阻断项，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
