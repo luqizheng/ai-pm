@@ -23,7 +23,7 @@ The following rules are now stated consistently across the overview, decision re
 13. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
 14. Harness Resume remains disabled until exact-version real-world acceptance.
 15. SEM is the sole Runner dispatch/handoff coordinator; Runner does not poll Platform MCP for Claim/control commands. Platform alone grants Lease/Generation.
-16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals; Lease Renewal has exactly one path: Runner WSS → SEM → Platform HTTPS API; Agent Activity does not renew.
+16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals; WSS liveness never renews by itself, and the single Lease Renewal path remains to be selected.
 
 ## 2. Required pre-implementation closure gates
 
@@ -48,7 +48,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-15 Runtime/data ownership mapping | Every existing PgPool/SQL operation in run_executor, claim, lease, worker_command, run_events and cleanup is assigned to Platform API or SEM-local process state; SEM has no Platform DB pool |
 | G-16 Runner control-channel exclusivity | Integration-level operation inventory proves Runner cannot Claim, renew Lease, poll/ACK commands or perform recovery through Platform MCP; each control operation has exactly one WSS→SEM→Platform API path; Harness business MCP remains available |
 | G-17 Target Runner authorization | Platform Claim API validates the target Runner identity against device registration, tenant/project binding, authorization and supervision policy; SEM cannot claim for an arbitrary/self-reported device |
-| G-18 Lease renewal separation | Tests prove WSS liveness does not renew Lease, Harness Agent Activity does not renew Lease, and only the dedicated WSS renewal request forwarded by SEM can renew the exact current generation |
+| G-18 Lease renewal separation | Design selects exactly one renewal initiator/transport; tests prove WSS liveness cannot renew by itself, no second path can renew, and only the selected path renews the exact current generation |
 
 ## 3. Initial SEM-02C code findings
 
