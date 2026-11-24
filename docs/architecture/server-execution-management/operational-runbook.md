@@ -59,3 +59,14 @@ Alert on requeue attempts for shielded Runs, SEM attempting Platform DB access o
 ## 7. Boundaries
 
 SEM does not host Platform API/MCP, manage Git multi-origin synchronization, back up Workspace/Worktree/Git Mirror, or introduce Redis/Kafka/RabbitMQ for V1.
+
+
+## 8. Human Intervention and Detached recovery（Review Pending）
+
+1. 检查 HIR 是否已创建、责任人/收件人是否解析、通知是否投递；通知失败时从 Inbox 查询，不能关闭 HIR 或释放 Barrier。
+2. 对 Detached Run，先检查 Runner reconnect sync、boot_id、process identity、Lease/Generation；不要只凭 PID 或心跳推断进程状态。
+3. 有 E1/E2/E3 时，按 Platform 受控事务终止旧 Attempt 并处理后继；只有命令 ACK 没有 E3 时继续隔离。
+4. Workspace/PID/logs 丢失且 Run 曾启动时按 E5 处理；不删除/重建旧执行证据来“修复”状态。
+5. E4/E5 下如确需重派，必须走 E6 高风险审批：展示可能重复的 Git/外部 API/LLM 副作用，记录缓解措施，绑定唯一 successor；旧 Barrier 保持未证实终止。
+6. Interaction continue 失败、response 未注入或消费证据不足时，不得手工把 Interaction 标成 consumed，也不得清除其 scheduling_shield。
+7. Cleanup Need 与 HIR 分开处理；清理完成不等于进程终止，HIR 关闭也不等于 Barrier 释放。
