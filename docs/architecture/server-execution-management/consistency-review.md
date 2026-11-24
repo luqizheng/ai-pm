@@ -22,6 +22,8 @@ The following rules are now stated consistently across the overview, decision re
 12. Each Repository has one authoritative origin; SEM does not implement multi-origin synchronization.
 13. Runner handoff uses normal claim, generation increment and fresh token; lease_client_id checks are not weakened.
 14. Harness Resume remains disabled until exact-version real-world acceptance.
+15. SEM is the sole Runner dispatch/handoff coordinator; Runner does not poll Platform MCP for Claim/control commands. Platform alone grants Lease/Generation.
+16. Runner Supervisor Heartbeat, Lease Renewal and Harness Agent Activity are separate signals; Lease Renewal has exactly one path: Runner WSS → SEM → Platform HTTPS API; Agent Activity does not renew.
 
 ## 2. Required pre-implementation closure gates
 
@@ -44,6 +46,9 @@ These are implementation-design/verification gates, not reasons to retain compat
 | G-13 Runner channel ownership | Every current Runner MCP operation is assigned to exactly one path (Platform MCP or SEM WSS); no duplicate Claim, Lease Renewal, command delivery or ACK authority remains |
 | G-14 Service and Runner authentication | Platform–SEM service identity and Runner WSS identity/connection revocation are defined; service tokens do not enter ordinary human-principal flow; cpk device binding is preserved |
 | G-15 Runtime/data ownership mapping | Every existing PgPool/SQL operation in run_executor, claim, lease, worker_command, run_events and cleanup is assigned to Platform API or SEM-local process state; SEM has no Platform DB pool |
+| G-16 Runner control-channel exclusivity | Integration-level operation inventory proves Runner cannot Claim, renew Lease, poll/ACK commands or perform recovery through Platform MCP; each control operation has exactly one WSS→SEM→Platform API path; Harness business MCP remains available |
+| G-17 Target Runner authorization | Platform Claim API validates the target Runner identity against device registration, tenant/project binding, authorization and supervision policy; SEM cannot claim for an arbitrary/self-reported device |
+| G-18 Lease renewal separation | Tests prove WSS liveness does not renew Lease, Harness Agent Activity does not renew Lease, and only the dedicated WSS renewal request forwarded by SEM can renew the exact current generation |
 
 ## 3. Initial SEM-02C code findings
 
@@ -53,7 +58,11 @@ These are implementation-design/verification gates, not reasons to retain compat
 4. Current pm-api mounts PmMcpServer with a Platform PgPool. Current auth explicitly rejects roles=[service] on ordinary business endpoints; cpk credentials are accepted only on /mcp.
 5. Current reconcile_orphans contains a >1h Lease-expiry path that changes a running Run back to queued and releases the Task without first proving process death. This remains a Phase 0 blocker.
 
-## 4. Known design details still requiring code-level reconciliation
+## 4. ADR-SEM-20 decisions now frozen
+
+The following former open questions are closed: (a) Claim is requested by SEM for a specific target Runner; (b) Runner control operations use WSS, while Harness business operations retain Platform MCP; (c) Lease Renewal is initiated only by Runner Supervisor over WSS and forwarded by SEM to Platform API; Agent Activity and WSS liveness do not renew; (d) Runner does not poll Platform MCP for Claim, commands, ACK or recovery. Platform remains the only Lease/Generation authority. These decisions require implementation and acceptance evidence; they are not current-code facts.
+
+## 5. Known design details still requiring code-level reconciliation
 
 1. The exact physical representation of Scheduling Shield (dedicated columns/table versus a carefully constrained existing field) must be chosen only after tracing every candidate and recovery query. The invariant is fixed; physical schema is not yet frozen.
 2. The exact HIR physical schema and API surface are target designs, not existing endpoints.
@@ -62,7 +71,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 5. OS-specific process identity and termination observation must be verified on supported SEM host OS/runtime.
 6. Exact Harness Resume behavior is an empirical gate, not a paper-only capability flag.
 
-## 5. Explicit non-goals
+## 6. Explicit non-goals
 
 - No Workspace, Worktree or Git Mirror backup/snapshot system.
 - No RPO/RTO for those ephemeral execution assets.
@@ -72,7 +81,7 @@ These are implementation-design/verification gates, not reasons to retain compat
 - No new SEM microservice or binary is implied by this document set.
 - No code implementation is authorized by this review.
 
-## 6. Exit criteria for SEM-02C
+## 7. Exit criteria for SEM-02C
 
 SEM-02C may mark the architecture Design Complete only after:
 - every design decision has a single authoritative definition;
@@ -82,4 +91,4 @@ SEM-02C may mark the architecture Design Complete only after:
 - every Phase has bounded scope, test plan, acceptance and rollback;
 - no unresolved product-level choice remains.
 
-Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval.
+Until then README status must remain Architecture Review / Design In Progress, not Design Complete. The current code mapping is recorded in code-contract-mapping.md and is an initial pass, not final API or schema approval. ADR-SEM-20 closes Runner dispatch/control-channel ownership but does not by itself close authentication, exact DTO/schema, revocation, SEM Inbox/Delivery Ledger schema or cross-service failure gates.
