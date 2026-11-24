@@ -7,7 +7,7 @@ A mock passing does not prove OS process semantics. Process and Runner ACK tests
 - E1/E2/E3/E4/E5 classification and allowed-action matrix.
 - Run lineage and monotonic Attempt numbering.
 - HIR transition guards and authorization.
-- Scheduling Shield predicate shared by every claim/requeue path.
+- Unified dispatchability predicate checks both Interaction scheduling_shield and independent Run Execution Barrier on every claim/recovery/requeue path.
 - Generation/token/client identity validation.
 - Runner supervision default and mode changes.
 - Harness capability default supports_resume=false.
