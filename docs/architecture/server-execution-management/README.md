@@ -175,4 +175,4 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 ## SEM-02D 最终架构审查结论
 
-最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。本轮发现 12 项实施前设计阻断项，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
+最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。原始审查识别 12 项实施前设计阻断项；后续新增 D-13 资源感知调度提案，当前共 13 项待关闭设计事项，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
