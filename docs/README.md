@@ -19,7 +19,7 @@
 | 查找 PA-07 实施审计与当前状态 | [PA-07 实施产物索引](architecture/pa-07-implementation/README.md)（IMP-001~003 + 最终验收报告） |
 | 查找 PA-08 执行可靠性实施计划 | [PA-08 实施索引](architecture/pa-08-implementation/README.md) |
 | 查找 AI-PM 通用 Artifact Service 架构基线 | [ADR-ART-001](architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md) |
-| 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |
+| 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |\n| 查找 Artifact Service API、数据模型和授权契约 | [ART-01 设计基线](architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md) |
 | 查找 S01–S05 产品场景与 UI 规格 | [scenarios/](scenarios/) |
 | 查找验收记录 | [acceptance/](acceptance/) |
 | 查找历史审查、代码事实和差距证据 | [audit/](audit/) |
@@ -68,7 +68,16 @@
 
 场景目录按 `scenarios/s01/` 至 `scenarios/s05/` 组织。场景内部可以包含 `docs/`、`ui/`、`qa/`、`figures/` 等子目录。场景索引优先放在对应场景目录，不把场景细节重复堆到本文件。
 
-### 3.3 Artifact Service 与 Visualization\n\n- `architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md`：通用 Artifact Service 的独立部署、数据存储、版本和 Generator 架构基线。\n- `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分、迁移边界和 ART-00 审计清单。\n\n通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 为准；原 Visualization 文档中被 ADR-ART-001 明确修订的部署/存储条款不再作为现行决策。\n\n### 3.4 历史设计与当前基线
+### 3.3 Artifact Service 与 Visualization
+
+- `architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md`：通用 Artifact Service 的独立部署、数据存储、版本和 Generator 架构基线。
+- `architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md`：现有代码、IAM、存储和 Visualization 资产的静态审计。
+- `architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md`：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
+- `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分和迁移边界。
+
+通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 与 ART-01 为准；ART-00 是静态审计证据，不能替代生产环境核验。原 Visualization 文档中被 ADR-ART-001 明确修订的部署/存储条款不再作为现行决策。
+
+### 3.4 历史设计与当前基线
 
 `project-ai-team-v2/`、`slice-d/`、部分早期 `audit/` 与 `superpowers/` 文件可能描述旧架构或已完成阶段。它们用于解释演进、提供代码/验收证据，不应覆盖当前 PA-06 / PA-07 基线。
 
