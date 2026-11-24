@@ -515,6 +515,50 @@ pub async fn reconcile_orphans(
             let _ = tx.commit().await;
         }
         tracing::warn!(%run_id, %project_id, "orphan run suspected: lease expired over an hour ago");
+
+        // B06-D3（业务验收 2026-11-24）：此前只告警不回收——Model A（MCP 认领）
+        // 的孤儿 Run 没有任何执行体处理，任务永久卡 running。首次确认即回收：
+        // Run=timed_out（isolate 语义）+ 任务 Running→Blocked→Ready（域合法边，
+        // 可被 runner 重新认领）；`run.orphan_reclaimed` 审计留痕。
+        let Ok(mut tx) = pool.begin().await else {
+            continue;
+        };
+        let run_reclaimed = sqlx::query(
+            "UPDATE delivery.task_run               SET status = 'timed_out', outcome = 'timed_out', finished_at = now(),                   termination_reason = 'lease_expired',                   lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL             WHERE id = $1 AND project_id = $2 AND status = 'running'",
+        )
+        .bind(run_id)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map(|r| r.rows_affected())
+        .unwrap_or(0);
+        if run_reclaimed > 0 {
+            let task_reclaimed = sqlx::query(
+                "WITH stale AS (                     UPDATE delivery.task SET status = 'blocked', updated_at = now()                      WHERE id = (SELECT task_id FROM delivery.task_run WHERE id = $1)                        AND status = 'running' RETURNING id                  ), released AS (                     UPDATE delivery.task SET status = 'ready', updated_at = now()                      WHERE id = (SELECT id FROM stale) AND status = 'blocked' RETURNING id                  )                  SELECT count(*) FROM released",
+            )
+            .bind(run_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map(|row| row.get::<i64, _>(0))
+            .unwrap_or(0);
+            let _ = crate::pm_write::append_audit(
+                &mut tx,
+                project_id,
+                &crate::actor::AuditActor::dispatch(),
+                "run.orphan_reclaimed",
+                "task_run",
+                Some(run_id),
+            )
+            .await;
+            let _ = tx.commit().await;
+            tracing::info!(
+                %run_id, %project_id,
+                task_released = task_reclaimed,
+                "orphan run reclaimed (lease_expired); task released back to ready"
+            );
+        } else {
+            let _ = tx.rollback().await;
+        }
     }
 
     let rows = sqlx::query(
