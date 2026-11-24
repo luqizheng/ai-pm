@@ -197,3 +197,17 @@ The user-ratified target design is recorded in `service-protocol-security-and-pe
 - Claim dispatch is idempotent across lost HTTP responses; SEM does not persist plaintext Lease Tokens.
 
 These are ratified target architecture decisions, not current-code facts; implementation remains outstanding.
+
+## 8. SEM-02D 十项评审问题代码契约复核（2026-11-25）
+
+本节补充本文件原始 SEM-02C 映射之后的只读复核结论；逐项依据、设计修正见 [`sem-02d-review-findings-corrective-design.md`](./sem-02d-review-findings-corrective-design.md)。
+
+- Interaction 创建事务会持久化 Interaction、human_wait shield、task_waiting、terminate worker_command 和 audit；当前 Runner `tick` 轮询命令，`execute_command` 处理 terminate/continue；continue 创建新 Agent Session 并注入 response。SEM-local CodexExecutor 没有等价的 Interaction continue/reply-injection command consumer。
+- Runner 自然退出由本机 reap 观察后记录日志并释放 active；lease-loss cleanup 走本地 terminate/reap 和 cleanup evidence。尚无完整独立的、可在 Lease 失效后可靠上报的 Runner process-exit evidence spool + WSS 路径。
+- `recovery.rs` 的 reacquire 路径精确要求 `scheduling_shield='start_wait'`、同一 lease_client_id 和 responded Interaction；它不覆盖执行中途 Runner Detached。
+- `codex_executor.rs` 在 PID record 缺失且 logs 目录缺失时可返回 `Done{Lost}`；`run_executor.rs` 将 Done Lost 进入失联恢复。若 Platform 已记录 stage=started，卷丢失不能作为进程死亡证据。
+- `integration.notification` 当前无 recipient 字段；Interaction 创建事务没有创建 notification/outbox notification delivery。
+- Session Manager 原始设计将 Native Session ID 采集放在 SEM `poll_active_runs`；远端 Runner 的 CODEX_HOME 只能由 Runner 本机访问。Runner continue 当前是 checkpoint/reply 注入 + 新进程，不等于 Native Resume。
+- `scheduling_shield` CHECK 只有 none/human_wait/start_wait/timed_out；B06-D3 把 Run 回 queued 后，普通 queued claim 不经过 claimed-only 的 candidate_shield 检查。必须在锁内统一执行 dispatchability predicate。
+
+注意：本节是现状审计，不代表修复已实现。Phase 0 未启动。
