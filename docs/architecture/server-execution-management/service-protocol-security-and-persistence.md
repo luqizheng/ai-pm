@@ -208,7 +208,7 @@ Platform `worker_command` remains the business command authority. SEM reads auth
 
 ## 6. API operation inventory (logical, versioned)
 
-The exact route strings may be finalized during implementation, but the logical operations and authority are fixed:
+The exact route strings, DTOs, status codes, retryability classes and error envelopes are SEM-02D design deliverables and must be frozen before Phase 1 implementation. The logical operations and authority are fixed:
 
 | Direction | Operation | Authority / idempotency |
 |---|---|---|
