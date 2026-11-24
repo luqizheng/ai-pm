@@ -11,7 +11,7 @@
 | Client Runner（有人监督） | 用户（人) | 用户设备进程 | 租约/心跳/命令通道/自报 |
 | Client Runner（无人监督） | 平台（弱监督：只有心跳） | 用户设备进程 | 同上，且失联时只能走 HIR |
 
-**硬规则**：Server Worker **不得**把 Client Runner 当本地子进程管理——`executor.poll`/`terminate` 对远程 session 只能返回 Err/Uncertain（现状即如此，`run_executor.rs:607-609`），SEM 侧终止确认对 runner 形态走 **E3（Runner 终止 ACK）**，见 `execution-safety.md` §2。
+**默认监督模式**：Runner 注册缺省为 `unattended`；只有明确配置 `supervised` 才走领取前用户确认。监督模式与在线/忙碌状态正交。\n\n**硬规则**：Server Worker **不得**把 Client Runner 当本地子进程管理——`executor.poll`/`terminate` 对远程 session 只能返回 Err/Uncertain（现状即如此，`run_executor.rs:607-609`），SEM 侧终止确认对 runner 形态走 **E3（Runner 终止 ACK）**，见 `execution-safety.md` §2。
 
 ## 2. 三项已确认决策
 
@@ -69,7 +69,7 @@ sequenceDiagram
 
 | 不变式 | 机制 |
 |---|---|
-| ① 原执行端停止或安全隔离 | cancel 命令 + E3 ACK；无 ACK → Run 保持 Detached（scheduling shield），**不进入接管** |
+| ① 原执行端停止或安全隔离 | cancel 命令 + E3 终止确认；无 E3 → Run 保持 Detached（scheduling shield），**不进入接管** |
 | ② 原租约/token/generation 失效 | 接管 claim 事务内显式清 `lease_token_hash` + generation+1（现有 claim ⑨ 段已做 generation+1，补显式 token 失效步） |
 | ③ 新 Runner 明确确认接收 | Q2=B 的「用户选择」只是授权；接管以 `claim_task_run_as_client`（设备 B 显式 claim）为准 |
 | ④ 新 generation 生效 | 现有 `lease_generation = COALESCE+1`（`claim.rs:928-963`），不动 |
@@ -82,7 +82,7 @@ sequenceDiagram
 
 - 接管**不修改**任何身份校验：`lease_client_id = device_id` 的复合外键约束（`fk_task_run_client_tenant`）、claim 时的身份验证全部原样。
 - 「接管」在协议上是**新设备的一次全新合法 claim**——旧执行权自然过期/被证据终止，新执行权走正门。没有任何代码路径「把 A 的租约改绑给 B」。
-- 若未来出现「预授权转移」需求（把 claim 权指定给设备 B），必须以新迁移+新校验实现，不走放宽路线（记入 `decision-record.md` 未决）。
+- 若未来出现「预授权转移」需求（把 claim 权指定给设备 B），必须以新迁移+新校验实现，不走放宽路线（另立 ADR）。
 
 ## 5. Runner 监督模式与任务接收通知
 
