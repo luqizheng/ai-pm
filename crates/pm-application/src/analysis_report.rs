@@ -341,18 +341,20 @@ pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), AnalysisR
 
     // G-1：projc 源（快照通道）必达，缺失即硬失败
     let projc_source: Option<Uuid> = match kb_revision {
-        Some(rev) => sqlx::query_scalar(
-            "SELECT s.id FROM projc.source s \
+        Some(rev) => {
+            sqlx::query_scalar(
+                "SELECT s.id FROM projc.source s \
               WHERE s.tenant_id = $1 AND s.project_id = $2 \
                 AND s.target_domain = 'knowledge_base' \
                 AND s.target_revision_id = $3 \
               ORDER BY s.created_at DESC LIMIT 1",
-        )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(rev.to_string())
-        .fetch_optional(&mut *tx)
-        .await?,
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(rev.to_string())
+            .fetch_optional(&mut *tx)
+            .await?
+        }
         None => None,
     };
     let Some(projc_source_id) = projc_source else {
@@ -375,18 +377,20 @@ pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), AnalysisR
 
     // pc 源（identity 综合通道；口径不变，反查可得）
     let pc_source: Option<Uuid> = match kb_revision {
-        Some(rev) => sqlx::query_scalar(
-            "SELECT s.id FROM pc.source s \
+        Some(rev) => {
+            sqlx::query_scalar(
+                "SELECT s.id FROM pc.source s \
               WHERE s.tenant_id = $1 AND s.project_id = $2 \
                 AND s.target_domain = 'knowledge_base' \
                 AND s.target_revision_id = $3 \
               ORDER BY s.created_at DESC LIMIT 1",
-        )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(rev.to_string())
-        .fetch_optional(&mut *tx)
-        .await?,
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(rev.to_string())
+            .fetch_optional(&mut *tx)
+            .await?
+        }
         None => None,
     };
 
@@ -592,8 +596,9 @@ pub async fn report_detail(
 
     // 证据投影（加法）：审阅判断依据——支撑对象名经 revision→object 反查。
     let pc_evidence: Vec<ReportEvidenceRow> = match header.pc_source_id {
-        Some(source_id) => sqlx::query_as(
-            "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
+        Some(source_id) => {
+            sqlx::query_as(
+                "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
                     e.section_anchor, e.file_path, e.commit_sha, e.start_line, e.end_line, \
                     e.excerpt, e.description, e.confidence, e.verification_status \
                FROM pc.evidence e \
@@ -601,15 +606,17 @@ pub async fn report_detail(
                JOIN pc.cognition_object o ON o.id = r.object_id \
               WHERE e.source_id = $1 \
               ORDER BY o.display_name ASC, e.created_at ASC",
-        )
-        .bind(source_id)
-        .fetch_all(pool)
-        .await?,
+            )
+            .bind(source_id)
+            .fetch_all(pool)
+            .await?
+        }
         None => Vec::new(),
     };
     let projc_evidence: Vec<ReportEvidenceRow> = match header.projc_source_id {
-        Some(source_id) => sqlx::query_as(
-            "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
+        Some(source_id) => {
+            sqlx::query_as(
+                "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
                     e.section_anchor, e.file_path, e.commit_sha, e.start_line, e.end_line, \
                     e.excerpt, e.description, e.confidence, e.verification_status \
                FROM projc.evidence e \
@@ -617,10 +624,11 @@ pub async fn report_detail(
                JOIN projc.cognition_object o ON o.id = r.object_id \
               WHERE e.source_id = $1 \
               ORDER BY o.display_name ASC, e.created_at ASC",
-        )
-        .bind(source_id)
-        .fetch_all(pool)
-        .await?,
+            )
+            .bind(source_id)
+            .fetch_all(pool)
+            .await?
+        }
         None => Vec::new(),
     };
 
@@ -696,7 +704,11 @@ async fn classify_after_publish_err(
     let mut cls = match pool.begin().await {
         Ok(t) => t,
         Err(e) => {
-            return ClassifyOutcome::FailedTech { kind: "begin", error: e, cleanup_error: None };
+            return ClassifyOutcome::FailedTech {
+                kind: "begin",
+                error: e,
+                cleanup_error: None,
+            };
         }
     };
     // F2：advisory 失败——开启未提交、未持有锁；drop 清理（回滚成败不可观测
@@ -706,19 +718,27 @@ async fn classify_after_publish_err(
         .execute(&mut *cls)
         .await
     {
-        return ClassifyOutcome::FailedTech { kind: "advisory", error: e, cleanup_error: None };
+        return ClassifyOutcome::FailedTech {
+            kind: "advisory",
+            error: e,
+            cleanup_error: None,
+        };
     }
     // 单条 JOIN（表级 ACCESS SHARE、不取行锁——V1.2.2 §2.1；唯一阻塞点=上方 advisory）
-    let row: Result<Option<(String, Option<String>)>, sqlx::Error> =
-        sqlx::query_as(join_sql).bind(proposal_id).fetch_optional(&mut *cls).await;
+    let row: Result<Option<(String, Option<String>)>, sqlx::Error> = sqlx::query_as(join_sql)
+        .bind(proposal_id)
+        .fetch_optional(&mut *cls)
+        .await;
     let row = match row {
         Ok(r) => r,
         Err(e) => {
             // F3：持 advisory 中——显式回滚释放（I-3）；双故障并列保留原始错误
             return match cls.rollback().await {
-                Ok(()) => {
-                    ClassifyOutcome::FailedTech { kind: "join", error: e, cleanup_error: None }
-                }
+                Ok(()) => ClassifyOutcome::FailedTech {
+                    kind: "join",
+                    error: e,
+                    cleanup_error: None,
+                },
                 Err(rbe) => ClassifyOutcome::FailedTech {
                     kind: "join_and_rollback",
                     error: e,
@@ -735,7 +755,11 @@ async fn classify_after_publish_err(
             }
             _ => ClassifyOutcome::Failed,
         },
-        Err(e) => ClassifyOutcome::FailedTech { kind: "commit", error: e, cleanup_error: None },
+        Err(e) => ClassifyOutcome::FailedTech {
+            kind: "commit",
+            error: e,
+            cleanup_error: None,
+        },
     }
 }
 
@@ -786,18 +810,24 @@ pub async fn close_report(
     let mut tx = pool.begin().await?;
 
     // 项目边界 + 行锁（tenant/project 双重校验；项目不匹配一律 NotFound）。
-    let row: Option<(Uuid, String, Option<Uuid>, Option<Uuid>, Option<Uuid>, String)> =
-        sqlx::query_as(
-            "SELECT repository_id, commit_sha, pc_source_id, kb_revision_id, projc_source_id, status \
+    let row: Option<(
+        Uuid,
+        String,
+        Option<Uuid>,
+        Option<Uuid>,
+        Option<Uuid>,
+        String,
+    )> = sqlx::query_as(
+        "SELECT repository_id, commit_sha, pc_source_id, kb_revision_id, projc_source_id, status \
                FROM integration.repo_analysis_report \
               WHERE id = $1 AND project_id = $2 \
                 AND tenant_id = (SELECT tenant_id FROM core.project WHERE id = $2) \
               FOR UPDATE",
-        )
-        .bind(report_id)
-        .bind(project_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    )
+    .bind(report_id)
+    .bind(project_id)
+    .fetch_optional(&mut *tx)
+    .await?;
     let Some((repository_id, commit_sha, pc_source_id, kb_revision_id, projc_source_id, status)) =
         row
     else {
@@ -853,7 +883,11 @@ pub async fn close_report(
                     match classify_pc_after_publish_err(pool, project_id, proposal_id).await {
                         ClassifyOutcome::Replay => replayed_proposals += 1,
                         ClassifyOutcome::Failed => publish_failed_proposals += 1,
-                        ClassifyOutcome::FailedTech { kind, error, cleanup_error } => {
+                        ClassifyOutcome::FailedTech {
+                            kind,
+                            error,
+                            cleanup_error,
+                        } => {
                             tracing::warn!(
                                 kind,
                                 proposal_id = %proposal_id,
@@ -941,12 +975,15 @@ pub async fn close_report(
                     }
                     Err(publish_err) => {
                         // R-1 分类（II-A）：advisory 逐字同 projc/publish.rs:118
-                        match classify_projc_after_publish_err(pool, project_id, proposal_id)
-                            .await
+                        match classify_projc_after_publish_err(pool, project_id, proposal_id).await
                         {
                             ClassifyOutcome::Replay => projc_replayed += 1,
                             ClassifyOutcome::Failed => projc_publish_failed += 1,
-                            ClassifyOutcome::FailedTech { kind, error, cleanup_error } => {
+                            ClassifyOutcome::FailedTech {
+                                kind,
+                                error,
+                                cleanup_error,
+                            } => {
                                 tracing::warn!(
                                     kind,
                                     proposal_id = %proposal_id,

@@ -18,9 +18,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use pm_domain::visualization::{
-    ObjectResolver, VizEdge, VizNode, VizSpec,
-};
+use pm_domain::visualization::{ObjectResolver, VizEdge, VizNode, VizSpec};
 
 /// 一致性状态（14 号 §5.2）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -211,11 +209,9 @@ fn trim_provenance(spec: &mut VizSpec) {
     provenance
         .source_object_ids
         .retain(|id| source_ids.contains(id.as_str()) || visible.contains(id.as_str()));
-    provenance.source_revision_refs.retain(|reference| {
-        source_ids
-            .iter()
-            .any(|id| reference.contains(id))
-    });
+    provenance
+        .source_revision_refs
+        .retain(|reference| source_ids.iter().any(|id| reference.contains(id)));
 }
 
 #[cfg(test)]
@@ -292,7 +288,11 @@ mod tests {
                 registry_version: None,
                 provenance: Some(pm_domain::visualization::Provenance {
                     source_domain: "delivery".to_string(),
-                    source_object_ids: vec!["R-1".to_string(), "R-2".to_string(), "R-9".to_string()],
+                    source_object_ids: vec![
+                        "R-1".to_string(),
+                        "R-2".to_string(),
+                        "R-9".to_string(),
+                    ],
                     source_revision_refs: vec!["R-1@rev1".to_string(), "R-9@rev9".to_string()],
                     source_snapshot_hash: None,
                 }),
@@ -346,7 +346,9 @@ mod tests {
         // R-9 从未出现在图内 → 不应出现在来源列表
         assert!(!provenance.source_object_ids.contains(&"R-9".to_string()));
         assert!(provenance.source_object_ids.contains(&"R-1".to_string()));
-        assert!(!provenance.source_revision_refs.contains(&"R-9@rev9".to_string()));
+        assert!(!provenance
+            .source_revision_refs
+            .contains(&"R-9@rev9".to_string()));
     }
 
     #[test]

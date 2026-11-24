@@ -31,11 +31,11 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // A4（tenant_audit_log；批 B 域5 迁仓储后落点 pm-infrastructure）
     ("crates/pm-infrastructure/src/repo_team_members.rs", 1),
     ("crates/pm-application/src/command_executor/audit.rs", 1), // A5
-    ("crates/pm-application/src/delivery/mod.rs", 1),   // A6
+    ("crates/pm-application/src/delivery/mod.rs", 1),           // A6
     ("crates/pm-application/src/knowledge_proposal/support.rs", 1), // A7
     ("crates/pm-application/src/project_import/advance.rs", 1), // A8
-    ("crates/pm-application/src/review/queue.rs", 1),   // A9
-    ("crates/pm-application/src/run_dispatch/lease.rs", 1), // A10
+    ("crates/pm-application/src/review/queue.rs", 1),           // A9
+    ("crates/pm-application/src/run_dispatch/lease.rs", 1),     // A10
     ("crates/pm-infrastructure/src/outbox_handlers.rs", 3), // A11 + D-2=A：TaskReady 自动写 assignee / no_executor_available skip（系统面 dispatch principal，四列显式 NULL）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),

@@ -37,7 +37,7 @@ vi.mock("@/api/discovery", () => ({
     transitionDiscoverySession(...args)
 }));
 
-function session(): DiscoverySession {
+function session(overrides: Partial<DiscoverySession> = {}): DiscoverySession {
   return {
     id: "sess-1",
     project_id: "proj-1",
@@ -46,13 +46,16 @@ function session(): DiscoverySession {
     status: "active",
     created_by: "p-1",
     created_at: "2026-11-10T08:00:00Z",
-    updated_at: "2026-11-10T09:00:00Z"
+    updated_at: "2026-11-10T09:00:00Z",
+    last_round_error: null,
+    last_round_error_at: null,
+    ...overrides
   };
 }
 
-function detail(): DiscoverySessionDetail {
+function detail(sessionOverrides: Partial<DiscoverySession> = {}): DiscoverySessionDetail {
   return {
-    session: session(),
+    session: session(sessionOverrides),
     messages: [],
     findings: [
       {
@@ -115,13 +118,43 @@ async function mountView() {
   return { wrapper, router };
 }
 
+/** B02-01：已答复问题（status=answered）不再给答复入口。 */
+function detailWithAnsweredQuestion(): DiscoverySessionDetail {
+  const base = detail();
+  return {
+    ...base,
+    questions: [
+      {
+        ...base.questions[0],
+        status: "answered",
+        answers: [
+          {
+            id: "a-1",
+            question_id: "q-1",
+            answer: "由网关统一签发",
+            answered_by: "p-1",
+            created_at: "2026-11-10T09:00:00Z"
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function answerErrorVisible(wrapper: { html(): string }): boolean {
+  return wrapper.html().includes("答复提交失败");
+}
+
 beforeEach(() => {
   listDiscoverySessions.mockReset();
   getDiscoverySession.mockReset();
   confirmDiscoveryFinding.mockReset();
+  answerDiscoveryQuestion.mockReset();
+  transitionDiscoverySession.mockReset();
   listDiscoverySessions.mockResolvedValue({ items: [session()], total: 1 });
   getDiscoverySession.mockResolvedValue(detail());
   confirmDiscoveryFinding.mockResolvedValue({});
+  transitionDiscoverySession.mockResolvedValue(session());
 });
 
 describe("DiscoveryView", () => {
@@ -163,5 +196,136 @@ describe("DiscoveryView", () => {
       "f-pending",
       expect.objectContaining({ status: "CONFIRMED" })
     );
+  });
+
+  // ── B02-01：阻塞问题必须有页面内答复入口（否则答复只能绕 chat 线程） ──
+
+  it("未答问题给答复入口；提交调真实命令并清空草稿", async () => {
+    answerDiscoveryQuestion.mockResolvedValue({
+      id: "a-1",
+      question_id: "q-1",
+      answer: "由网关统一签发",
+      answered_by: "p-1",
+      created_at: "2026-11-10T09:00:00Z"
+    });
+    const { wrapper } = await mountView();
+
+    const input = wrapper.find(
+      '[data-testid="dc-answer-input-q-1"] textarea'
+    );
+    expect(input.exists()).toBe(true);
+    await input.setValue("由网关统一签发");
+    await wrapper.find('[data-testid="dc-answer-submit-q-1"]').trigger("click");
+    await flushPromises();
+
+    expect(answerDiscoveryQuestion).toHaveBeenCalledWith(
+      "proj-1",
+      "sess-1",
+      "q-1",
+      "由网关统一签发"
+    );
+    expect(answerErrorVisible(wrapper)).toBe(false);
+  });
+
+  it("空白答复不给提交；已答复问题不再给入口", async () => {
+    const { wrapper } = await mountView();
+
+    expect(
+      (
+        wrapper.find('[data-testid="dc-answer-submit-q-1"]')
+          .element as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+
+    wrapper.unmount();
+    getDiscoverySession.mockResolvedValue(detailWithAnsweredQuestion());
+    const remounted = await mountView();
+
+    expect(
+      remounted.wrapper.find('[data-testid="dc-answer-form-q-1"]').exists()
+    ).toBe(false);
+    expect(answerDiscoveryQuestion).not.toHaveBeenCalled();
+  });
+
+  // ── B03-01（R1）：等待复核/输入的会话必须有处理入口（否则消息死信） ──
+
+  it("REVIEW_REQUIRED 会话给出复核提示与退回/完结入口", async () => {
+    getDiscoverySession.mockResolvedValue(
+      detail({ status: "REVIEW_REQUIRED" })
+    );
+    const { wrapper } = await mountView();
+    await flushPromises();
+
+    expect(
+      wrapper.find('[data-testid="dc-session-actions"]').exists()
+    ).toBe(true);
+    expect(
+      wrapper.find('[data-testid="dc-resume-session"]').exists()
+    ).toBe(true);
+    expect(
+      wrapper.find('[data-testid="dc-complete-session"]').exists()
+    ).toBe(true);
+  });
+
+  it("退回/完结调真实跃迁命令", async () => {
+    getDiscoverySession.mockResolvedValue(
+      detail({ status: "REVIEW_REQUIRED" })
+    );
+    const { wrapper } = await mountView();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="dc-resume-session"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "proj-1",
+      "sess-1",
+      "IN_PROGRESS"
+    );
+
+    await wrapper.find('[data-testid="dc-complete-session"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "proj-1",
+      "sess-1",
+      "COMPLETED"
+    );
+  });
+
+  it("NEEDS_USER_INPUT 会话只给完结入口；失败标记可见", async () => {
+    getDiscoverySession.mockResolvedValue(
+      detail({
+        status: "NEEDS_USER_INPUT",
+        last_round_error: "model_error: timeout",
+        last_round_error_at: "2026-11-24T08:00:00Z"
+      })
+    );
+    const { wrapper } = await mountView();
+    await flushPromises();
+
+    expect(
+      wrapper.find('[data-testid="dc-resume-session"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.find('[data-testid="dc-complete-session"]').exists()
+    ).toBe(true);
+    expect(wrapper.find('[data-testid="dc-round-error"]').text()).toContain(
+      "model_error: timeout"
+    );
+  });
+
+  it("跃迁失败（409 竞态）不打断，重拉详情对齐服务端", async () => {
+    getDiscoverySession.mockResolvedValue(
+      detail({ status: "REVIEW_REQUIRED" })
+    );
+    transitionDiscoverySession.mockRejectedValue(new Error("409"));
+    const { wrapper } = await mountView();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="dc-resume-session"]').trigger("click");
+    await flushPromises();
+
+    expect(transitionDiscoverySession).toHaveBeenCalledTimes(1);
+    // 失败后重拉了详情（服务端状态是唯一真源）。
+    expect(getDiscoverySession.mock.calls.length).toBeGreaterThan(1);
   });
 });

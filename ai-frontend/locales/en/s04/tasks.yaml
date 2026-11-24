@@ -90,6 +90,21 @@ tasks:
     attentionGo: Handle
     attentionEmpty: Nothing requires human attention.
     upcomingTitle: Recent Tasks
+    aiAnalysisEntry: AI Task Analysis
+    chipAll: All tasks
+    chipUnassigned: Unassigned
+    chipBlocked: Blocked
+    chipDraft: Draft
+    chipReady: Ready
+    chipCompleted: Completed
+    executingTitle: Executing
+    executingEmpty: No tasks currently executing
+    execKindLabel: Execution type
+    execKindAi: AI agent
+    execKindHuman: Human
+    execKindUnassigned: Unassigned
+    recentCompletedTitle: Recently completed
+    recentCompletedEmpty: No completed tasks yet
     insightsTitle: AI Planning Insights
     insightsEmpty: No AI planning insights.
     insightsDevNote: Demo data (dev mock); the AI planning insights API is not wired yet.
@@ -172,6 +187,12 @@ tasks:
     requiresBaseline: An approved implementation baseline (S03) is required to generate tasks.
     mockNote: Demo data (dev mock); the AI decomposition API is not wired yet. Proposals live in this page session only.
   detail:
+    manualComplete: Manual complete
+    manualReasonPlaceholder: Reason for completing (required, audited)…
+    manualReasonRequired: A completion reason is required (accountability)
+    manualSubmit: Confirm completion
+    manualCancel: Cancel
+    manualFailed: Manual completion failed; please retry
     approvalPending: Pending human decision
     loading: Loading task detail…
     loadErrorTitle: Failed to load

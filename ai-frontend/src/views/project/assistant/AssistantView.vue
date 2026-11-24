@@ -17,12 +17,14 @@ import {
 } from "@/api/conversations";
 import {
   getDiscoverySession,
+  transitionDiscoverySession,
   type DiscoverySessionDetail,
   type DiscoveryMessage
 } from "@/api/discovery";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
 import { useAssistantConversation } from "@/composables/useAssistantConversation";
+import AssistantReadinessBanner from "@/components/shell/AssistantReadinessBanner.vue";
 
 /**
  * Project AI conversation page（V2 D-4 会话 REST + Batch G assistant 回复）。
@@ -165,6 +167,46 @@ function syncInterviewLink(conversation: Conversation | null) {
   if (interviewSessionId.value) void loadInterview(interviewSessionId.value);
 }
 
+// ─────────────────────────────────────── 访谈人工处理入口（B03-01 死信修复）
+//
+// REVIEW_REQUIRED 的访谈不在编排扫描集内：消息落进去后 AI 不会消费，直到
+// 人工退回（IN_PROGRESS，恢复编排）或完结（COMPLETED，回落 chat）。没有
+// 这组入口时消息就是死信——这是 v1.0 验收 B03-01 的 P1 缺陷本体。
+
+/** 访谈在等人工复核（REVIEW_REQUIRED）：AI 暂停消费，需要退回或完结。 */
+const interviewAwaitingReview = computed(
+  () => interview.value?.session.status === "REVIEW_REQUIRED"
+);
+
+/** 访谈在等人输入（NEEDS_USER_INPUT）：答完可人工完结。 */
+const interviewNeedsUserInput = computed(
+  () => interview.value?.session.status === "NEEDS_USER_INPUT"
+);
+
+/** 人工处理动作进行中（防重复提交；按钮 disabled）。 */
+const transitioning = ref(false);
+/** 跃迁失败提示（409=状态已被别处推进，刷新对齐而非报错打断）。 */
+const transitionConflict = ref("");
+
+/**
+ * 人工处理访谈会话：退回继续（IN_PROGRESS）或复核通过并完结（COMPLETED）。
+ * 完成后重拉访谈段；失败（含 409 竞态）也重拉——服务端状态是唯一真源。
+ */
+async function transitionInterview(status: "IN_PROGRESS" | "COMPLETED") {
+  const sessionId = interviewSessionId.value;
+  if (!effectiveProjectId.value || !sessionId || transitioning.value) return;
+  transitioning.value = true;
+  transitionConflict.value = "";
+  try {
+    await transitionDiscoverySession(effectiveProjectId.value, sessionId, status);
+  } catch {
+    transitionConflict.value = t("assistant.transitionConflict");
+  } finally {
+    transitioning.value = false;
+    void loadInterview(sessionId);
+  }
+}
+
 // ──────────────────────────────────── 会话机制（与 AI Chat 常驻列共用同一实现）
 //
 // DR-C8 第 ② 步：会话能力从本页抽到 composable，常驻列复用同一份——
@@ -182,6 +224,7 @@ const {
   sendError,
   pendingText,
   drafting,
+  aiReadiness,
   panelTitle,
   conversationOptions,
   load,
@@ -328,6 +371,8 @@ watch(effectiveProjectId, next => {
           class="assistant-stage"
           :class="{ 'assistant-stage--split': interviewSessionId }"
         >
+          <!-- R3/B01-01：AI 未就绪的显式引导（原因 + 配置入口），不伪造可用。 -->
+          <AssistantReadinessBanner :readiness="aiReadiness" />
           <AiConversationPanel
             :messages="timeline"
             :title="panelTitle"
@@ -353,6 +398,61 @@ watch(effectiveProjectId, next => {
                 {{ interview.session.status }}
               </span>
             </p>
+            <!-- B03-01：编排轮失败对用户可见（系统自动重试，不伪造成功）。 -->
+            <p
+              v-if="interview?.session.last_round_error"
+              class="assistant-interview__error"
+              role="status"
+              data-testid="interview-round-error"
+            >
+              {{ t("assistant.lastRoundError") }}:
+              {{ interview.session.last_round_error }}
+            </p>
+            <!-- B03-01：等待人工复核/输入的显式提示 + 处理入口。 -->
+            <div
+              v-if="interviewAwaitingReview || interviewNeedsUserInput"
+              class="assistant-interview__review"
+              :class="{
+                'assistant-interview__review--review': interviewAwaitingReview
+              }"
+              role="alert"
+              data-testid="interview-review-banner"
+            >
+              <p class="assistant-interview__review-text">
+                {{
+                  interviewAwaitingReview
+                    ? t("assistant.reviewRequiredNotice")
+                    : t("assistant.needsInputNotice")
+                }}
+              </p>
+              <div class="assistant-interview__review-actions">
+                <Button
+                  v-if="interviewAwaitingReview"
+                  variant="secondary"
+                  size="sm"
+                  :disabled="transitioning"
+                  data-testid="interview-resume"
+                  @click="transitionInterview('IN_PROGRESS')"
+                >
+                  {{ t("assistant.resumeInterview") }}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  :disabled="transitioning"
+                  data-testid="interview-complete"
+                  @click="transitionInterview('COMPLETED')"
+                >
+                  {{ t("assistant.completeInterview") }}
+                </Button>
+              </div>
+              <p
+                v-if="transitionConflict"
+                class="assistant-interview__review-conflict"
+              >
+                {{ transitionConflict }}
+              </p>
+            </div>
             <div
               v-if="interviewMessages.length > 0"
               class="assistant-interview__timeline"
@@ -556,6 +656,45 @@ watch(effectiveProjectId, next => {
 }
 
 .assistant-interview__status {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
+}
+
+/* B03-01：编排失败提示（自动重试中，非阻断）。 */
+.assistant-interview__error {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
+}
+
+/* B03-01：等待人工复核/输入的处理面板。 */
+.assistant-interview__review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-md);
+}
+
+.assistant-interview__review--review {
+  border-color: var(--ws-color-warning);
+}
+
+.assistant-interview__review-text {
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-small);
+}
+
+.assistant-interview__review-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.assistant-interview__review-conflict {
+  margin: 0;
   color: var(--ws-text-secondary);
   font-size: var(--font-size-micro);
 }

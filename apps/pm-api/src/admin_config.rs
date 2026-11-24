@@ -21,9 +21,9 @@ use serde_json::json;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use pm_application::repo::platform_ops::PlatformOpsRepo;
 use crate::support::repos::platform_ops_repo;
 use crate::support::{ApiError, ApiResult};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -47,7 +47,12 @@ fn require_system_admin(caller: &AuthedPrincipal) -> ApiResult<()> {
     Ok(())
 }
 
-fn row_to_json(endpoint: &str, model: &str, enabled: bool, updated_at: chrono::DateTime<chrono::Utc>) -> serde_json::Value {
+fn row_to_json(
+    endpoint: &str,
+    model: &str,
+    enabled: bool,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> serde_json::Value {
     json!({
         "endpoint": endpoint,
         "model": model,

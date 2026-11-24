@@ -21,7 +21,6 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::design_guard_repo;
-use pm_application::repo::DesignGuardRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::design::{
     self, AddFindingRequest, CreateAdrRequest, CreateDesignRequest, DecideApprovalRequest,
@@ -29,6 +28,7 @@ use pm_application::design::{
     LinkAdrDesignRequest, LinkAdrRequirementRequest, LinkDesignRequirementRequest,
     ResolveFindingRequest, SetBlockingRequest, SupersedeAdrRequest, SupersedeBaselineRequest,
 };
+use pm_application::repo::DesignGuardRepo;
 
 /// 设计级端点公共前置：租户边界（越权/不存在一律 404）+ 项目成员可见性。
 async fn require_design_visible(

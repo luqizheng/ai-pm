@@ -88,6 +88,11 @@ function goCreate() {
   void router.push({ path: "/project/tasks/backlog", query: { create: "1" } });
 }
 
+/** TASK-01 §2 Header：AI 任务分析入口（任务拆解工作区）。 */
+function goBreakdown() {
+  void router.push({ path: "/project/tasks/breakdown" });
+}
+
 const stats = computed(() => {
   const counts = { total: 0, draft: 0, ready: 0, blocked: 0, unassigned: 0 };
   counts.total = tasks.value.length;
@@ -148,6 +153,45 @@ const attention = computed(() => {
   return items;
 });
 
+/** 执行类型（TASK-01 §3）：有 run 记录=AI 执行；无 run=人工。未指派不算。 */
+const EXEC_RUN_ACTIVE = new Set([
+  "claimed",
+  "running",
+  "submitted",
+  "reviewing",
+  "awaiting_decision"
+]);
+
+function executionKind(task: TaskRowModel): "ai" | "human" | "unassigned" {
+  if (task.runStatus) return "ai";
+  if (!task.assigneeId) return "unassigned";
+  return "human";
+}
+
+/** 执行中的任务（TASK-01 §2.2）：执行通道状态活跃或最新 run 活跃。 */
+const executing = computed(() =>
+  tasks.value
+    .filter(
+      task =>
+        EXEC_RUN_ACTIVE.has(task.status) ||
+        (task.runStatus !== null && EXEC_RUN_ACTIVE.has(task.runStatus))
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+);
+
+/** 最近完成任务（TASK-01 §2.4）：已完成，按更新时间倒序。 */
+const recentCompleted = computed(() =>
+  tasks.value
+    .filter(task => task.status === "completed")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 8)
+);
+
+const executingCount = computed(() => executing.value.length);
+const completedCount = computed(
+  () => tasks.value.filter(task => task.status === "completed").length
+);
+
 const upcoming = computed(() =>
   [...tasks.value]
     .filter(
@@ -194,6 +238,15 @@ function decideInsight(id: string, decision: "accepted" | "rejected") {
       >
         <RefreshCw :size="14" />
         {{ t("s04.tasks.common.refresh") }}
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        data-testid="tasks-ai-analysis"
+        @click="goBreakdown"
+      >
+        <Sparkles :size="14" />
+        {{ t("s04.tasks.overview.aiAnalysisEntry") }}
       </Button>
       <Button
         variant="primary"
@@ -260,6 +313,140 @@ function decideInsight(id: string, decision: "accepted" | "rejected") {
             )
           }}</span>
         </button>
+      </section>
+
+      <div class="ov-chips" data-testid="ov-chips">
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({})"
+        >
+          {{ t("s04.tasks.overview.chipAll") }}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({ unassigned: '1' })"
+        >
+          {{ t("s04.tasks.overview.chipUnassigned") }}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({ status: 'blocked' })"
+        >
+          {{ t("s04.tasks.overview.chipBlocked") }}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({ status: 'draft' })"
+        >
+          {{ t("s04.tasks.overview.chipDraft") }}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({ status: 'ready' })"
+        >
+          {{ t("s04.tasks.overview.chipReady") }}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="goBacklog({ status: 'completed' })"
+        >
+          {{ t("s04.tasks.overview.chipCompleted") }}
+        </Button>
+      </div>
+
+      <section class="ov-card" data-testid="ov-executing">
+        <header class="ov-card__head">
+          <h2 class="ov-card__title">
+            {{ t("s04.tasks.overview.executingTitle") }}
+            <span class="ov-card__count">{{ executingCount }}</span>
+          </h2>
+        </header>
+        <EmptyState
+          v-if="executing.length === 0"
+          :title="t('s04.tasks.overview.executingEmpty')"
+          size="sm"
+        />
+        <table v-else class="ov-table">
+          <thead>
+            <tr>
+              <th>{{ t("s04.tasks.common.taskLabel") }}</th>
+              <th>{{ t("s04.tasks.common.statusLabel") }}</th>
+              <th>{{ t("s04.tasks.overview.execKindLabel") }}</th>
+              <th>{{ t("s04.tasks.common.assigneeLabel") }}</th>
+              <th>{{ t("s04.tasks.common.updatedLabel") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="task in executing"
+              :key="task.id"
+              class="ov-table__row"
+              @click="openDetail(task)"
+            >
+              <td>
+                <span class="ov-table__id">{{ task.code }}</span>
+                <span class="ov-table__title">{{ task.title }}</span>
+              </td>
+              <td><TaskStatusChip :status="task.status" /></td>
+              <td>{{ t(`s04.tasks.overview.execKind${executionKind(task).charAt(0).toUpperCase()}${executionKind(task).slice(1)}`) }}</td>
+              <td>
+                {{
+                  task.assigneeId
+                    ? shortId(task.assigneeId)
+                    : t("s04.tasks.common.unassigned")
+                }}
+              </td>
+              <td>{{ formatDateTime(task.updatedAt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="ov-card" data-testid="ov-recent-completed">
+        <header class="ov-card__head">
+          <h2 class="ov-card__title">
+            {{ t("s04.tasks.overview.recentCompletedTitle") }}
+            <span class="ov-card__count">{{ completedCount }}</span>
+          </h2>
+          <Button variant="ghost" size="sm" @click="goBacklog({ status: 'completed' })">
+            {{ t("s04.tasks.overview.chipCompleted") }}
+          </Button>
+        </header>
+        <EmptyState
+          v-if="recentCompleted.length === 0"
+          :title="t('s04.tasks.overview.recentCompletedEmpty')"
+          size="sm"
+        />
+        <table v-else class="ov-table">
+          <thead>
+            <tr>
+              <th>{{ t("s04.tasks.common.taskLabel") }}</th>
+              <th>{{ t("s04.tasks.overview.execKindLabel") }}</th>
+              <th>{{ t("s04.tasks.common.updatedLabel") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="task in recentCompleted"
+              :key="task.id"
+              class="ov-table__row"
+              @click="openDetail(task)"
+            >
+              <td>
+                <span class="ov-table__id">{{ task.code }}</span>
+                <span class="ov-table__title">{{ task.title }}</span>
+              </td>
+              <td>{{ t(`s04.tasks.overview.execKind${executionKind(task).charAt(0).toUpperCase()}${executionKind(task).slice(1)}`) }}</td>
+              <td>{{ formatDateTime(task.updatedAt) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section class="ov-card">
@@ -773,5 +960,18 @@ function decideInsight(id: string, decision: "accepted" | "rejected") {
 .ov-insight__decided {
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
+}
+.ov-chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.ov-card__count {
+  margin-left: var(--space-2);
+  font-size: var(--font-size-caption);
+  color: var(--ws-text-secondary);
+  font-weight: normal;
 }
 </style>

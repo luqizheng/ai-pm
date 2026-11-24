@@ -4,9 +4,9 @@
 //! docs 事实，输出是同一套提案链能吃下的草案。无可用 LLM 时用确定性 Fake，
 //! 保证演示环境四步向导能走通。
 
-use async_trait::async_trait;
 use crate::conversation_model::{complete_raw, ConversationTurn};
 use crate::model::ModelError;
+use async_trait::async_trait;
 use pm_application::repo_facts::pm_ai_port::ModelError as RepoModelError;
 pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
 use pm_application::team_llm_catalog::ModelResolutionError;

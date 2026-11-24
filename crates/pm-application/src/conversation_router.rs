@@ -273,6 +273,14 @@ pub struct SendOutcome {
     pub landed: Landed,
     pub discovery_session_id: Option<Uuid>,
     pub handoff: Option<HandoffView>,
+    /// 落点访谈会话的当前状态（`landed=interview` 时有值）。
+    ///
+    /// B03-01：`REVIEW_REQUIRED` 的访谈不在编排扫描集内——消息已记录但**不会**
+    /// 被 AI 消费，直到人工复核（→ `IN_PROGRESS` 恢复编排 / → `COMPLETED` 完结）。
+    /// 调用方必须把该状态呈现给用户，并提供人工处理入口；否则消息对用户表现为
+    /// 「已发送但永远没有回复」。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interview_status: Option<String>,
     #[serde(flatten)]
     pub message: LandedMessage,
 }
@@ -482,17 +490,19 @@ pub async fn send_message(
                 landed: Landed::Chat,
                 discovery_session_id: None,
                 handoff: None,
+                interview_status: None,
                 message: LandedMessage::Chat(message),
             }
         }
         Plan::Continue(session_id) => {
-            let message =
+            let (message, status) =
                 append_user_to_interview(&mut tx, tenant_id, conversation_id, session_id, &request)
                     .await?;
             SendOutcome {
                 landed: Landed::Interview,
                 discovery_session_id: Some(session_id),
                 handoff: None,
+                interview_status: Some(status),
                 message: LandedMessage::Interview(message),
             }
         }
@@ -512,7 +522,7 @@ pub async fn send_message(
                 intent,
             )
             .await?;
-            let message = append_user_to_interview(
+            let (message, status) = append_user_to_interview(
                 &mut tx,
                 tenant_id,
                 conversation_id,
@@ -524,6 +534,7 @@ pub async fn send_message(
                 landed: Landed::Interview,
                 discovery_session_id: Some(handoff.discovery_session_id),
                 handoff: Some(handoff),
+                interview_status: Some(status),
                 message: LandedMessage::Interview(message),
             }
         }
@@ -625,13 +636,14 @@ async fn decide(
 ///
 /// 先取会话行锁（C7 会话级追加互斥，与编排器 / 池版追加同一把锁），锁后复核
 /// 会话仍活跃——判定时活跃、锁前被人工完结/暂停的极端竞态 → 409，不写。
+/// 返回落点会话的当前状态（含 `REVIEW_REQUIRED`——见 [`SendOutcome::interview_status`]）。
 async fn append_user_to_interview(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     tenant_id: Uuid,
     conversation_id: Uuid,
     session_id: Uuid,
     request: &SendMessageRequest,
-) -> Result<DiscoveryMessageView, RouterError> {
+) -> Result<(DiscoveryMessageView, String), RouterError> {
     let session = discovery::lock_session_in(tx, tenant_id, session_id).await?;
     if !session_is_active(&session.status) {
         return Err(RouterError::Conflict("discovery_session_not_active"));
@@ -640,7 +652,7 @@ async fn append_user_to_interview(
         discovery::append_message_in_tx(tx, tenant_id, session_id, "user", "WEB", &request.content)
             .await?;
     touch_conversation(tx, conversation_id).await?;
-    Ok(message)
+    Ok((message, session.status))
 }
 
 async fn touch_conversation(

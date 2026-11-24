@@ -27,7 +27,7 @@ use pm_application::product::{self, ProductError};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::team_llm_guard::{guard_team, err_not_found};
+use crate::team_llm_guard::{err_not_found, guard_team};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -70,7 +70,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/projects/{project_id}/products",
             get(project_products_handler),
         )
-        .route("/v1/pm/products/{product_id}/tasks", get(product_tasks_handler))
+        .route(
+            "/v1/pm/products/{product_id}/tasks",
+            get(product_tasks_handler),
+        )
 }
 
 // ─────────────────────────────────────────────────────────────── 错误映射
@@ -78,21 +81,17 @@ pub(crate) fn router() -> Router<AppState> {
 fn api_err(err: ProductError) -> Response {
     match err {
         ProductError::NotFound => err_not_found("product not found"),
-        ProductError::Validation(m) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "message": m })),
-        )
-            .into_response(),
-        ProductError::Conflict(m) => (
-            StatusCode::CONFLICT,
-            Json(json!({ "message": m })),
-        )
-            .into_response(),
+        ProductError::Validation(m) => {
+            (StatusCode::BAD_REQUEST, Json(json!({ "message": m }))).into_response()
+        }
+        ProductError::Conflict(m) => {
+            (StatusCode::CONFLICT, Json(json!({ "message": m }))).into_response()
+        }
         ProductError::Forbidden(m) => err_forbidden(&m),
         ProductError::RuleRejected(code, message) => match code.as_str() {
-            "not_a_product_member"
-            | "team_owner_required"
-            | "product_owner_required" => err_forbidden(&message),
+            "not_a_product_member" | "team_owner_required" | "product_owner_required" => {
+                err_forbidden(&message)
+            }
             "product_member_not_found" => err_not_found(&message),
             // last_owner / already_* / 其他 → 409。
             _ => (
@@ -113,11 +112,7 @@ fn api_err(err: ProductError) -> Response {
 }
 
 fn err_forbidden(message: &str) -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(json!({ "message": message })),
-    )
-        .into_response()
+    (StatusCode::FORBIDDEN, Json(json!({ "message": message }))).into_response()
 }
 
 fn db_ok<T>(result: Result<T, ProductError>, render: impl Fn(T) -> Response) -> Response {
@@ -158,7 +153,7 @@ async fn create_product_handler(
             body.first_owner_principal_id,
         )
         .await,
-    |p| (StatusCode::CREATED, Json(p)).into_response(),
+        |p| (StatusCode::CREATED, Json(p)).into_response(),
     )
 }
 
@@ -196,9 +191,13 @@ async fn project_products_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) =
-        crate::support::require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await
+    if let Err(resp) = crate::support::require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await
     {
         return resp.into_response();
     }

@@ -148,6 +148,8 @@ fn sample_batch() -> RawTaskBatch {
             key: "sms".to_string(),
             title: "接入短信服务商并配置登录模板".to_string(),
             description: Some("选型并配置短信通道".to_string()),
+            goal: Some("短信通道可用".to_string()),
+            deliverables: vec!["短信通道配置".to_string()],
             acceptance_criteria: vec!["短信通道连通性自测通过".to_string()],
             depends_on: vec![],
             role_ref: Some("developer".to_string()),
@@ -157,6 +159,8 @@ fn sample_batch() -> RawTaskBatch {
                 key: "login".to_string(),
                 title: "实现手机号验证码登录".to_string(),
                 description: Some("含发送/校验/过期".to_string()),
+                goal: Some("验证码登录可用".to_string()),
+                deliverables: vec!["登录模块".to_string()],
                 acceptance_criteria: vec!["正确验证码可登录".to_string()],
                 depends_on: vec!["sms".to_string()],
                 role_ref: Some("nobody".to_string()),
@@ -165,6 +169,8 @@ fn sample_batch() -> RawTaskBatch {
                 key: "guard".to_string(),
                 title: "补登录失败风控".to_string(),
                 description: None,
+                goal: None,
+                deliverables: vec![],
                 acceptance_criteria: vec!["连续失败 5 次锁定 10 分钟".to_string()],
                 depends_on: vec!["login".to_string()],
                 role_ref: None,
@@ -371,6 +377,31 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
         batch.tasks[1].ai_role_version_id.is_none(),
         "越界角色置空而非编造"
     );
+
+    // B05-01：S04 就绪检查 A 层要求 goal/deliverables 非空——创建即落。
+    // 任务①模型给了 goal/deliverables；任务③（guard）模型未给 → 回退
+    // description（None→title）/验收口径，不允许落库后 A 层全 ⚠。
+    let contract_rows: Vec<(Option<String>, serde_json::Value)> = sqlx::query_as(
+        "SELECT goal, deliverables FROM delivery.task WHERE project_id = $1          ORDER BY created_at, id",
+    )
+    .bind(fx.project_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(contract_rows.len(), 3);
+    for (goal, deliverables) in &contract_rows {
+        let goal = goal.as_deref().map(str::trim).unwrap_or("");
+        assert!(
+            !goal.is_empty(),
+            "B05-01: generated task must carry a non-empty goal"
+        );
+        assert!(
+            deliverables.as_array().map(Vec::len).unwrap_or(0) > 0,
+            "B05-01: generated task must carry non-empty deliverables"
+        );
+    }
+    // 模型给了 goal/deliverables 的任务按原样落库（不覆盖为回退值）。
+    assert_eq!(contract_rows[0].0.as_deref(), Some("短信通道可用"));
 
     // E1：task_requirement 指向 approved 修订（DB 断言，不看回包）。
     let pins: Vec<(Uuid, String)> = sqlx::query_as(
@@ -620,6 +651,8 @@ async fn over_limit_batch_is_truncated(pool: PgPool) {
             key: format!("p{index}"),
             title: format!("前置任务 {index}"),
             description: None,
+            goal: None,
+            deliverables: vec![],
             acceptance_criteria: vec![format!("前置 {index} 自测通过")],
             depends_on: vec![],
             role_ref: None,
@@ -630,6 +663,8 @@ async fn over_limit_batch_is_truncated(pool: PgPool) {
             key: format!("m{index}"),
             title: format!("主任务 {index}"),
             description: None,
+            goal: None,
+            deliverables: vec![],
             acceptance_criteria: vec![format!("主任务 {index} 验收通过")],
             depends_on: vec!["p0".to_string()],
             role_ref: None,

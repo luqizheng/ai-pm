@@ -98,8 +98,7 @@ pub trait AcceptanceReadRepo: Send + Sync {
         project_id: Uuid,
     ) -> Result<Vec<ApprovalRow>, sqlx::Error>;
 
-    async fn project_approvals(&self, project_id: Uuid)
-        -> Result<Vec<ApprovalRow>, sqlx::Error>;
+    async fn project_approvals(&self, project_id: Uuid) -> Result<Vec<ApprovalRow>, sqlx::Error>;
 
     async fn list_artifacts(
         &self,

@@ -362,7 +362,11 @@ async fn mark_analyzed_derives_links_and_failed_is_terminal(pool: PgPool) {
     assert_eq!(status, "analyzed");
     assert_eq!(kb_link, Some(kb_rev));
     assert_eq!(src, Some(source));
-    assert_eq!(projc_src, Some(projc_source), "G-1 dual source registration");
+    assert_eq!(
+        projc_src,
+        Some(projc_source),
+        "G-1 dual source registration"
+    );
 
     // DEF-CHAIN-02（branch-b4 场景）：file:// 路径不存在 → `git_not_found`，
     // 不得再落到历史证据里的 "git authentication failed"。
@@ -861,9 +865,14 @@ async fn projc_submitted_proposal_on(
     approve: bool,
 ) -> Uuid {
     let actor = dev();
-    let receipt = projc_upsert_draft(pool, project, &actor, projc_object_draft(key, &format!("# {key}")))
-        .await
-        .unwrap();
+    let receipt = projc_upsert_draft(
+        pool,
+        project,
+        &actor,
+        projc_object_draft(key, &format!("# {key}")),
+    )
+    .await
+    .unwrap();
     let drafted = projc_create(
         pool,
         project,
@@ -994,7 +1003,11 @@ async fn mark_analyzed_registers_dual_sources(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(status, "analyzed");
-    assert_eq!(pc_src, Some(pc_source), "G-1: pc_source_id（identity 通道）");
+    assert_eq!(
+        pc_src,
+        Some(pc_source),
+        "G-1: pc_source_id（identity 通道）"
+    );
     assert_eq!(
         projc_src,
         Some(projc_source),
@@ -1161,12 +1174,11 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
     .unwrap();
     assert_eq!(pc_versions, 1);
     assert_eq!(projc_versions, 1, "G-2: projc-decision → projc 正式版本");
-    let (pc_status,): (String,) =
-        sqlx::query_as("SELECT status FROM pc.proposal WHERE id = $1")
-            .bind(pc_approved)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let (pc_status,): (String,) = sqlx::query_as("SELECT status FROM pc.proposal WHERE id = $1")
+        .bind(pc_approved)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(pc_status, "applied");
     let (projc_status,): (String,) =
         sqlx::query_as("SELECT status FROM projc.proposal WHERE id = $1")
@@ -1179,8 +1191,7 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
     // 对象 → 来源分析报告追溯（lineage）：双域各取一个已入版本的对象，反查
     // version→proposal→报告。来源报告即本测试的 report。
     use pm_application::repo::kb_pc_query::KbPcQueryRepo;
-    let query_repo =
-        pm_infrastructure::repo_kb_pc_query::PgKbPcQueryRepo::new(pool.clone());
+    let query_repo = pm_infrastructure::repo_kb_pc_query::PgKbPcQueryRepo::new(pool.clone());
     for (schema_domain, repo_col) in [("pc", "pc_source_id"), ("projc", "projc_source_id")] {
         let (obj_id,): (Uuid,) = sqlx::query_as(&format!(
             "SELECT vm.object_id FROM {schema_domain}.version_member vm               JOIN {schema_domain}.cognition_version cv ON cv.id = vm.version_id              WHERE cv.project_id = $1 AND vm.object_id IS NOT NULL LIMIT 1"
@@ -1191,7 +1202,10 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
         .unwrap();
         let lineage = match schema_domain {
             "pc" => query_repo.pc_object_lineage(project, obj_id).await.unwrap(),
-            _ => query_repo.projc_object_lineage(project, obj_id).await.unwrap(),
+            _ => query_repo
+                .projc_object_lineage(project, obj_id)
+                .await
+                .unwrap(),
         };
         assert_eq!(lineage.len(), 1, "{schema_domain} lineage");
         assert_eq!(lineage[0].report_id, Some(report));
@@ -1232,7 +1246,10 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
 
     // 幂等重放语义：重复 close 409（状态门共用，双域一致）
     let again = close_report(&pool, project, report, &closer).await;
-    assert!(matches!(again, Err(AnalysisReportError::Conflict(_))), "{again:?}");
+    assert!(
+        matches!(again, Err(AnalysisReportError::Conflict(_))),
+        "{again:?}"
+    );
 }
 
 // ── G-2：ProjC 发布失败独立计数、不阻断关闭 ─────────────────────────────────
@@ -1269,7 +1286,9 @@ async fn close_projc_publish_failure_is_independent_and_non_blocking(pool: PgPoo
         &pool,
         project,
         &dev(),
-        ProjcPublishInput { proposal_id: projc_ok },
+        ProjcPublishInput {
+            proposal_id: projc_ok,
+        },
     )
     .await
     .unwrap();

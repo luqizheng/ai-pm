@@ -116,11 +116,12 @@ impl PlatformOpsRepo for PgPlatformOpsRepo {
     }
 
     async fn version_id_of_job(&self, job_id: Uuid) -> Result<Uuid, sqlx::Error> {
-        let id: Uuid =
-            sqlx::query_scalar("SELECT document_version_id FROM docproc.processing_job WHERE id = $1")
-                .bind(job_id)
-                .fetch_one(&self.pool)
-                .await?;
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT document_version_id FROM docproc.processing_job WHERE id = $1",
+        )
+        .bind(job_id)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(id)
     }
 

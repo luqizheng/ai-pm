@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
 use pm_application::pc::{
-    propose_from_analysis, publish_version, register_evidence, register_source, AnalysisProposalInput,
-    AnalysisProposalOutcome, EvidenceInput, EvidenceSubject, SourceInput,
+    propose_from_analysis, publish_version, register_evidence, register_source,
+    AnalysisProposalInput, AnalysisProposalOutcome, EvidenceInput, EvidenceSubject, SourceInput,
 };
 
 const LEAD: Uuid = Uuid::from_u128(0x7072_0000_0000_0000_0000_0000_0000_0001);
@@ -168,7 +168,9 @@ async fn analyze_replay_is_idempotent_via_ledger(pool: PgPool) {
         rationale: "b4a-replay".into(),
     };
 
-    let first = propose_from_analysis(&pool, project, input.clone()).await.unwrap();
+    let first = propose_from_analysis(&pool, project, input.clone())
+        .await
+        .unwrap();
     let AnalysisProposalOutcome::Proposed(r1) = first else {
         panic!("expected Proposed");
     };
@@ -186,7 +188,10 @@ async fn analyze_replay_is_idempotent_via_ledger(pool: PgPool) {
     .unwrap();
     assert_eq!(command, "pc_propose_from_analysis");
     assert_eq!(status, "completed");
-    assert!(fp.as_deref().is_some_and(|v| !v.is_empty()), "请求指纹已锚定");
+    assert!(
+        fp.as_deref().is_some_and(|v| !v.is_empty()),
+        "请求指纹已锚定"
+    );
 
     // 场景 1/9：同 op 同意图 → completed 短路，幂等返回原提案
     let second = propose_from_analysis(&pool, project, input).await.unwrap();
@@ -313,13 +318,12 @@ async fn publish_completed_short_circuit_compares_fingerprint(pool: PgPool) {
     );
 
     // 恢复指纹 → 同 op 同 fp → 幂等重放
-    let content_hash: String = sqlx::query_scalar(
-        "SELECT proposal_content_hash FROM pc.proposal WHERE id = $1",
-    )
-    .bind(receipt.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let content_hash: String =
+        sqlx::query_scalar("SELECT proposal_content_hash FROM pc.proposal WHERE id = $1")
+            .bind(receipt.proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     sqlx::query(
         "UPDATE pc.write_operation SET request_fingerprint = $2 \
           WHERE project_id = $1 AND operation_id = $3",
@@ -500,7 +504,10 @@ async fn projc_analyze_replay_is_idempotent_via_ledger(pool: PgPool) {
     let ProjcOutcome::Proposed(r2) = second else {
         panic!("expected Proposed (replay)");
     };
-    assert_eq!(r2.proposal_id, r1.proposal_id, "ProjC 同 op 同意图幂等返回原提案");
+    assert_eq!(
+        r2.proposal_id, r1.proposal_id,
+        "ProjC 同 op 同意图幂等返回原提案"
+    );
 
     let (command, status): (String, String) = sqlx::query_as(
         "SELECT command, status FROM projc.write_operation \

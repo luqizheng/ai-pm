@@ -716,3 +716,102 @@ async fn overview_non_member_404(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+// ── R3（B01-01）：AI 就绪探针 ───────────────────────────────────────────
+
+/// 探针 = DB 四项数据条件（provider/catalog/team_wide 授权/general 策略）：
+/// 默认部署全零 → ready=false；四项齐备 → ready=true；跨租户项目 404。
+#[sqlx::test(migrations = "../../migrations")]
+async fn ai_readiness_reflects_llm_data_plane(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_tenant_member(&pool, tenant, "alice").await;
+    let project = seed_project(&pool, tenant, "RDY").await;
+    seed_project_member(&pool, tenant, project, alice).await;
+    let app = app(pool.clone());
+    let alice_token = token_for("alice", 1);
+
+    // ① 全零：默认部署事实（不伪造就绪）。
+    let (status, body) = call(
+        &app,
+        &format!("/v1/pm/projects/{project}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider_enabled_count"], 0);
+    assert_eq!(body["catalog_model_enabled_count"], 0);
+    assert_eq!(body["team_wide_authorization_count"], 0);
+    assert_eq!(body["general_policy_set"], false);
+    assert_eq!(body["ready"], false);
+
+    // ② 四项齐备（直接种子数据面；openai_compatible 允许无凭证）。
+    let provider_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.team_llm_provider \
+         (tenant_id, name, provider_type, endpoint, status, created_by) \
+         VALUES ($1, 'rdy-provider', 'openai_compatible', 'http://127.0.0.1:9', 'enabled', $2) \
+         RETURNING id",
+    )
+    .bind(tenant)
+    .bind(alice)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let model_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.team_llm_model \
+         (tenant_id, provider_id, model_id, display_name, enabled, created_by) \
+         VALUES ($1, $2, 'test-model', 'Test Model', true, $3) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(provider_id)
+    .bind(alice)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.team_llm_model_authorization (tenant_id, model_id, state, granted_by) \
+         VALUES ($1, $2, 'team_wide', $3)",
+    )
+    .bind(tenant)
+    .bind(model_id)
+    .bind(alice)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.team_llm_model_policy \
+         (tenant_id, role_key, model_id, updated_by) \
+         VALUES ($1, 'general', $2, $3)",
+    )
+    .bind(tenant)
+    .bind(model_id)
+    .bind(alice)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, body) = call(
+        &app,
+        &format!("/v1/pm/projects/{project}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider_enabled_count"], 1);
+    assert_eq!(body["catalog_model_enabled_count"], 1);
+    assert_eq!(body["team_wide_authorization_count"], 1);
+    assert_eq!(body["general_policy_set"], true);
+    assert_eq!(body["ready"], true);
+
+    // ③ 跨租户项目：404（不泄露存在性）。
+    let tenant2 = seed_tenant(&pool, "2").await;
+    let bob = seed_tenant_member(&pool, tenant2, "bob").await;
+    let project2 = seed_project(&pool, tenant2, "RDY2").await;
+    seed_project_member(&pool, tenant2, project2, bob).await;
+    let (status, _) = call(
+        &app,
+        &format!("/v1/pm/projects/{project2}/ai-readiness"),
+        &alice_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

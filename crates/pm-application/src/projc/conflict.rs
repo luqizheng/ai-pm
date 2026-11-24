@@ -240,8 +240,10 @@ pub async fn resolve_conflict(
         .map(str::trim)
         .filter(|n| !n.is_empty())
         .map(str::to_string);
-    if matches!(input.action, ResolveAction::Resolve | ResolveAction::Dismiss)
-        && note.is_none()
+    if matches!(
+        input.action,
+        ResolveAction::Resolve | ResolveAction::Dismiss
+    ) && note.is_none()
     {
         return Err(ProjcError::Invalid(
             "resolution note is required for resolve/dismiss".into(),
@@ -259,7 +261,10 @@ pub async fn resolve_conflict(
     .bind(conflict_id)
     .bind(new_status)
     .bind(&note)
-    .bind(matches!(input.action, ResolveAction::Resolve | ResolveAction::Dismiss))
+    .bind(matches!(
+        input.action,
+        ResolveAction::Resolve | ResolveAction::Dismiss
+    ))
     .bind(actor.principal_id)
     .execute(&mut *tx)
     .await?;

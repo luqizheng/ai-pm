@@ -108,7 +108,10 @@ mod tests {
     fn optional_fields_are_skipped_when_absent() {
         let json = serde_json::to_string(&SourceRef::new("delivery", "requirement", "R-042"))
             .expect("serialize");
-        assert_eq!(json, r#"{"domain":"delivery","type":"requirement","id":"R-042"}"#);
+        assert_eq!(
+            json,
+            r#"{"domain":"delivery","type":"requirement","id":"R-042"}"#
+        );
     }
 
     #[test]
@@ -118,7 +121,10 @@ mod tests {
             .with_content_hash("abc123");
         let back: SourceRef = serde_json::from_str(&serde_json::to_string(&src).unwrap()).unwrap();
         assert_eq!(back, src);
-        assert_eq!(back.sort_key(), ("delivery", "requirement", "R-042", "rev-12"));
+        assert_eq!(
+            back.sort_key(),
+            ("delivery", "requirement", "R-042", "rev-12")
+        );
     }
 
     #[test]

@@ -20,6 +20,23 @@ assistant:
   interviewNotice: Switched to requirement clarification
   interviewSegmentLabel: Requirement clarification interview
   interviewStatus: Interview status
+  reviewRequiredNotice: >-
+    This interview is awaiting human review: findings have all been decided and
+    your confirmation is needed. Until reviewed, the AI will not process new
+    messages in this interview; resume or complete it to continue.
+  needsInputNotice: This interview is waiting for your input. Answer the open questions above and the AI continues; complete the session once you are done.
+  resumeInterview: Resume interview
+  completeInterview: Approve and complete
+  lastRoundError: Last processing round failed (the system retries automatically)
+  transitionConflict: The interview status was changed by another action; refreshed to the latest state.
+  readiness:
+    title: AI assistant is not ready — messages will not get replies
+    missingProvider: No model provider is enabled
+    missingModel: The model catalog has no enabled model
+    missingAuthorization: No team-wide model authorization is granted
+    missingGeneralPolicy: The general model policy is not configured
+    hint: AI can only reply after the configuration below; other project features are unaffected meanwhile.
+    settingsLink: Open Team settings → AI services
   todoTitle: To-do
   openQuestions: Open questions
   whyBlockingPrefix: Why this matters

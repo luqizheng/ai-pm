@@ -12,6 +12,7 @@ import {
   type SendMessageOutcome,
   type SubmitInteractionPayload
 } from "@/api/conversations";
+import { getAiReadiness, type AiReadiness } from "@/api/llm";
 import {
   INTERACTION_STATUSES,
   PAYLOAD_REQUIRED_FIELDS,
@@ -304,6 +305,12 @@ export function useAssistantConversation(
   const drafting = ref(false);
   /** 真实注入记账（后端 metadata.injection；无则 null）。 */
   const injection = ref<AssistantInjection | null>(null);
+  /**
+   * AI 数据面就绪探针（R3/B01-01）：null = 未拉取/无项目/探针失败（探针
+   * 失败静默——不给用户加压，发送链路本身仍诚实）。`ready=false` 时聊天
+   * 面板渲染未配置引导（原因 + 配置入口）。
+   */
+  const aiReadiness = ref<AiReadiness | null>(null);
 
   // ───────────────────────────────────────────────────────── 增量轮询
 
@@ -469,11 +476,14 @@ export function useAssistantConversation(
     if (!target) {
       stopPolling();
       loading.value = false;
+      aiReadiness.value = null;
       return;
     }
     stopPolling();
     loading.value = true;
     loadError.value = "";
+    // 就绪探针与首屏并行；失败静默（探针失败不给用户加压，发送链路仍诚实）。
+    void refreshReadiness();
     try {
       conversations.value = await listConversations(target);
       selectedId.value = conversations.value[0]?.id ?? "";
@@ -490,6 +500,20 @@ export function useAssistantConversation(
     }
   }
 
+  /** AI 数据面就绪探针（R3/B01-01）：每次项目载入刷新一次，失败静默。 */
+  async function refreshReadiness() {
+    const target = projectId.value;
+    if (!target) {
+      aiReadiness.value = null;
+      return;
+    }
+    try {
+      aiReadiness.value = await getAiReadiness(target);
+    } catch {
+      /* 静默保留旧态 */
+    }
+  }
+
   function reload() {
     void load();
   }
@@ -501,6 +525,7 @@ export function useAssistantConversation(
     selectedId.value = "";
     timeline.value = [];
     injection.value = null;
+    aiReadiness.value = null;
     onConversationChanged?.(null);
     loading.value = false;
     loadError.value = "";
@@ -731,6 +756,7 @@ export function useAssistantConversation(
     sendError,
     pendingText,
     drafting,
+    aiReadiness,
     // 派生
     selectedConversation,
     panelTitle,

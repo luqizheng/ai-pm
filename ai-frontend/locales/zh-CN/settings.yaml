@@ -294,8 +294,8 @@ settings:
       reopenAction: 重开项目
       reopenConfirmTitle: 确认重开该项目？
       reopenConfirmDescription: 重开后恢复 active 态，写入与 AI 执行能力恢复。
-      reopenedToast: "项目已重开（{status}）"
-      closedToast: "项目已关闭（{status}）"
+      reopenedToast: 项目已重开（{status}）
+      closedToast: 项目已关闭（{status}）
       cancel: 取消
     members:
       membersTitle: 项目成员
@@ -477,9 +477,9 @@ settings:
       delete: 删除
       deleteDone: 已删除
       deleteFailed: 删除失败（有调用记录的 Provider 不可删除）
-      lastTested: "上次测试：{time}"
+      lastTested: 上次测试：{time}
       neverTested: 从未测试
-      keyConfigured: "已配置（{hint}）"
+      keyConfigured: 已配置（{hint}）
       keyMissing: 未配置；本地模型（Ollama 等）可留空
       keyPlaceholder: 填入新的 Key（保存后不可回读）
       fields:
@@ -541,3 +541,95 @@ settings:
         enabled: 已启用
         disabled: 已停用
         archived: 已归档
+        catalog: null
+        title: 模型目录与策略
+        hint: 登记 Provider 的可用模型并完成授权与策略——四项齐备后 AI 才具备回复条件（Provider 已启用 → 模型已启用 →
+          team_wide 授权 → general 策略）。
+        loading: 正在加载模型目录…
+        empty: 尚无模型目录行——先启用 Provider，再登记模型。
+        loadFailed: 模型目录加载失败
+        saveFailed: 保存失败
+        modelAdded: 模型已登记
+        addModel: 登记模型
+        providerPlaceholder: 选择 Provider（已启用）
+        modelIdPlaceholder: 模型 ID（如 deepseek-chat）
+        displayNamePlaceholder: 显示名（缺省同模型 ID）
+        contextWindowPlaceholder: 上下文窗口（可选）
+        colModel: 模型
+        colProvider: Provider
+        colCapabilities: 能力
+        colEnabled: 启用
+        colAuthorization: 授权
+        on: 已启用
+        off: 已停用
+        grant: 授权 team_wide
+        revoke: 撤销授权
+        grantDone: 已授权 team_wide
+        revokeDone: 已撤销授权
+        revokeImpact: 仍有 {count} 条策略/覆盖引用该模型（未自动改写，解析将失败——请同步调整策略）。
+        policiesTitle: Role 模型策略
+        generalMissing: 尚未配置 general 策略——未配置时 AI 无法选模（general_policy_missing）。
+        inheritGeneral: 继承 general
+        savePolicies: 保存策略
+        policiesSaved: 策略已保存
+        capabilities:
+          text_generation: 文本生成
+          reasoning: 推理
+          structured_output: 结构化输出
+          tool_calling: 工具调用
+          vision: 视觉
+          long_context: 长上下文
+        roles:
+          general: general（兜底）
+          ai_pm_lead: AI 项目负责人
+          requirement_analysis: 需求分析
+          task_analysis: 任务分析
+          risk_analysis: 风险分析
+          architecture_analysis: 架构分析
+          knowledge_management: 知识管理
+      catalog:
+        title: 模型目录与策略
+        hint: 登记 Provider 的可用模型并完成授权与策略——四项齐备后 AI 才具备回复条件（Provider 已启用 → 模型已启用 →
+          team_wide 授权 → general 策略）。
+        loading: 正在加载模型目录…
+        empty: 尚无模型目录行——先启用 Provider，再登记模型。
+        loadFailed: 模型目录加载失败
+        saveFailed: 保存失败
+        modelAdded: 模型已登记
+        addModel: 登记模型
+        providerPlaceholder: 选择 Provider（已启用）
+        modelIdPlaceholder: 模型 ID（如 deepseek-chat）
+        displayNamePlaceholder: 显示名（缺省同模型 ID）
+        contextWindowPlaceholder: 上下文窗口（可选）
+        colModel: 模型
+        colProvider: Provider
+        colCapabilities: 能力
+        colEnabled: 启用
+        colAuthorization: 授权
+        on: 已启用
+        off: 已停用
+        grant: 授权 team_wide
+        revoke: 撤销授权
+        grantDone: 已授权 team_wide
+        revokeDone: 已撤销授权
+        revokeImpact: 仍有 {count} 条策略/覆盖引用该模型（未自动改写，解析将失败——请同步调整策略）。
+        policiesTitle: Role 模型策略
+        generalMissing: 尚未配置 general 策略——未配置时 AI 无法选模（general_policy_missing）。
+        inheritGeneral: 继承 general
+        savePolicies: 保存策略
+        policiesSaved: 策略已保存
+        capabilities:
+          text_generation: 文本生成
+          reasoning: 推理
+          structured_output: 结构化输出
+          tool_calling: 工具调用
+          vision: 视觉
+          long_context: 长上下文
+        roles:
+          general: general（兜底）
+          ai_pm_lead: AI 项目负责人
+          requirement_analysis: 需求分析
+          task_analysis: 任务分析
+          risk_analysis: 风险分析
+          architecture_analysis: 架构分析
+          knowledge_management: 知识管理

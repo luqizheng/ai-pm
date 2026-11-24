@@ -263,7 +263,13 @@ pub async fn supersede_consultation(
     actor: &AuditActor,
 ) -> Result<Uuid, ConsultationError> {
     let mut tx = pool.begin().await?;
-    let old: (Uuid, Option<Uuid>, serde_json::Value, Option<String>, String) = sqlx::query_as(
+    let old: (
+        Uuid,
+        Option<Uuid>,
+        serde_json::Value,
+        Option<String>,
+        String,
+    ) = sqlx::query_as(
         "SELECT project_id, task_id, product_scope, scope_note, status \
            FROM governance.human_consultation WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
     )
@@ -445,4 +451,3 @@ async fn end_waiting_if_task(
     .await?;
     Ok(())
 }
-

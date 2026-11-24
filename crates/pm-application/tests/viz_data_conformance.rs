@@ -80,7 +80,13 @@ async fn seed_requirement(
     (requirement, revision)
 }
 
-async fn seed_design(pool: &PgPool, tenant: Uuid, project: Uuid, by: Uuid, title: &str) -> (Uuid, Uuid) {
+async fn seed_design(
+    pool: &PgPool,
+    tenant: Uuid,
+    project: Uuid,
+    by: Uuid,
+    title: &str,
+) -> (Uuid, Uuid) {
     let design: Uuid = sqlx::query_scalar(
         "INSERT INTO design.design (tenant_id, project_id, code, title, created_by) \
          VALUES ($1, $2, $3, $3, $4) RETURNING id",
@@ -168,8 +174,14 @@ async fn clean_data_after_normal_writes_has_zero_violations(pool: PgPool) {
     .await
     .unwrap();
 
-    let rows = check_relation_data(&pool, Some(tenant)).await.expect("核查");
-    assert!(is_conformant(&rows), "正常写入的数据应为 0 违规：{}", summary(&rows));
+    let rows = check_relation_data(&pool, Some(tenant))
+        .await
+        .expect("核查");
+    assert!(
+        is_conformant(&rows),
+        "正常写入的数据应为 0 违规：{}",
+        summary(&rows)
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -212,7 +224,9 @@ async fn cross_project_requirement_binding_is_detected(pool: PgPool) {
     .await
     .unwrap();
 
-    let rows = check_relation_data(&pool, Some(tenant)).await.expect("核查");
+    let rows = check_relation_data(&pool, Some(tenant))
+        .await
+        .expect("核查");
     let c1: i64 = rows
         .iter()
         .filter(|r| r.check_id == "C-1")
@@ -246,7 +260,9 @@ async fn mismatched_revision_binding_is_detected(pool: PgPool) {
     .await
     .unwrap();
 
-    let rows = check_relation_data(&pool, Some(tenant)).await.expect("核查");
+    let rows = check_relation_data(&pool, Some(tenant))
+        .await
+        .expect("核查");
     let c2: i64 = rows
         .iter()
         .filter(|r| r.check_id == "C-2")
@@ -306,11 +322,18 @@ async fn cross_project_task_dependency_is_detected(pool: PgPool) {
     );
 
     // C-4 在干净库上仍为 0
-    let rows = check_relation_data(&pool, Some(tenant)).await.expect("核查");
+    let rows = check_relation_data(&pool, Some(tenant))
+        .await
+        .expect("核查");
     let c4: i64 = rows
         .iter()
         .filter(|r| r.check_id == "C-4")
         .map(|r| r.violations)
         .sum();
-    assert_eq!(c4, 0, "跨项目依赖被 FK 挡住，核查应为 0：{}", summary(&rows));
+    assert_eq!(
+        c4,
+        0,
+        "跨项目依赖被 FK 挡住，核查应为 0：{}",
+        summary(&rows)
+    );
 }

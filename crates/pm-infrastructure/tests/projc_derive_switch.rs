@@ -149,9 +149,7 @@ async fn derive_routes_technical_cognition_to_projc(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(objects.len(), 4, "snapshot+tech_stack+2 modules");
-    assert!(objects
-        .iter()
-        .all(|(_, s)| s == "identity" || s == "draft"));
+    assert!(objects.iter().all(|(_, s)| s == "identity" || s == "draft"));
     for expected in ["repository", "tech_stack"] {
         assert!(
             objects.iter().any(|(t, _)| t == expected),
@@ -203,13 +201,12 @@ async fn derive_routes_technical_cognition_to_projc(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(projc_sources, 1);
-    let (projc_rev_pin,): (Option<String>,) = sqlx::query_as(
-        "SELECT target_revision_id FROM projc.source WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (projc_rev_pin,): (Option<String>,) =
+        sqlx::query_as("SELECT target_revision_id FROM projc.source WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(projc_rev_pin.as_deref(), Some(kb_rev.to_string().as_str()));
 
     // Finding 仅候选：派生 → 提案（repo_analysis、submitted），无正式版本行
@@ -229,14 +226,16 @@ async fn derive_routes_technical_cognition_to_projc(pool: PgPool) {
         panic!("candidates expected");
     };
     assert_eq!(receipt.member_count, 4);
-    let (origin, status): (String, String) = sqlx::query_as(
-        "SELECT origin_kind, status FROM projc.proposal WHERE id = $1",
-    )
-    .bind(receipt.proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!((origin.as_str(), status.as_str()), ("repo_analysis", "submitted"));
+    let (origin, status): (String, String) =
+        sqlx::query_as("SELECT origin_kind, status FROM projc.proposal WHERE id = $1")
+            .bind(receipt.proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (origin.as_str(), status.as_str()),
+        ("repo_analysis", "submitted")
+    );
     let version_rows: i64 =
         sqlx::query_scalar("SELECT count(*) FROM projc.cognition_version WHERE project_id = $1")
             .bind(project)
@@ -314,7 +313,10 @@ async fn snapshot_dictionary_deprecated_fails_closed(pool: PgPool) {
         },
     )
     .await;
-    assert!(identity_ok.is_ok(), "identity chain untouched: {identity_ok:?}");
+    assert!(
+        identity_ok.is_ok(),
+        "identity chain untouched: {identity_ok:?}"
+    );
 
     // projc 字典不受 pc 废弃波及（独立字典，R-02）
     let projc_ok = pm_application::projc::upsert_object_draft(
@@ -332,5 +334,8 @@ async fn snapshot_dictionary_deprecated_fails_closed(pool: PgPool) {
         },
     )
     .await;
-    assert!(projc_ok.is_ok(), "projc dictionary independent: {projc_ok:?}");
+    assert!(
+        projc_ok.is_ok(),
+        "projc dictionary independent: {projc_ok:?}"
+    );
 }

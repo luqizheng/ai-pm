@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+
+import { useDesignProject } from "@/views/project/design/use-design-project";
 import { getProjectGoal, type ProjectGoalView } from "@/api/goal";
 import { useI18n } from "vue-i18n";
 import { PageFrame } from "@/components/shell";
@@ -43,6 +45,9 @@ const props = defineProps<Props>();
 
 const router = useRouter();
 const route = useRoute();
+// B06-D5：项目上下文 = URL query 优先，回退壳 scope store（顶栏已选项目）。
+// 此前只读 query——左导航「项目总览」不带参数，顶栏明明已选仍报「请先选项目」。
+const { projectId: storeProjectId } = useDesignProject();
 const { t } = useI18n();
 const translate: Translate = (key, params) => t(key, params ?? {});
 
@@ -54,7 +59,8 @@ const phase = ref<"loading" | "ready" | "empty" | "error">("loading");
 
 function currentProjectId(): string {
   const query = route.query.project_id;
-  return typeof query === "string" ? query : "";
+  if (typeof query === "string" && query) return query;
+  return storeProjectId.value;
 }
 
 async function defaultLoader(projectId: string): Promise<CommandCenterData> {
@@ -102,7 +108,7 @@ async function loadGoal(projectId: string) {
 
 onMounted(load);
 watch(
-  () => route.query.project_id,
+  () => currentProjectId(),
   () => void load()
 );
 

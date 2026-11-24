@@ -4,10 +4,10 @@
 //! 含撤回历史/验收历史/挂任务咨询）；Product↔Project Link 解除改软删（历史
 //! 保留 + 撤回后可重建）；已撤回 Link 不再出现在有效列表。
 
+use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::human_consultation::create_consultation;
 use pm_application::product::{create_product_link, end_product_link};
-use pm_application::actor::AuditActor;
 use pm_application::task_products::{
     add_task_product, record_product_acceptance, ProductAcceptanceInput,
 };
@@ -235,10 +235,15 @@ async fn product_link_withdraw_is_soft_and_relinkable(pool: PgPool) {
     let err = create_product_link(&pool, &actor(&f), f.actor_id, product_id, f.project_id)
         .await
         .unwrap_err();
-    assert!(matches!(err, pm_application::product::ProductError::Conflict("link_already_exists")));
+    assert!(matches!(
+        err,
+        pm_application::product::ProductError::Conflict("link_already_exists")
+    ));
 
     // 解除 → 软删：行仍在且有 withdrawn_at。
-    end_product_link(&pool, &actor(&f), f.actor_id, link1).await.unwrap();
+    end_product_link(&pool, &actor(&f), f.actor_id, link1)
+        .await
+        .unwrap();
     let (withdrawn_at, withdrawn_by): (Option<chrono::DateTime<chrono::Utc>>, Option<Uuid>) =
         sqlx::query_as(
             "SELECT withdrawn_at, withdrawn_by FROM core.product_project_link WHERE id = $1",

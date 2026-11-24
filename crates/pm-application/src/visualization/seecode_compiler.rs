@@ -118,7 +118,13 @@ fn edge_kind(relation: &str) -> &'static str {
 fn node_id(source: &str) -> String {
     let sanitized: String = source
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let sanitized = sanitize_multi_underscore(&sanitized);
     format!("n_{sanitized}")
@@ -239,7 +245,10 @@ pub fn compile(spec: &VizSpec) -> Result<CompiledSpec, CompileError> {
             entry["status"] = json!(status);
         }
         // 溯源进 sub（file:line 风格与 SeeCode evidence 理念一致）
-        if let Some(SourceRef { domain, r#type, id, .. }) = &node.source_ref {
+        if let Some(SourceRef {
+            domain, r#type, id, ..
+        }) = &node.source_ref
+        {
             entry["sub"] = json!(truncate_chars(&format!("{domain}/{type}#{id}"), 48));
         }
         nodes.push(entry);
@@ -262,9 +271,7 @@ pub fn compile(spec: &VizSpec) -> Result<CompiledSpec, CompileError> {
         ]));
     }
     if dropped_edges > 0 {
-        warnings.push(format!(
-            "因节点裁剪丢弃 {dropped_edges} 条边（端点未入选）"
-        ));
+        warnings.push(format!("因节点裁剪丢弃 {dropped_edges} 条边（端点未入选）"));
     }
 
     // ── envelope
@@ -359,7 +366,10 @@ mod tests {
         let id = compiled.spec["nodes"][0]["id"].as_str().unwrap();
         assert!(id.starts_with("n_"), "id 应有 n_ 前缀：{id}");
         assert!(
-            id.chars().next().map(|c| c.is_ascii_alphabetic() || c == '_').unwrap_or(false),
+            id.chars()
+                .next()
+                .map(|c| c.is_ascii_alphabetic() || c == '_')
+                .unwrap_or(false),
             "id 必须以字母或下划线开头"
         );
     }
@@ -427,7 +437,11 @@ mod tests {
         let compiled = compile(&spec).expect("编译");
         assert_eq!(compiled.node_count, MAX_NODES);
         assert!(!compiled.warnings.is_empty(), "裁剪必须告警");
-        assert!(compiled.warnings[0].contains("显示 24 / 30"), "{:?}", compiled.warnings);
+        assert!(
+            compiled.warnings[0].contains("显示 24 / 30"),
+            "{:?}",
+            compiled.warnings
+        );
     }
 
     #[test]
@@ -444,7 +458,10 @@ mod tests {
 
     #[test]
     fn empty_spec_is_rejected() {
-        assert_eq!(compile(&spec_with(vec![], vec![])), Err(CompileError::Empty));
+        assert_eq!(
+            compile(&spec_with(vec![], vec![])),
+            Err(CompileError::Empty)
+        );
     }
 
     #[test]
@@ -484,7 +501,10 @@ mod tests {
         let spec = spec_with(vec![node("n1", "task", "任务")], vec![]);
         let compiled = compile(&spec).expect("编译");
         let sub = compiled.spec["nodes"][0]["sub"].as_str().unwrap();
-        assert!(sub.contains("delivery/requirement"), "溯源应在 sub 中：{sub}");
+        assert!(
+            sub.contains("delivery/requirement"),
+            "溯源应在 sub 中：{sub}"
+        );
     }
 
     #[test]
@@ -495,6 +515,9 @@ mod tests {
         let text = serde_json::to_string(&compiled.spec).unwrap();
         assert!(!text.contains("source_ref"), "source_ref 不应原样外泄");
         assert!(!text.contains("slot_key"), "slot_key 不应进渲染 spec");
-        assert!(!text.contains("registry_version"), "registry_version 不应进渲染 spec");
+        assert!(
+            !text.contains("registry_version"),
+            "registry_version 不应进渲染 spec"
+        );
     }
 }

@@ -160,7 +160,9 @@ pub(crate) async fn require_human_principal(
     if kind.as_deref() == Some("human") {
         Ok(())
     } else {
-        Err(ApiError::Forbidden("this action requires a human principal"))
+        Err(ApiError::Forbidden(
+            "this action requires a human principal",
+        ))
     }
 }
 
@@ -251,7 +253,7 @@ pub async fn project_visible(
         "SELECT EXISTS ( \
              SELECT 1 FROM core.project p \
              JOIN core.project_member m ON m.project_id = p.id \
-              WHERE p.id = $1 AND p.tenant_id = $2 AND m.principal_id = $3)", 
+              WHERE p.id = $1 AND p.tenant_id = $2 AND m.principal_id = $3)",
     )
     .bind(project_id)
     .bind(tenant_id)
@@ -321,9 +323,7 @@ pub mod repos {
         pm_infrastructure::repo_cognition::PgCognitionRepo::new(pool.clone())
     }
 
-    pub fn member_repo(
-        pool: &sqlx::PgPool,
-    ) -> pm_infrastructure::repo_team_members::PgMemberRepo {
+    pub fn member_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_team_members::PgMemberRepo {
         pm_infrastructure::repo_team_members::PgMemberRepo::new(pool.clone())
     }
 

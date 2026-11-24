@@ -484,7 +484,8 @@ pub async fn reconcile_orphans(
 ) -> Result<usize, RunDispatchError> {
     // P3（I1，B-1 默认并入）：超窗残留进程告警——running 且租约过期超过 1 小时
     // 仍非终态的 Run，落 `run.orphan_suspected` 审计（1 小时去重）+ warn 日志。
-    // 清理仍走既有 claim 路径的 isolate_started_run / 兜底回收；此处只补「可见性」。
+    // B06-D3：确认即回收——首次检出的孤儿（租约过期 >1h 且从未被回收）直接
+    // 执行回收（Run=timed_out + 任务回 Ready），不再停留于「只告警」。
     let orphans: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT r.id, r.project_id \
            FROM delivery.task_run r \
@@ -492,8 +493,7 @@ pub async fn reconcile_orphans(
             AND r.lease_expires_at < now() - interval '1 hour' \
             AND NOT EXISTS ( \
                  SELECT 1 FROM governance.audit_log a \
-                  WHERE a.action = 'run.orphan_suspected' AND a.target_id = r.id \
-                    AND a.created_at > now() - interval '1 hour')",
+                  WHERE a.action = 'run.orphan_reclaimed' AND a.target_id = r.id)",
     )
     .fetch_all(pool)
     .await?;
@@ -515,6 +515,71 @@ pub async fn reconcile_orphans(
             let _ = tx.commit().await;
         }
         tracing::warn!(%run_id, %project_id, "orphan run suspected: lease expired over an hour ago");
+
+        // B06-D3（业务验收 2026-11-24）：此前只告警不回收——Model A（MCP 认领）
+        // 的孤儿 Run 没有任何执行体处理，任务永久卡 running。首次确认即回收：
+        // Run 退回 `queued`（lease_expired，可重试语义——不终态化）+ 任务
+        // Running→Blocked→Ready（域合法边，可被 runner 重新认领）；
+        // `run.orphan_reclaimed` 审计留痕。
+        let Ok(mut tx) = pool.begin().await else {
+            continue;
+        };
+        let run_reclaimed = sqlx::query(
+            "UPDATE delivery.task_run \
+              SET status = 'queued', outcome = NULL, finished_at = NULL, \
+                  termination_reason = 'lease_expired', next_dispatch_at = now(), \
+                  lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
+            WHERE id = $1 AND project_id = $2 AND status = 'running'",
+        )
+        .bind(run_id)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map(|r| r.rows_affected())
+        .unwrap_or(0);
+        if run_reclaimed > 0 {
+            // 同事务两条顺序语句（数据修改 CTE 共享同一快照，链式 WHERE 互相不可见）。
+            let task_id: Uuid =
+                sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+                    .bind(run_id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(RunDispatchError::Db)?;
+            sqlx::query(
+                "UPDATE delivery.task SET status = 'blocked', updated_at = now() \
+                 WHERE id = $1 AND status = 'running'",
+            )
+            .bind(task_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(RunDispatchError::Db)?;
+            let task_reclaimed = sqlx::query(
+                "UPDATE delivery.task SET status = 'ready', updated_at = now() \
+                 WHERE id = $1 AND status = 'blocked' RETURNING id",
+            )
+            .bind(task_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(RunDispatchError::Db)?
+            .rows_affected();
+            let _ = crate::pm_write::append_audit(
+                &mut tx,
+                project_id,
+                &crate::actor::AuditActor::dispatch(),
+                "run.orphan_reclaimed",
+                "task_run",
+                Some(run_id),
+            )
+            .await;
+            let _ = tx.commit().await;
+            tracing::info!(
+                %run_id, %project_id,
+                task_released = task_reclaimed,
+                "orphan run reclaimed (lease_expired); task released back to ready"
+            );
+        } else {
+            let _ = tx.rollback().await;
+        }
     }
 
     let rows = sqlx::query(

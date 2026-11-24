@@ -77,18 +77,30 @@ pub async fn create_task(
     }
 
     let mut tx = pool.begin().await?;
+    // B05-01：交付物创建即落（规范化与 update 契约同口径：path 去重非空）。
+    let deliverables_json: Option<serde_json::Value> = match req.deliverables {
+        Some(items) => {
+            let normalized = normalize_deliverables(items)?;
+            Some(serde_json::to_value(normalized).map_err(|error| {
+                PmWriteError::ValidationMsg(format!("deliverables serialize: {error}"))
+            })?)
+        }
+        None => None,
+    };
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id, ai_role_version_id, implementation_baseline_id) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1, \
-                 (SELECT tenant_id FROM core.project WHERE id = $2), $8, $9)",
+         (id, project_id, milestone_id, title, description, goal, deliverables, status, priority, assignee_id, revision, tenant_id, ai_role_version_id, implementation_baseline_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, '[]'::jsonb), 'draft', $8, $9, 1, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2), $10, $11)",
     )
     .bind(task_id)
     .bind(project_id)
     .bind(req.milestone_id)
     .bind(title)
     .bind(req.description)
+    .bind(req.goal.as_deref().map(str::trim).filter(|g| !g.is_empty()))
+    .bind(deliverables_json)
     .bind(priority)
     .bind(req.assignee_id)
     .bind(req.ai_role_version_id)
@@ -119,12 +131,10 @@ pub async fn create_task(
     .await?;
     // PA-05-01/05（注册表）：创建即注册统一事项 + Timeline `created` 活动
     // （同事务，与审计管线同一致性级别）。
-    let work_tenant: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let work_tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&mut *tx)
+        .await?;
     let work_item_id = crate::work_item::ensure_work_item(
         &mut tx,
         work_tenant,
@@ -243,6 +253,7 @@ pub async fn update_task(
             supersede: None,
             delivery_submitted: false,
             acceptance_evidence_complete: false,
+            manual_completion: false,
         };
         pm_domain::task_transition::validate_transition(&input).map_err(|_| {
             PmWriteError::Validation(

@@ -370,20 +370,25 @@ pub fn assemble(drafts: Vec<SectionDraft>) -> InterviewContext {
     }
 }
 
-// ── chat 段预算（整合计划 Batch 3A；与访谈预算**独立**）──────────────────
+// ── chat 段预算（整合计划 Batch 3A + R2/B09-01 记录节；与访谈预算**独立**）──
 //
-// 复用同一套「整节删除优先于逐节压缩 + 记账」结构，但 chat 只有两节、
-// 独立 8,000 字符预算——访谈是长程结构化任务，chat 是一问一答，
+// 复用同一套「整节删除优先于逐节压缩 + 记账」结构，但 chat 节集独立、
+// 独立 16,000 字符预算——访谈是长程结构化任务，chat 是一问一答，
 // 二者不共享额度（访谈的 36,000 常量不动）。
 
-/// chat 分节顺序（与 `assemble_chat` 一致）。
-pub const CHAT_SECTION_ORDER: [&str; 2] = [
+/// chat 分节顺序（与 `assemble_chat` 一致；R2 起含项目记录节）。
+pub const CHAT_SECTION_ORDER: [&str; 3] = [
     crate::chat_context::CHAT_KEY_PROJECT_PROFILE,
+    crate::chat_context::CHAT_KEY_PROJECT_RECORDS,
     crate::chat_context::CHAT_KEY_REPOSITORY_FACTS,
 ];
 
-/// chat 整节删除顺序：仓库事实先删（项目画像是更基本的上下文）。
-pub const CHAT_DROP_ORDER: [&str; 1] = [crate::chat_context::CHAT_KEY_REPOSITORY_FACTS];
+/// chat 整节删除顺序：仓库事实先删，其次项目记录（B09-01 的核心节——
+/// 只有总预算被仓库事实+记录同时压爆时才轮到它）。
+pub const CHAT_DROP_ORDER: [&str; 2] = [
+    crate::chat_context::CHAT_KEY_REPOSITORY_FACTS,
+    crate::chat_context::CHAT_KEY_PROJECT_RECORDS,
+];
 
 /// 把原始小节装配成 chat 注入产物（受 chat 预算约束）。
 ///
@@ -434,6 +439,9 @@ pub fn assemble_chat(drafts: Vec<SectionDraft>) -> crate::chat_context::ChatCont
     for section in sections.iter_mut() {
         let cap = match section.key.as_str() {
             crate::chat_context::CHAT_KEY_PROJECT_PROFILE => CHAT_CAP_PROJECT_PROFILE,
+            crate::chat_context::CHAT_KEY_PROJECT_RECORDS => {
+                crate::project_records::PROJECT_RECORDS_CAP_CHARS
+            }
             crate::chat_context::CHAT_KEY_REPOSITORY_FACTS => CHAT_CAP_REPOSITORY_FACTS,
             _ => continue,
         };

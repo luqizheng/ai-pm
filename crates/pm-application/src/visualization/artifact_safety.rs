@@ -50,10 +50,7 @@ impl SvgSafetyReport {
 
     /// 违规码集合（便于聚合统计）。
     pub fn codes(&self) -> BTreeSet<&str> {
-        self.violations
-            .iter()
-            .map(|v| v.code.as_str())
-            .collect()
+        self.violations.iter().map(|v| v.code.as_str()).collect()
     }
 
     /// 人类可读摘要（用于日志与审计）。
@@ -81,12 +78,32 @@ const FORBIDDEN_ELEMENTS: &[(&str, &str, &str)] = &[
     ("iframe", "S_SVG_IFRAME", "产物不得包含 iframe"),
     ("object", "S_SVG_OBJECT", "产物不得包含 object"),
     ("embed", "S_SVG_EMBED", "产物不得包含 embed"),
-    ("audio", "S_SVG_MEDIA", "产物不得包含媒体元素（可发起网络请求）"),
-    ("video", "S_SVG_MEDIA", "产物不得包含媒体元素（可发起网络请求）"),
+    (
+        "audio",
+        "S_SVG_MEDIA",
+        "产物不得包含媒体元素（可发起网络请求）",
+    ),
+    (
+        "video",
+        "S_SVG_MEDIA",
+        "产物不得包含媒体元素（可发起网络请求）",
+    ),
     ("handler", "S_SVG_HANDLER", "产物不得包含 handler 元素"),
-    ("set", "S_SVG_ANIMATE", "产物不得包含 set/animate 元素（可改写属性）"),
-    ("animate", "S_SVG_ANIMATE", "产物不得包含 set/animate 元素（可改写属性）"),
-    ("animatetransform", "S_SVG_ANIMATE", "产物不得包含 set/animate 元素（可改写属性）"),
+    (
+        "set",
+        "S_SVG_ANIMATE",
+        "产物不得包含 set/animate 元素（可改写属性）",
+    ),
+    (
+        "animate",
+        "S_SVG_ANIMATE",
+        "产物不得包含 set/animate 元素（可改写属性）",
+    ),
+    (
+        "animatetransform",
+        "S_SVG_ANIMATE",
+        "产物不得包含 set/animate 元素（可改写属性）",
+    ),
 ];
 
 /// 引用型元素：`use` / `image` 的**引用目标**决定是否安全。
@@ -202,8 +219,8 @@ fn check_tags(svg: &str, report: &mut SvgSafetyReport) {
 
         // 引用型元素：`use` / `image` 的引用目标必须安全
         if REFERENCE_ELEMENTS.contains(&lower_name.as_str()) {
-            let target = attribute_value(&tag, "href")
-                .or_else(|| attribute_value(&tag, "xlink:href"));
+            let target =
+                attribute_value(&tag, "href").or_else(|| attribute_value(&tag, "xlink:href"));
             match target {
                 Some(value) if !is_external(&value) && !value.trim().is_empty() => {
                     // data: URI / 片段引用 —— 安全
@@ -319,11 +336,7 @@ fn attribute_names(tag: &str) -> Vec<String> {
             break;
         }
         let start = i;
-        while i < chars.len()
-            && !chars[i].is_whitespace()
-            && chars[i] != '='
-            && chars[i] != '/'
-        {
+        while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '=' && chars[i] != '/' {
             i += 1;
         }
         let name: String = chars[start..i].iter().collect();
@@ -396,7 +409,10 @@ fn find_external_reference(tag: &str) -> Option<String> {
         while let Some(pos) = search.find(attr) {
             let value_start = pos + attr.len();
             let value = search[value_start..].trim_start();
-            let value = value.strip_prefix('"').or_else(|| value.strip_prefix('\'')).unwrap_or(value);
+            let value = value
+                .strip_prefix('"')
+                .or_else(|| value.strip_prefix('\''))
+                .unwrap_or(value);
             let end = value
                 .find(|c: char| c == '"' || c == '\'' || c.is_whitespace() || c == '>')
                 .unwrap_or(value.len());
@@ -429,15 +445,12 @@ fn is_external(value: &str) -> bool {
     if lower.is_empty() || lower.starts_with('#') || lower.starts_with("data:") {
         return false;
     }
-    EXTERNAL_SCHEMES.iter().any(|scheme| lower.starts_with(scheme))
+    EXTERNAL_SCHEMES
+        .iter()
+        .any(|scheme| lower.starts_with(scheme))
 }
 
-fn push(
-    report: &mut SvgSafetyReport,
-    code: &str,
-    at: impl Into<String>,
-    message: String,
-) {
+fn push(report: &mut SvgSafetyReport, code: &str, at: impl Into<String>, message: String) {
     report.violations.push(SafetyViolation {
         code: code.to_string(),
         at: at.into(),
@@ -502,7 +515,9 @@ mod tests {
     #[test]
     fn external_reference_is_rejected() {
         let svg = r#"<svg><a href="https://example.com/x">link</a></svg>"#;
-        assert!(inspect_svg(svg).codes().contains("S_SVG_EXTERNAL_REFERENCE"));
+        assert!(inspect_svg(svg)
+            .codes()
+            .contains("S_SVG_EXTERNAL_REFERENCE"));
     }
 
     #[test]
@@ -529,13 +544,17 @@ mod tests {
     #[test]
     fn use_element_with_external_target_is_rejected() {
         let svg = r##"<svg><use href="https://cdn.example.com/a.svg#g"/></svg>"##;
-        assert!(inspect_svg(svg).codes().contains("S_SVG_EXTERNAL_REFERENCE"));
+        assert!(inspect_svg(svg)
+            .codes()
+            .contains("S_SVG_EXTERNAL_REFERENCE"));
     }
 
     #[test]
     fn external_url_in_style_is_rejected() {
         let svg = r#"<svg><style>.a{fill:url(https://cdn.example.com/a.svg#g)}</style></svg>"#;
-        assert!(inspect_svg(svg).codes().contains("S_SVG_EXTERNAL_REFERENCE"));
+        assert!(inspect_svg(svg)
+            .codes()
+            .contains("S_SVG_EXTERNAL_REFERENCE"));
     }
 
     #[test]
@@ -546,8 +565,12 @@ mod tests {
 
     #[test]
     fn doctype_and_entity_are_rejected() {
-        assert!(inspect_svg(r#"<!DOCTYPE svg><svg/>"#).codes().contains("S_SVG_DOCTYPE"));
-        assert!(inspect_svg(r#"<!ENTITY x "y"><svg/>"#).codes().contains("S_SVG_ENTITY"));
+        assert!(inspect_svg(r#"<!DOCTYPE svg><svg/>"#)
+            .codes()
+            .contains("S_SVG_DOCTYPE"));
+        assert!(inspect_svg(r#"<!ENTITY x "y"><svg/>"#)
+            .codes()
+            .contains("S_SVG_ENTITY"));
     }
 
     #[test]

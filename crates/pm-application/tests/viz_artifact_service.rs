@@ -11,11 +11,11 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use pm_application::visualization::artifact_service::{
-    CreateDraftInput,
-    create_draft, decide_approval, get_artifact, mark_stale, request_approval, VizError,
-};
 use pm_application::actor::AuditActor;
+use pm_application::visualization::artifact_service::{
+    create_draft, decide_approval, get_artifact, mark_stale, request_approval, CreateDraftInput,
+    VizError,
+};
 
 /// actor 的 principal_id 必须真实存在——审计表对 principal 有 FK。
 fn actor(principal_id: Uuid) -> AuditActor {
@@ -40,17 +40,21 @@ async fn ensure_project(pool: &PgPool) -> (Uuid, Uuid) {
         .await
         .expect("insert tenant");
     // core.principal 无 tenant_id 列（租户映射在 principal_identity）
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', '测试人')")
-        .bind(principal)
-        .execute(pool)
-        .await
-        .expect("insert principal");
-    sqlx::query("INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')")
-        .bind(tenant)
-        .bind(principal)
-        .execute(pool)
-        .await
-        .expect("insert tenant member");
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', '测试人')",
+    )
+    .bind(principal)
+    .execute(pool)
+    .await
+    .expect("insert principal");
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')",
+    )
+    .bind(tenant)
+    .bind(principal)
+    .execute(pool)
+    .await
+    .expect("insert tenant member");
     sqlx::query("INSERT INTO core.customer (id, tenant_id, name) VALUES ($1, $2, '测试客户')")
         .bind(customer)
         .bind(tenant)
@@ -121,7 +125,9 @@ async fn full_lifecycle_draft_to_published_to_stale(pool: PgPool) {
     assert_eq!(published.state, "published");
 
     // published → stale
-    mark_stale(&pool, artifact.id, &a).await.expect("标记 stale");
+    mark_stale(&pool, artifact.id, &a)
+        .await
+        .expect("标记 stale");
     let stale = get_artifact(&pool, artifact.id).await.expect("读取");
     assert_eq!(stale.state, "stale");
 }
@@ -145,11 +151,16 @@ async fn rejection_requires_reason_and_goes_to_rejected(pool: PgPool) {
     )
     .await
     .expect("创建 draft");
-    let approval = request_approval(&pool, artifact.id, &a).await.expect("请求审批");
+    let approval = request_approval(&pool, artifact.id, &a)
+        .await
+        .expect("请求审批");
 
     // 无理由拒绝 → Validation
     let result = decide_approval(&pool, approval, &a, "reject", None).await;
-    assert!(matches!(result, Err(VizError::Validation(_))), "拒绝必须带理由");
+    assert!(
+        matches!(result, Err(VizError::Validation(_))),
+        "拒绝必须带理由"
+    );
 
     // 带理由拒绝 → 成功，artifact 置 rejected
     decide_approval(&pool, approval, &a, "reject", Some("不符合追踪语义"))
@@ -204,7 +215,9 @@ async fn hash_drift_causes_conflict(pool: PgPool) {
     )
     .await
     .expect("创建 draft");
-    let approval = request_approval(&pool, artifact.id, &a).await.expect("请求审批");
+    let approval = request_approval(&pool, artifact.id, &a)
+        .await
+        .expect("请求审批");
 
     // 审批请求后篡改 spec_hash（模拟 artifact 被改）
     sqlx::query("UPDATE viz.artifact SET spec_hash = 'drifted-hash' WHERE id = $1")
@@ -214,7 +227,10 @@ async fn hash_drift_causes_conflict(pool: PgPool) {
         .expect("篡改哈希");
 
     let result = decide_approval(&pool, approval, &a, "approve", None).await;
-    assert!(matches!(result, Err(VizError::Conflict(_))), "哈希漂移必须 409");
+    assert!(
+        matches!(result, Err(VizError::Conflict(_))),
+        "哈希漂移必须 409"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -252,7 +268,9 @@ async fn second_pending_on_same_slot_conflicts(pool: PgPool) {
     .await
     .expect("第二个 draft（version 2）");
 
-    request_approval(&pool, first.id, &a).await.expect("第一条 pending");
+    request_approval(&pool, first.id, &a)
+        .await
+        .expect("第一条 pending");
     let result = request_approval(&pool, second.id, &a).await;
     assert!(
         matches!(result, Err(VizError::Conflict(_))),
@@ -279,8 +297,12 @@ async fn decided_approval_cannot_be_redecided(pool: PgPool) {
     )
     .await
     .expect("创建 draft");
-    let approval = request_approval(&pool, artifact.id, &a).await.expect("请求审批");
-    decide_approval(&pool, approval, &a, "approve", None).await.expect("批准");
+    let approval = request_approval(&pool, artifact.id, &a)
+        .await
+        .expect("请求审批");
+    decide_approval(&pool, approval, &a, "approve", None)
+        .await
+        .expect("批准");
 
     let result = decide_approval(&pool, approval, &a, "reject", Some("再来一次")).await;
     assert!(matches!(result, Err(VizError::Conflict(_))), "终态不得重审");
@@ -306,8 +328,12 @@ async fn accept_does_not_touch_business_tables(pool: PgPool) {
     )
     .await
     .expect("创建 draft");
-    let approval = request_approval(&pool, artifact.id, &a).await.expect("请求审批");
-    decide_approval(&pool, approval, &a, "approve", None).await.expect("批准");
+    let approval = request_approval(&pool, artifact.id, &a)
+        .await
+        .expect("请求审批");
+    decide_approval(&pool, approval, &a, "approve", None)
+        .await
+        .expect("批准");
 
     // 业务域对象计数（在测试库中应全为 0——本测试只写过 viz.* 与审计）
     for table in [
@@ -324,7 +350,10 @@ async fn accept_does_not_touch_business_tables(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .expect("count");
-        assert_eq!(count, 0, "{table} 不应有任何行——可视化零业务写路径（AC-16）");
+        assert_eq!(
+            count, 0,
+            "{table} 不应有任何行——可视化零业务写路径（AC-16）"
+        );
     }
 }
 

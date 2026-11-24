@@ -32,23 +32,40 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         target_service: &str,
         task_type: &str,
     ) -> Result<Option<AnalysisTaskRow>, sqlx::Error> {
-        let row: Option<(String, Option<Value>, Option<String>, DateTime<Utc>, DateTime<Utc>, Uuid, String, String)> =
-            sqlx::query_as(
-                "SELECT t.task_status, t.result_ref, t.last_error, t.created_at, t.updated_at, \
+        let row: Option<(
+            String,
+            Option<Value>,
+            Option<String>,
+            DateTime<Utc>,
+            DateTime<Utc>,
+            Uuid,
+            String,
+            String,
+        )> = sqlx::query_as(
+            "SELECT t.task_status, t.result_ref, t.last_error, t.created_at, t.updated_at, \
                         i.id, i.intake_type, i.title \
                    FROM integration.intake_task t \
                    JOIN integration.intake_record i ON i.id = t.intake_id \
                   WHERE t.id = $1 AND t.project_id = $2 \
                     AND t.target_service = $3 AND t.task_type = $4",
-            )
-            .bind(task_id)
-            .bind(project_id)
-            .bind(target_service)
-            .bind(task_type)
-            .fetch_optional(&self.pool)
-            .await?;
+        )
+        .bind(task_id)
+        .bind(project_id)
+        .bind(target_service)
+        .bind(task_type)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.map(
-            |(task_status, result_ref, last_error, created_at, updated_at, intake_id, intake_type, title)| {
+            |(
+                task_status,
+                result_ref,
+                last_error,
+                created_at,
+                updated_at,
+                intake_id,
+                intake_type,
+                title,
+            )| {
                 AnalysisTaskRow {
                     task_status,
                     result_ref,
@@ -68,20 +85,41 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         project_id: Uuid,
         revision_id: Uuid,
     ) -> Result<Option<KbRevisionRow>, sqlx::Error> {
-        let row: Option<(Uuid, Uuid, String, String, i32, String, Option<String>, String, Option<String>, DateTime<Utc>)> =
-            sqlx::query_as(
-                "SELECT r.id, d.id, d.doc_key, d.doc_type, r.revision_no, r.status, \
+        let row: Option<(
+            Uuid,
+            Uuid,
+            String,
+            String,
+            i32,
+            String,
+            Option<String>,
+            String,
+            Option<String>,
+            DateTime<Utc>,
+        )> = sqlx::query_as(
+            "SELECT r.id, d.id, d.doc_key, d.doc_type, r.revision_no, r.status, \
                         r.source_commit_sha, r.content_hash, r.change_summary, r.created_at \
                    FROM kb.document_revision r \
                    JOIN kb.document d ON d.id = r.document_id \
                   WHERE r.id = $1 AND d.project_id = $2",
-            )
-            .bind(revision_id)
-            .bind(project_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        )
+        .bind(revision_id)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.map(
-            |(rev_id, doc_id, doc_key, doc_type, revision_no, revision_status, source_commit_sha, content_hash, change_summary, created_at)| {
+            |(
+                rev_id,
+                doc_id,
+                doc_key,
+                doc_type,
+                revision_no,
+                revision_status,
+                source_commit_sha,
+                content_hash,
+                change_summary,
+                created_at,
+            )| {
                 KbRevisionRow {
                     rev_id,
                     doc_id,
@@ -121,11 +159,13 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         .bind(proposal_id)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row.map(|(source_id, status, governance_level)| PcProposalHead {
-            source_id,
-            status,
-            governance_level,
-        }))
+        Ok(
+            row.map(|(source_id, status, governance_level)| PcProposalHead {
+                source_id,
+                status,
+                governance_level,
+            }),
+        )
     }
 
     async fn pc_objects_of_source(
@@ -315,13 +355,8 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         project_id: Uuid,
         object_id: Uuid,
     ) -> Result<Vec<ObjectLineageRow>, sqlx::Error> {
-        self.object_lineage(
-            project_id,
-            object_id,
-            "pc",
-            "pc_source_id",
-        )
-        .await
+        self.object_lineage(project_id, object_id, "pc", "pc_source_id")
+            .await
     }
 
     async fn projc_object_lineage(
@@ -329,13 +364,8 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         project_id: Uuid,
         object_id: Uuid,
     ) -> Result<Vec<ObjectLineageRow>, sqlx::Error> {
-        self.object_lineage(
-            project_id,
-            object_id,
-            "projc",
-            "projc_source_id",
-        )
-        .await
+        self.object_lineage(project_id, object_id, "projc", "projc_source_id")
+            .await
     }
 }
 

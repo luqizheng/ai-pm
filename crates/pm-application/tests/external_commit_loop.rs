@@ -24,10 +24,7 @@ use pm_application::repo_facts::pm_ai_port::ModelError;
 
 /// 本地 file:// 仓库夹具：初始化 + N 个提交，返回 URL 与仓库根。
 fn init_repo(name: &str, commits: &[(&str, &str)]) -> (String, PathBuf) {
-    let root = std::env::temp_dir().join(format!(
-        "ai-pm-ec-test-{name}-{}",
-        Uuid::new_v4()
-    ));
+    let root = std::env::temp_dir().join(format!("ai-pm-ec-test-{name}-{}", Uuid::new_v4()));
     let path = root.join("repo");
     std::fs::create_dir_all(&path).unwrap();
     let run = |args: &[&str]| {
@@ -77,21 +74,25 @@ fn commit_change(repo_root: &PathBuf, file: &str, message: &str) {
 
 async fn seed_human_principal(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', '产品经理')")
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', '产品经理')",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
     id
 }
 
 async fn seed_ai_principal(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'Agent')")
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'Agent')",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
     id
 }
 
@@ -113,10 +114,7 @@ async fn seed(pool: &PgPool, tag: &str, commits: &[(&str, &str)]) -> Fixture {
         .await
         .unwrap();
     let project_id = Uuid::new_v4();
-    let code = format!(
-        "EC-{}",
-        project_id.simple().to_string()[..8].to_uppercase()
-    );
+    let code = format!("EC-{}", project_id.simple().to_string()[..8].to_uppercase());
     sqlx::query(
         "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
          VALUES ($1, $2, $3, $4, $5)",
@@ -260,27 +258,17 @@ async fn reach_awaiting_adoption(pool: &PgPool, fx: &Fixture, doc_key: &str) -> 
         outcome.discovered_commits, 1,
         "fixture must discover exactly one commit"
     );
-    let listed = pm_application::external_commit::list_external_commits(
-        pool,
-        fx.project_id,
-        None,
-    )
-    .await
-    .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     let stub = FullStub {
         doc_key: doc_key.to_string(),
     };
-    let analyzed = analyze_external_commit(
-        pool,
-        &fx.knowledge_root,
-        &stub,
-        commit_id,
-        &fx.human,
-    )
-    .await
-    .unwrap();
+    let analyzed = analyze_external_commit(pool, &fx.knowledge_root, &stub, commit_id, &fx.human)
+        .await
+        .unwrap();
     assert_eq!(analyzed.status, "analyzed");
 
     let (_, clarifications, _) = get_external_commit(pool, commit_id).await.unwrap();
@@ -312,7 +300,10 @@ async fn first_scan_builds_anchor_without_flooding_history(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(rows, 0, "pre-existing history must not flood the adoption queue");
+    assert_eq!(
+        rows, 0,
+        "pre-existing history must not flood the adoption queue"
+    );
 
     // 新提交 → 下次扫描发现。
     commit_change(&fx.repo_root, "c.md", "feat: add login page");
@@ -321,13 +312,9 @@ async fn first_scan_builds_anchor_without_flooding_history(pool: PgPool) {
         .unwrap();
     assert_eq!(outcome.repositories[0].discovered, 1);
 
-    let listed = pm_application::external_commit::list_external_commits(
-        &pool,
-        fx.project_id,
-        None,
-    )
-    .await
-    .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0]["status"], "discovered");
     assert_eq!(listed[0]["author_name"], "External Dev");
@@ -354,8 +341,7 @@ async fn repeated_scans_dedupe_by_repository_and_sha(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        second.repositories[0].discovered,
-        0,
+        second.repositories[0].discovered, 0,
         "HEAD 未前进的重复扫描必须零新增"
     );
 
@@ -421,7 +407,11 @@ async fn force_push_rebuilds_anchor_instead_of_guessing_range(pool: PgPool) {
         .unwrap();
     let scan = &outcome.repositories[0];
     assert_eq!(scan.discovered, 0, "历史重写不得猜区间");
-    assert!(scan.note.as_deref().unwrap_or_default().contains("重建锚点"));
+    assert!(scan
+        .note
+        .as_deref()
+        .unwrap_or_default()
+        .contains("重建锚点"));
 }
 
 // ── 2. 分析 ───────────────────────────────────────────────────────────────
@@ -437,10 +427,9 @@ async fn analyze_without_provider_falls_back_to_derived_and_records_not_needed(p
         .await
         .unwrap();
 
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     let outcome = analyze_external_commit(
@@ -452,13 +441,19 @@ async fn analyze_without_provider_falls_back_to_derived_and_records_not_needed(p
     )
     .await
     .unwrap();
-    assert_eq!(outcome.status, "awaiting_adoption", "派生模式零澄清 → 直接待采纳");
+    assert_eq!(
+        outcome.status, "awaiting_adoption",
+        "派生模式零澄清 → 直接待采纳"
+    );
     assert_eq!(outcome.analysis_mode.as_deref(), Some("derived"));
     assert_eq!(outcome.clarification_state.as_deref(), Some("not_needed"));
 
     let (row, clarifications, _) = get_external_commit(&pool, commit_id).await.unwrap();
     assert!(clarifications.is_empty());
-    assert_eq!(row.clarification_state, "not_needed", "无需澄清必须显式记录");
+    assert_eq!(
+        row.clarification_state, "not_needed",
+        "无需澄清必须显式记录"
+    );
     let analysis = row.analysis.unwrap();
     assert_eq!(analysis["analysis_mode"], "derived");
     assert!(analysis["knowledge_updates"].as_array().unwrap().is_empty());
@@ -475,10 +470,9 @@ async fn analysis_failure_is_visible_and_retry_recovers(pool: PgPool) {
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     let failed = analyze_external_commit(
@@ -491,11 +485,19 @@ async fn analysis_failure_is_visible_and_retry_recovers(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(failed.status, "failed");
-    assert!(failed.error.as_deref().unwrap_or_default().contains("provider down"));
+    assert!(failed
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("provider down"));
 
     let (row, _, _) = get_external_commit(&pool, commit_id).await.unwrap();
     assert_eq!(row.status, "failed");
-    assert!(row.last_error.as_deref().unwrap_or_default().contains("provider down"));
+    assert!(row
+        .last_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("provider down"));
     assert_eq!(row.attempts, 1);
 
     // 重试成功。
@@ -525,25 +527,21 @@ async fn llm_output_is_sanitized_and_questions_become_clarifications(pool: PgPoo
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     let stub = FullStub {
         doc_key: "login-design".to_string(),
     };
-    let outcome = analyze_external_commit(
-        &pool,
-        &fx.knowledge_root,
-        &stub,
-        commit_id,
-        &fx.human,
-    )
-    .await
-    .unwrap();
-    assert_eq!(outcome.status, "analyzed", "有澄清问题 → analyzed + pending");
+    let outcome = analyze_external_commit(&pool, &fx.knowledge_root, &stub, commit_id, &fx.human)
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.status, "analyzed",
+        "有澄清问题 → analyzed + pending"
+    );
     assert_eq!(outcome.clarification_state.as_deref(), Some("pending"));
 
     let (row, clarifications, _) = get_external_commit(&pool, commit_id).await.unwrap();
@@ -572,23 +570,16 @@ async fn answering_all_clarifications_promotes_to_awaiting_adoption(pool: PgPool
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
     let stub = FullStub {
         doc_key: "login-design".to_string(),
     };
-    analyze_external_commit(
-        &pool,
-        &fx.knowledge_root,
-        &stub,
-        commit_id,
-        &fx.human,
-    )
-    .await
-    .unwrap();
+    analyze_external_commit(&pool, &fx.knowledge_root, &stub, commit_id, &fx.human)
+        .await
+        .unwrap();
 
     // AI 主体不得答复（人类面通道执法）。
     let ai_id = seed_ai_principal(&pool).await;
@@ -606,10 +597,15 @@ async fn answering_all_clarifications_promotes_to_awaiting_adoption(pool: PgPool
     assert!(matches!(err, ExternalCommitError::Validation(_)));
 
     // 人类答复 → resolved + awaiting_adoption。
-    let answered =
-        answer_clarification(&pool, commit_id, clarifications[0].id, &fx.human, "沿用既有约定")
-            .await
-            .unwrap();
+    let answered = answer_clarification(
+        &pool,
+        commit_id,
+        clarifications[0].id,
+        &fx.human,
+        "沿用既有约定",
+    )
+    .await
+    .unwrap();
     assert_eq!(answered.status, "answered");
     let (row, clarifications, _) = get_external_commit(&pool, commit_id).await.unwrap();
     assert_eq!(row.clarification_state, "resolved");
@@ -630,10 +626,9 @@ async fn adopt_requires_analysis_and_human_principal(pool: PgPool) {
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     // 发现态直接决定 → 409（发现 ≠ 采纳；CHECK 约束同层兜底）。
@@ -653,15 +648,9 @@ async fn adopt_requires_analysis_and_human_principal(pool: PgPool) {
 
     // 推进到 awaiting_adoption 后，AI 主体仍不得决定。
     let stub = DerivedStub;
-    analyze_external_commit(
-        &pool,
-        &fx.knowledge_root,
-        &stub,
-        commit_id,
-        &fx.human,
-    )
-    .await
-    .unwrap();
+    analyze_external_commit(&pool, &fx.knowledge_root, &stub, commit_id, &fx.human)
+        .await
+        .unwrap();
     let ai_id = seed_ai_principal(&pool).await;
     let ai = AuditActor::principal(ai_id);
     let err = decide_adoption(
@@ -707,17 +696,19 @@ async fn approval_submits_knowledge_proposal_and_close_backfills_revision(pool: 
         .unwrap()
         .parse()
         .unwrap();
-    assert_eq!(proposals[0]["outcome"], "committed", "过质量门的常规修订直接提交");
+    assert_eq!(
+        proposals[0]["outcome"], "committed",
+        "过质量门的常规修订直接提交"
+    );
 
     // 提案已落正式修订（Markdown+Git 权威正文经既有管线写入；DB 只存修订账目，
     // 正文按 canonical_path 落在知识库 Git 工作树）。
-    let revision_id: Uuid = sqlx::query_scalar(
-        "SELECT resulting_revision_id FROM ai.document_proposal WHERE id = $1",
-    )
-    .bind(proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let revision_id: Uuid =
+        sqlx::query_scalar("SELECT resulting_revision_id FROM ai.document_proposal WHERE id = $1")
+            .bind(proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     // 提案行的 canonical_path 是 submit 时按 project_code 规范化的真实落盘路径
     //（夹具种子行用的是占位路径，不能作为读盘依据）。
     let (git_sha, canonical_path): (String, String) = sqlx::query_as(
@@ -733,11 +724,19 @@ async fn approval_submits_knowledge_proposal_and_close_backfills_revision(pool: 
         "DEBUG md_path={} exists={} root_exists={:?}",
         md_path.display(),
         md_path.exists(),
-        std::fs::read_dir(fx.knowledge_root.path()).map(|entries| entries.count()).unwrap_or(0)
+        std::fs::read_dir(fx.knowledge_root.path())
+            .map(|entries| entries.count())
+            .unwrap_or(0)
     );
     let markdown = std::fs::read_to_string(&md_path).unwrap();
-    assert!(markdown.contains("source_events:"), "缺省来源尾注必须由采纳路径补齐");
-    assert!(markdown.contains("# 登录设计"), "拟稿正文必须真实写入权威正文");
+    assert!(
+        markdown.contains("source_events:"),
+        "缺省来源尾注必须由采纳路径补齐"
+    );
+    assert!(
+        markdown.contains("# 登录设计"),
+        "拟稿正文必须真实写入权威正文"
+    );
 
     // 提案未关闭前 close 必须可行（本例已 committed）→ 回填修订引用并关闭。
     let closed = close_adoption(&pool, commit_id, &fx.human).await.unwrap();
@@ -796,7 +795,9 @@ async fn close_is_blocked_while_knowledge_proposal_is_pending(pool: PgPool) {
         .await
         .unwrap();
 
-    let err = close_adoption(&pool, commit_id, &fx.human).await.unwrap_err();
+    let err = close_adoption(&pool, commit_id, &fx.human)
+        .await
+        .unwrap_err();
     let ExternalCommitError::Conflict(message) = &err else {
         panic!("expected conflict, got {err:?}");
     };
@@ -830,10 +831,9 @@ async fn no_update_and_reject_close_explicitly(pool: PgPool) {
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
     analyze_external_commit(
         &pool,
@@ -949,10 +949,9 @@ async fn diff_view_reads_the_cached_clone(pool: PgPool) {
     discover_external_commits(&pool, fx.project_id, &fx.human, None)
         .await
         .unwrap();
-    let listed =
-        pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
-            .await
-            .unwrap();
+    let listed = pm_application::external_commit::list_external_commits(&pool, fx.project_id, None)
+        .await
+        .unwrap();
     let commit_id: Uuid = listed[0]["id"].as_str().unwrap().parse().unwrap();
 
     let (diff, truncated, sha) = read_commit_diff(&pool, commit_id).await.unwrap();

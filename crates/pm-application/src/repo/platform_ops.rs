@@ -52,8 +52,7 @@ pub trait PlatformOpsRepo: Send + Sync {
     async fn version_id_of_job(&self, job_id: Uuid) -> Result<Uuid, sqlx::Error>;
 
     /// 版本 → 文档 id。
-    async fn document_id_of_version_row(&self, version_id: Uuid)
-        -> Result<Uuid, sqlx::Error>;
+    async fn document_id_of_version_row(&self, version_id: Uuid) -> Result<Uuid, sqlx::Error>;
 
     // ── 杂项守卫 ──
     async fn intake_project_id(

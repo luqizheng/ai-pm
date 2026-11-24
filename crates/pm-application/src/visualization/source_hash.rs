@@ -73,25 +73,36 @@ fn build_payload(spec: &VizSpec) -> SourceHashPayload {
         .nodes
         .iter()
         .filter_map(|node| {
-            node.source_ref.as_ref().map(|source_ref| SourceFingerprint {
-                domain: source_ref.domain.clone(),
-                r#type: source_ref.r#type.clone(),
-                id: source_ref.id.clone(),
-                revision_id: source_ref.revision_id.clone().unwrap_or_default(),
-                content_hash: source_ref.content_hash.clone().unwrap_or_default(),
-            })
+            node.source_ref
+                .as_ref()
+                .map(|source_ref| SourceFingerprint {
+                    domain: source_ref.domain.clone(),
+                    r#type: source_ref.r#type.clone(),
+                    id: source_ref.id.clone(),
+                    revision_id: source_ref.revision_id.clone().unwrap_or_default(),
+                    content_hash: source_ref.content_hash.clone().unwrap_or_default(),
+                })
         })
         .collect();
     sources.sort_by(|a, b| {
-        (a.domain.as_str(), a.r#type.as_str(), a.id.as_str(), a.revision_id.as_str()).cmp(&(
-            b.domain.as_str(),
-            b.r#type.as_str(),
-            b.id.as_str(),
-            b.revision_id.as_str(),
-        ))
+        (
+            a.domain.as_str(),
+            a.r#type.as_str(),
+            a.id.as_str(),
+            a.revision_id.as_str(),
+        )
+            .cmp(&(
+                b.domain.as_str(),
+                b.r#type.as_str(),
+                b.id.as_str(),
+                b.revision_id.as_str(),
+            ))
     });
     sources.dedup_by(|a, b| {
-        a.domain == b.domain && a.r#type == b.r#type && a.id == b.id && a.revision_id == b.revision_id
+        a.domain == b.domain
+            && a.r#type == b.r#type
+            && a.id == b.id
+            && a.revision_id == b.revision_id
     });
 
     let mut derived: Vec<DerivedFingerprint> = spec
@@ -177,10 +188,10 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pm_domain::visualization::source_ref::{DerivedTrace, SourceRef};
     use pm_domain::visualization::spec::{
         Budget, VizEdge, VizMeta, VizNode, VizSpec, VizView, SPEC_VERSION,
     };
-    use pm_domain::visualization::source_ref::{DerivedTrace, SourceRef};
 
     fn node(id: &str, revision: &str) -> VizNode {
         VizNode {
@@ -233,7 +244,9 @@ mod tests {
     fn hash_is_64_lowercase_hex() {
         let hash = source_hash(&spec());
         assert_eq!(hash.len(), 64);
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(hash
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
     }
 
     #[test]
@@ -269,7 +282,11 @@ mod tests {
     fn hash_changes_when_revision_changes() {
         let base = source_hash(&spec());
         let mut s = spec();
-        s.nodes[0].source_ref.as_mut().expect("source_ref").revision_id = Some("rev-13".to_string());
+        s.nodes[0]
+            .source_ref
+            .as_mut()
+            .expect("source_ref")
+            .revision_id = Some("rev-13".to_string());
         assert_ne!(base, source_hash(&s));
     }
 
@@ -277,7 +294,11 @@ mod tests {
     fn hash_changes_when_content_hash_changes() {
         let base = source_hash(&spec());
         let mut s = spec();
-        s.nodes[0].source_ref.as_mut().expect("source_ref").content_hash = Some("hash-2".to_string());
+        s.nodes[0]
+            .source_ref
+            .as_mut()
+            .expect("source_ref")
+            .content_hash = Some("hash-2".to_string());
         assert_ne!(base, source_hash(&s));
     }
 

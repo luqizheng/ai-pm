@@ -14,16 +14,13 @@ pub trait AiTeamMonitorRepo: Send + Sync {
     async fn project_tenant(&self, project_id: Uuid) -> Result<Option<Uuid>, sqlx::Error>;
 
     /// ① roles 计数：(启用数, 停用数, 模板总数)。
-    async fn roles_summary(&self, project_id: Uuid)
-        -> Result<(i64, i64, i64), sqlx::Error>;
+    async fn roles_summary(&self, project_id: Uuid) -> Result<(i64, i64, i64), sqlx::Error>;
 
     /// ② runs 计数：(活跃, 近24h成功, 近24h失败)。
-    async fn runs_summary(&self, project_id: Uuid)
-        -> Result<(i64, i64, i64), sqlx::Error>;
+    async fn runs_summary(&self, project_id: Uuid) -> Result<(i64, i64, i64), sqlx::Error>;
 
     /// ③ tasks 计数：(awaiting_decision, blocked)。
-    async fn tasks_summary(&self, project_id: Uuid)
-        -> Result<(i64, i64), sqlx::Error>;
+    async fn tasks_summary(&self, project_id: Uuid) -> Result<(i64, i64), sqlx::Error>;
 
     /// 项目指定的 Provider 绑定行：(显示名, 状态, model 配置)；未指定 → None。
     async fn designated_provider(
@@ -33,10 +30,18 @@ pub trait AiTeamMonitorRepo: Send + Sync {
     ) -> Result<Option<(String, String, String)>, sqlx::Error>;
 
     /// Team 首个 enabled+有模型 Provider 名（创建序）；无 → None。
-    async fn team_default_provider(
+    async fn team_default_provider(&self, tenant_id: Uuid) -> Result<Option<String>, sqlx::Error>;
+
+    /// LLM 数据面就绪计数（R3/B01-01，只读；不触碰凭证）：
+    /// (enabled Provider 数, enabled 目录模型数, 指向 enabled 模型的
+    /// team_wide 授权数, general 策略行数)。
+    ///
+    /// 语义 = worker `resolve_model_for_role` 末级兜底的通过前置——四者全绿
+    /// 时模型解析才具备数据条件（进程内开关不在此面，API 如实不观测）。
+    async fn llm_readiness_counts(
         &self,
         tenant_id: Uuid,
-    ) -> Result<Option<String>, sqlx::Error>;
+    ) -> Result<(i64, i64, i64, i64), sqlx::Error>;
 
     async fn recent_runs(
         &self,
@@ -50,7 +55,6 @@ pub trait AiTeamMonitorRepo: Send + Sync {
         limit: i64,
     ) -> Result<Vec<crate::repo::ai_team_monitor::AiTeamEventRow>, sqlx::Error>;
 }
-
 
 /// monitor 明细行：run（最近 50 条投影）。
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]

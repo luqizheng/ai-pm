@@ -102,8 +102,7 @@ pub struct MemberAuditActor {
 /// 锁内快照 → 裁决 的同步回调（规则判定是纯函数，无 await）。
 /// Err = (错误码, 消息)——HTTP 错误码契约（TEAM_OWNER_REQUIRED / OWNER_LAST 等）
 /// 由规则层携带，实现侧只负责回滚。
-pub type PlanFn<'a> =
-    &'a (dyn Fn(ChangeSnapshot) -> Result<(Vec<MemberWrite>, Vec<MemberAuditLine>), (String, String)>
+pub type PlanFn<'a> = &'a (dyn Fn(ChangeSnapshot) -> Result<(Vec<MemberWrite>, Vec<MemberAuditLine>), (String, String)>
          + Send
          + Sync);
 

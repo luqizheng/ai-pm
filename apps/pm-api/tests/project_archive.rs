@@ -367,13 +367,11 @@ async fn external_run_cancel_entry(pool: PgPool) {
 async fn seed_product_owner_link(pool: &PgPool, project_id: Uuid) -> Uuid {
     // 调用者 = dev-off（router off 模式注入）；Product Owner 行必须对准它。
     let owner = pm_api::auth::DEV_OFF_PRINCIPAL;
-    let tenant_id: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO core.tenant (id, provider, external_key, display_name) \
          VALUES ($1, 'lmms', gen_random_uuid()::text, 'Fixture') \
@@ -457,7 +455,10 @@ async fn close_reopen_guard_matrix_product_owner(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(!outsider_allowed, "outsider must not be a lifecycle manager");
+    assert!(
+        !outsider_allowed,
+        "outsider must not be a lifecycle manager"
+    );
     let owner_allowed = pm_application::archive::is_project_lifecycle_manager(
         &pool,
         SYSTEM_TENANT,
@@ -479,7 +480,8 @@ async fn close_reopen_guard_matrix_product_owner(pool: PgPool) {
                 &format!("/v1/pm/projects/{project_id}/close"),
                 Some(json!({ "reason": "lc" })),
             ))
-            .await.unwrap(),
+            .await
+            .unwrap(),
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
@@ -493,7 +495,8 @@ async fn close_reopen_guard_matrix_product_owner(pool: PgPool) {
                 &format!("/v1/pm/projects/{project_id}/close"),
                 Some(json!({})),
             ))
-            .await.unwrap(),
+            .await
+            .unwrap(),
     )
     .await;
     assert_eq!(st, StatusCode::CONFLICT, "{body}");
@@ -537,7 +540,8 @@ async fn close_reopen_guard_matrix_product_owner(pool: PgPool) {
                 &format!("/v1/pm/projects/{project_id}/reopen"),
                 Some(json!({})),
             ))
-            .await.unwrap(),
+            .await
+            .unwrap(),
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");

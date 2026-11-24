@@ -297,6 +297,17 @@ export function getTaskDetail(taskId: string) {
 }
 
 /** `GET /v1/pm/projects/{project_id}/dependency-graph`：项目级依赖图。 */
+/** B06-D2：人工任务直接完成（真人唯一通道；AI 主体 403，理由必填落审计）。 */
+export function completeTaskManually(
+  taskId: string,
+  body: { reason: string; expected_revision?: number }
+) {
+  return http.post<{ task_id: string; status: string; revision: number }>(
+    `/v1/pm/tasks/${taskId}/transitions`,
+    body
+  );
+}
+
 export function getDependencyGraph(projectId: string) {
   return http.get<DependencyGraph>(
     `/v1/pm/projects/${projectId}/dependency-graph`

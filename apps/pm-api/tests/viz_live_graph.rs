@@ -37,7 +37,10 @@ fn token_for(sub: &str, tid: i64) -> String {
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 /// 造租户 / 成员 / 客户 / 项目（owner 已入成员表）。返回 (tenant, project, principal)。
@@ -65,12 +68,14 @@ async fn seed_scene(pool: &PgPool, seq: i64) -> (Uuid, Uuid, Uuid) {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')")
-        .bind(tenant)
-        .bind(principal)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')",
+    )
+    .bind(tenant)
+    .bind(principal)
+    .execute(pool)
+    .await
+    .unwrap();
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (tenant_id, code, name, status) VALUES ($1, $2, $2, 'active') RETURNING id",
     )
@@ -112,7 +117,14 @@ async fn seed_task(pool: &PgPool, tenant: Uuid, project: Uuid, title: &str, stat
     .unwrap()
 }
 
-async fn seed_dependency(pool: &PgPool, tenant: Uuid, project: Uuid, task: Uuid, on: Uuid, by: Uuid) {
+async fn seed_dependency(
+    pool: &PgPool,
+    tenant: Uuid,
+    project: Uuid,
+    task: Uuid,
+    on: Uuid,
+    by: Uuid,
+) {
     sqlx::query(
         "INSERT INTO delivery.task_dependency (tenant_id, project_id, task_id, depends_on_task_id, created_by) \
          VALUES ($1, $2, $3, $4, $5)",
@@ -137,7 +149,9 @@ async fn live_trace_graph_returns_current_consistency(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project}/live/trace-graph"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project}/live/trace-graph"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -165,7 +179,9 @@ async fn live_task_dag_returns_edges(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project}/live/task-dag"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project}/live/task-dag"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -219,7 +235,9 @@ async fn live_graph_cross_project_edges_do_not_leak(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project1}/live/task-dag"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project1}/live/task-dag"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -314,7 +332,9 @@ async fn live_architecture_graph_returns_derived_edges(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project}/live/architecture-graph"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project}/live/architecture-graph"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -333,15 +353,14 @@ async fn live_architecture_graph_returns_derived_edges(pool: PgPool) {
     assert_eq!(edges[0]["to"], baseline.to_string());
     assert_eq!(edges[0]["relation"], "derived_trace");
     assert_eq!(edges[0]["derived"]["direct"], false);
-    assert_eq!(edges[0]["derived"]["semantic_confidence"], "structurally_supported");
+    assert_eq!(
+        edges[0]["derived"]["semantic_confidence"],
+        "structurally_supported"
+    );
 
     let nodes = body["data"]["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 2, "两个端点节点");
-    let kinds: Vec<&str> = nodes
-
-        .iter()
-        .map(|n| n["kind"].as_str().unwrap())
-        .collect();
+    let kinds: Vec<&str> = nodes.iter().map(|n| n["kind"].as_str().unwrap()).collect();
     assert!(kinds.contains(&"architecture"));
     assert!(kinds.contains(&"baseline"));
     // 节点必须带溯源（domain=ai），不得伪造 revision
@@ -426,7 +445,9 @@ async fn live_architecture_graph_cross_project_baseline_does_not_leak(pool: PgPo
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project1}/live/architecture-graph"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project1}/live/architecture-graph"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -451,7 +472,9 @@ async fn unknown_view_kind_is_404(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/v1/pm/visualizations/projects/{project}/live/nope"))
+                .uri(format!(
+                    "/v1/pm/visualizations/projects/{project}/live/nope"
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -460,4 +483,3 @@ async fn unknown_view_kind_is_404(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
-

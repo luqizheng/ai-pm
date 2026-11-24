@@ -240,10 +240,8 @@ async fn read_empty_state_composition_defaults(pool: PgPool) {
     );
     // 对外口径必须写明默认拒绝（不得再宣称「无表态时默认允许」）。
     assert!(
-        rules.iter().any(|r| r["key"] == "capabilities" && r["text"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("默认拒绝")),
+        rules.iter().any(|r| r["key"] == "capabilities"
+            && r["text"].as_str().unwrap_or_default().contains("默认拒绝")),
         "capabilities rule must state the default-deny semantics"
     );
 }

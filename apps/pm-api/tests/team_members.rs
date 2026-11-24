@@ -157,7 +157,8 @@ async fn world(pool: &PgPool) -> World {
     let owner_id = Uuid::parse_str(owner["principal_id"].as_str().unwrap()).unwrap();
     assert_eq!(owner["is_active"], json!(true));
     assert_eq!(
-        owner["is_admin"], json!(false),
+        owner["is_admin"],
+        json!(false),
         "provision 预登记行不再是 Team Owner"
     );
     assert_eq!(owner["team_role"], json!("member"));
@@ -173,7 +174,11 @@ async fn world(pool: &PgPool) -> World {
     .await;
     assert_eq!(status, StatusCode::CREATED, "{team}");
     let after = me(&app, &owner_token).await;
-    assert_eq!(after["is_admin"], json!(true), "建团后 owner 即刻进入管理面");
+    assert_eq!(
+        after["is_admin"],
+        json!(true),
+        "建团后 owner 即刻进入管理面"
+    );
     assert_eq!(after["team_role"], json!("owner"));
     assert_eq!(after["memberships"][0]["role"], json!("owner"));
     assert_eq!(after["onboarding_required"], json!(false));
@@ -221,11 +226,13 @@ async fn member_role(pool: &PgPool, tenant_id: Uuid, principal_id: Uuid) -> Opti
 
 /// 本 Team 的 owner 数。
 async fn owner_count(pool: &PgPool, team_id: Uuid) -> i64 {
-    sqlx::query_scalar("SELECT count(*) FROM core.team_member WHERE team_id = $1 AND role = 'owner'")
-        .bind(team_id)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "SELECT count(*) FROM core.team_member WHERE team_id = $1 AND role = 'owner'",
+    )
+    .bind(team_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 // ─────────────────────────────────────────────────────── TN-4 / TN-5
@@ -335,7 +342,9 @@ async fn tn5_admin_cannot_transfer_ownership(pool: PgPool) {
     // 什么都没发生。
     assert_eq!(owner_count(&pool, w.team_id).await, 1);
     assert_eq!(
-        member_role(&pool, w.tenant_id, w.member_id).await.as_deref(),
+        member_role(&pool, w.tenant_id, w.member_id)
+            .await
+            .as_deref(),
         Some("member")
     );
 }
@@ -587,7 +596,11 @@ async fn rv4_member_cannot_touch_member_management(pool: PgPool) {
     ] {
         let (status, body) = call(&w.app, method, &uri, &member_token, body).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri}: {body}");
-        assert_eq!(body["message"], json!("team owner required"), "{method} {uri}");
+        assert_eq!(
+            body["message"],
+            json!("team owner required"),
+            "{method} {uri}"
+        );
     }
 
     // 成员面唯一写权：自助退出。成功后 memberships=[]、onboarding_required=true。
@@ -871,7 +884,9 @@ async fn rv8_audit_failure_rolls_the_role_change_back(pool: PgPool) {
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 
     assert_eq!(
-        member_role(&pool, w.tenant_id, w.member_id).await.as_deref(),
+        member_role(&pool, w.tenant_id, w.member_id)
+            .await
+            .as_deref(),
         Some("member"),
         "审计失败必须让角色变更一起回滚"
     );
@@ -923,7 +938,11 @@ async fn rv9_concurrent_owner_demotion_never_reaches_zero_owners(pool: PgPool) {
         "并发降级不得全部生效，实际 {codes:?}"
     );
 
-    assert_eq!(owner_count(&pool, w.team_id).await, 1, "并发降级不得让 owner 归零");
+    assert_eq!(
+        owner_count(&pool, w.team_id).await,
+        1,
+        "并发降级不得让 owner 归零"
+    );
 }
 
 // ─────────────────────────────────────────────────────────── RV-10
@@ -944,9 +963,12 @@ async fn rv10_token_roles_alone_never_grant_tenant_admin(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let team_id =
-        Uuid::parse_str(me(&app, &owner_token).await["memberships"][0]["team_id"].as_str().unwrap())
-            .unwrap();
+    let team_id = Uuid::parse_str(
+        me(&app, &owner_token).await["memberships"][0]["team_id"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
 
     // token 自称 tenant_admin，但库里只有 provision 的 member 预登记行。
     let claimant_token = token("usr-claimant", json!(["tenant_admin"]));
@@ -991,6 +1013,10 @@ async fn rv10_token_roles_alone_never_grant_tenant_admin(pool: PgPool) {
     ] {
         let (status, resp) = call(&app, method, &uri, &claimant_token, body).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri}: {resp}");
-        assert_eq!(resp["message"], json!("team owner required"), "{method} {uri}");
+        assert_eq!(
+            resp["message"],
+            json!("team owner required"),
+            "{method} {uri}"
+        );
     }
 }

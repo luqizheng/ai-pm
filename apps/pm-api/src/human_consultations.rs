@@ -86,8 +86,14 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_handler).post(create_handler),
         )
         .route("/v1/pm/human-consultations/{id}/start", post(start_handler))
-        .route("/v1/pm/human-consultations/{id}/decide", post(decide_handler))
-        .route("/v1/pm/human-consultations/{id}/cancel", post(cancel_handler))
+        .route(
+            "/v1/pm/human-consultations/{id}/decide",
+            post(decide_handler),
+        )
+        .route(
+            "/v1/pm/human-consultations/{id}/cancel",
+            post(cancel_handler),
+        )
         .route(
             "/v1/pm/human-consultations/{id}/supersede",
             post(supersede_handler),
@@ -247,5 +253,9 @@ async fn supersede_handler(
         &actor,
     )
     .await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": new_id }))).into_response())
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "id": new_id })),
+    )
+        .into_response())
 }

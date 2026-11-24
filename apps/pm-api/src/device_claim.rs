@@ -19,8 +19,8 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::platform_ops_repo;
-use pm_application::repo::platform_ops::PlatformOpsRepo;
 use pm_application::caller::{DeviceClaim, DeviceClaimIgnoredReason};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 /// 设备声明头（客户端自报，不可信）。
 pub const DEVICE_HEADER: &str = "x-ai-pm-device-id";

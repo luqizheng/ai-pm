@@ -126,15 +126,7 @@ async fn update_handler(
         }
     }
     let actor = caller.audit_actor();
-    match update_project_info(
-        &state.pool,
-        &actor,
-        caller.tenant_id,
-        project_id,
-        body,
-    )
-    .await
-    {
+    match update_project_info(&state.pool, &actor, caller.tenant_id, project_id, body).await {
         Ok(info) => (StatusCode::OK, Json(info)).into_response(),
         Err(err) => info_error(err),
     }

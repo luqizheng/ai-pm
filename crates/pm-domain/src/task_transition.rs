@@ -49,6 +49,9 @@ pub fn allowed_edges() -> &'static [(TaskStatus, TaskStatus)] {
         (Ready, Cancelled),
         (Ready, Claimed),
         (Ready, Superseded),
+        // B06-D2：人工任务的直接完成边（守卫见 validate_transition 的
+        // manual_completion 标志——设备不可认领的人工任务唯一收尾路径）。
+        (Ready, Completed),
         (Reviewing, Cancelled),
         (Reviewing, ChangesRequested),
         (Reviewing, Completed),
@@ -104,6 +107,17 @@ pub fn validate_transition(input: &TransitionInput) -> Result<(), TransitionErro
     {
         return Err(TransitionError::MissingEvidence(
             "acceptance evidence must be complete (E2)",
+        ));
+    }
+    // B06-D2：Ready → Completed 仅人工任务可用——必须带显式 manual_completion
+    // 标志（调用方已核验任务类别与理由非空；执行类任务仍必须走交付/评审生命
+    // 周期，不得借本边跳过 E1/E2）。
+    if input.from == TaskStatus::Ready
+        && input.to == TaskStatus::Completed
+        && !input.manual_completion
+    {
+        return Err(TransitionError::MissingEvidence(
+            "manual completion requires the manual_completion flag (human-executable tasks only; reason recorded by the caller)",
         ));
     }
     // §19.2：Running → Failed 需要终止性失败条件（B4-A..B4-D）。retryable 的
@@ -205,6 +219,11 @@ pub struct TransitionInput {
     pub delivery_submitted: bool,
     /// §三 E2：验收证据与审批策略均满足（Reviewing → Completed 时必须为 true）。
     pub acceptance_evidence_complete: bool,
+    /// B06-D2（业务验收 2026-11-24）：人工任务直接完成标志（`Ready → Completed`
+    /// 边的守卫证据）。仅人工执行类任务（无 executor 匹配、执行中心归类
+    /// 「无可用执行者」）可由真人主体设置；调用方负责核验任务类别与理由
+    /// 非空——域层只认显式标志（与 waiting_resolved / delivery_submitted 同纪律）。
+    pub manual_completion: bool,
 }
 
 impl TransitionInput {
@@ -224,6 +243,7 @@ impl TransitionInput {
             supersede: None,
             delivery_submitted: false,
             acceptance_evidence_complete: false,
+            manual_completion: false,
         }
     }
 
@@ -277,9 +297,9 @@ mod tests {
 
     #[test]
     fn edge_count_matches_ruled_matrix() {
-        // 21 non-cancel edges + 9 cancel edges (every non-terminal state) = 30.
-        assert_eq!(allowed_edges().len(), 30);
-        assert_eq!(ruled_edges().len(), 30);
+        // B06-D2 后：22 non-cancel edges + 9 cancel edges (every non-terminal state) = 31.
+        assert_eq!(allowed_edges().len(), 31);
+        assert_eq!(ruled_edges().len(), 31);
     }
 
     #[test]
@@ -595,5 +615,44 @@ mod tests {
         let mut complete = TransitionInput::minimal(Reviewing, Completed);
         complete.acceptance_evidence_complete = true;
         assert!(validate_transition(&complete).is_ok());
+    }
+
+    // ── B06-D2：人工任务直接完成（Ready→Completed）────────────────────
+
+    #[test]
+    fn ready_to_completed_requires_manual_completion_flag() {
+        use TaskStatus::*;
+        let input = TransitionInput {
+            manual_completion: false,
+            ..TransitionInput::minimal(Ready, Completed)
+        };
+        assert!(matches!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "manual completion requires the manual_completion flag (human-executable tasks only; reason recorded by the caller)"
+            ))
+        ));
+    }
+
+    #[test]
+    fn ready_to_completed_with_flag_passes_and_other_tasks_keep_old_rules() {
+        use TaskStatus::*;
+        let input = TransitionInput {
+            manual_completion: true,
+            ..TransitionInput::minimal(Ready, Completed)
+        };
+        assert!(validate_transition(&input).is_ok());
+        // Draft→Completed 依旧非法（只有 Ready 有本条人工边）。
+        let draft_input = TransitionInput {
+            manual_completion: true,
+            ..TransitionInput::minimal(Draft, Completed)
+        };
+        assert!(matches!(
+            validate_transition(&draft_input),
+            Err(TransitionError::IllegalTransition {
+                from: Draft,
+                to: Completed
+            })
+        ));
     }
 }

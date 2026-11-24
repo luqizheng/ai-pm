@@ -21,9 +21,9 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, repos::platform_ops_repo, ApiResult};
-use pm_application::repo::platform_ops::PlatformOpsRepo;
+use crate::support::{repos::platform_ops_repo, require_project_visible, ApiResult};
 use pm_application::outbox_ops::{self, ReplayOutcome};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

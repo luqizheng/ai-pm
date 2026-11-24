@@ -32,6 +32,8 @@ design:
     noProjectHint: 技术设计与架构决策属于项目，需要先选定项目上下文。
     errorTitle: 加载失败
     filters: 筛选
+    save: 保存
+    cancel: 取消
   context:
     title: 工作空间
     designs: 技术设计
@@ -76,6 +78,8 @@ design:
     design_approved: 设计已批准
     requirements_confirmed: 需求依据已确认
     adrs_resolved: 关键决策已解决
+    scope_defined: 实施范围已明确
+    acceptance_ready: 验收标准已齐备
     acceptance_criteria: 验收标准齐备
     repositories_verified: 仓库基准已核验
   analysis:
@@ -89,6 +93,10 @@ design:
     adrsTitle: 影响关系
     noAdrs: 该设计未被任何架构决策引用。
   designs:
+    create: 新建设计
+    createTitle: 新建设计
+    fieldTitle: 标题
+    fieldMarkdown: 首版正文（Markdown，可选）
     emptyTitle: 暂无技术设计
     emptyHint: 项目内尚无技术设计，创建后可在此管理版本链与评审。
     notFoundTitle: 设计不存在
@@ -105,6 +113,23 @@ design:
     openFindings: 未闭 {count}
     noFindings: 无
   detail:
+    newRevision: 新修订
+    editDraft: 编辑草稿
+    submitRevision: 提交修订
+    requestApproval: 请求审批
+    newRevisionTitle: 新修订草稿
+    editDraftTitle: 编辑草稿
+    fieldSummary: 摘要（可选）
+    fieldMarkdown: 正文（Markdown）
+    fieldReason: 审批理由（拒绝必填）
+    approvalTitle: 人工审批
+    approvalHint: 设计审批必须由人裁决（AI 无批准路径）；通过 = 该版本成为当前正式版本。
+    approve: 批准
+    reject: 拒绝
+    linkRequirement: 关联需求
+    unlink: 取消关联
+    linkSubmit: 关联
+    selectRequirement: 选择目标…
     revisionsTitle: 版本链
     noRevisions: 该设计尚无版本。
     contentTitle: 版本正文
@@ -113,6 +138,25 @@ design:
     noFindings: 该版本没有登记评审问题。
     aiSource: AI 产出
   adrs:
+    create: 新建 ADR
+    createTitle: 新建 ADR
+    fieldTitle: 标题
+    fieldQuestion: 决策问题
+    fieldContext: 背景（可选）
+    fieldRationale: 理由（可选）
+    fieldConsequences: 后果（可选）
+    fieldBlocking: 标记为实施阻塞项
+    submitRevision: 提交修订
+    requestApproval: 请求人工确认
+    accept: 接受
+    clearBlocking: 解除阻塞标记
+    markBlocking: 标记阻塞实施
+    linkDesign: 关联设计
+    linkRequirement: 关联需求
+    linkDesignTitle: 关联设计（挂最新修订）
+    linkRequirementTitle: 关联需求
+    noDesignRevision: 该设计尚无修订版本，无法关联。
+    approvalTitle: 人工确认
     emptyTitle: 暂无架构决策
     emptyHint: 项目内尚无架构决策，重要技术决策应独立记录以便追溯。
     notFoundTitle: 决策不存在

@@ -79,6 +79,21 @@ const projectId = computed(() => {
 const PAGE_SIZE = 50;
 
 const rows = ref<TaskRowModel[]>([]);
+
+/** TASK-01 §3 执行类型派生：有 run 记录=AI 执行；无 run=人工/未指派。 */
+const EXEC_RUN_ACTIVE = new Set([
+  "claimed",
+  "running",
+  "submitted",
+  "reviewing",
+  "awaiting_decision"
+]);
+
+function executionKind(task: TaskRowModel): "ai" | "human" | "unassigned" {
+  if (task.runStatus) return "ai";
+  if (!task.assigneeId) return "unassigned";
+  return "human";
+}
 const total = ref(0);
 const page = ref(1);
 const loading = ref(true);
@@ -586,6 +601,7 @@ function gotoPage(next: number) {
           <tr>
             <th class="bl-table__check-col" />
             <th>{{ t("s04.tasks.common.taskLabel") }}</th>
+            <th>{{ t("s04.tasks.overview.execKindLabel") }}</th>
             <th>{{ t("s04.tasks.common.statusLabel") }}</th>
             <th>{{ t("s04.tasks.common.priorityLabel") }}</th>
             <th>{{ t("s04.tasks.common.assigneeLabel") }}</th>
@@ -615,9 +631,16 @@ function gotoPage(next: number) {
                 class="bl-table__link"
                 @click="openDetail(task)"
               >
-                <span class="bl-table__id">{{ shortId(task.id) }}</span>
+                <span class="bl-table__id">{{ task.code }}</span>
                 <span>{{ task.title }}</span>
               </button>
+            </td>
+            <td>
+              {{
+                t(
+                  `s04.tasks.overview.execKind${executionKind(task).charAt(0).toUpperCase()}${executionKind(task).slice(1)}`
+                )
+              }}
             </td>
             <td><TaskStatusChip :status="task.status" /></td>
             <td><TaskPriorityChip :priority="task.priority" /></td>

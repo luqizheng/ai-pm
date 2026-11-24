@@ -24,25 +24,23 @@ pub use adapter_contract::{
     contract, verify, ContractCheck, OutputFormat, RenderAdapter, RenderError, RenderOutput,
 };
 pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
-pub use data_conformance::{
-    check_relation_data, is_conformant, summary as conformance_summary, ConformanceViolation,
-};
 pub use artifact_service::{
     create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
     VizError,
 };
-pub use seecode_compiler::{compile as compile_for_seecode, CompileError, CompiledSpec};
-pub use render_job::{render_artifact, RenderOutcome};
+pub use data_conformance::{
+    check_relation_data, is_conformant, summary as conformance_summary, ConformanceViolation,
+};
 pub use live_graph::{build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT};
-pub use queries::{
-    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries,
-    ArtifactFilter, ArtifactListRow, SlotSummaryRow,
-};
-pub use resolver::{
-    probe_visible_objects, CallerScope, InMemoryObjectResolver, SourceKey,
-};
 pub use projection::{
     project_spec, Consistency, ProjectionContext, ProjectionReport, ReadStrategy, VisibleCounts,
 };
+pub use queries::{
+    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries, ArtifactFilter,
+    ArtifactListRow, SlotSummaryRow,
+};
 pub use registry_loader::{load_registry, load_registry_from_path, parse_registry, REGISTRY_FILE};
+pub use render_job::{render_artifact, RenderOutcome};
+pub use resolver::{probe_visible_objects, CallerScope, InMemoryObjectResolver, SourceKey};
+pub use seecode_compiler::{compile as compile_for_seecode, CompileError, CompiledSpec};
 pub use source_hash::source_hash;

@@ -222,14 +222,14 @@ async fn release_reason(pool: &PgPool, run_id: Uuid) -> Option<String> {
 async fn claim_writes_gate_snapshots(pool: PgPool) {
     let f = fx(&pool, "SG-C1").await;
     let downstream = seed_claimable(&pool, f.project_id, "C1").await;
-    let upstream = seed_completed_predecessor(&pool, f.project_id, downstream, "C1", f.actor_id).await;
+    let upstream =
+        seed_completed_predecessor(&pool, f.project_id, downstream, "C1", f.actor_id).await;
     // 找到该任务的 queued run。
-    let run_id: Uuid =
-        sqlx::query_scalar("SELECT id FROM delivery.task_run WHERE task_id = $1")
-            .bind(downstream)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let run_id: Uuid = sqlx::query_scalar("SELECT id FROM delivery.task_run WHERE task_id = $1")
+        .bind(downstream)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
     let outcome = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
@@ -249,29 +249,30 @@ async fn claim_writes_gate_snapshots(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(snap.get::<Uuid, _>("predecessor_task_id"), upstream);
-    let expected_revision: Option<Uuid> = sqlx::query_scalar(
-        "SELECT current_task_revision_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(upstream)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let expected_revision: Option<Uuid> =
+        sqlx::query_scalar("SELECT current_task_revision_id FROM delivery.task WHERE id = $1")
+            .bind(upstream)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(
         snap.get::<Option<Uuid>, _>("predecessor_revision_id"),
         expected_revision
     );
     assert_eq!(snap.get::<String, _>("required_condition"), "completed");
-    assert_eq!(snap.get::<Option<serde_json::Value>, _>("required_deliverable_ref"), None);
+    assert_eq!(
+        snap.get::<Option<serde_json::Value>, _>("required_deliverable_ref"),
+        None
+    );
     assert!(snap.get::<bool, _>("satisfied"));
 
     // Product 快照：无关联 = 空数组。
-    let empty: serde_json::Value = sqlx::query_scalar(
-        "SELECT product_gate_snapshot FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let empty: serde_json::Value =
+        sqlx::query_scalar("SELECT product_gate_snapshot FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(empty, serde_json::json!([]));
 }
 
@@ -298,7 +299,11 @@ async fn blocked_product_denies_claim(pool: PgPool) {
         assert_eq!(run_status(&pool, run_id).await, "queued");
         assert_eq!(
             release_reason(&pool, run_id).await.as_deref(),
-            Some(if status == "suspended" { "product_suspended" } else { "product_archived" })
+            Some(if status == "suspended" {
+                "product_suspended"
+            } else {
+                "product_archived"
+            })
         );
         let snap_count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM delivery.task_run_dependency_snapshot WHERE run_id = $1",
@@ -334,11 +339,13 @@ async fn product_suspend_and_claim_race_is_serialized(pool: PgPool) {
     let suspend_pool = pool.clone();
     let suspend = tokio::spawn(async move {
         // 直接以 lifecycle 语义执行状态变更（含 FOR UPDATE + 审计 + commit）。
-        sqlx::query("UPDATE core.product SET status = 'suspended', updated_at = now() WHERE id = $1")
-            .bind(product_id)
-            .execute(&suspend_pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE core.product SET status = 'suspended', updated_at = now() WHERE id = $1",
+        )
+        .bind(product_id)
+        .execute(&suspend_pool)
+        .await
+        .unwrap();
     });
     let claim_outcome = claim.await.unwrap();
     suspend.await.unwrap();
@@ -363,13 +370,12 @@ async fn product_suspend_and_claim_race_is_serialized(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-            let suspended_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
-                "SELECT updated_at FROM core.product WHERE id = $1",
-            )
-            .bind(product_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+            let suspended_at: chrono::DateTime<chrono::Utc> =
+                sqlx::query_scalar("SELECT updated_at FROM core.product WHERE id = $1")
+                    .bind(product_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
             assert!(
                 suspended_at >= snapshot_at,
                 "suspend must not have committed before the claim snapshot"
@@ -386,11 +392,10 @@ async fn product_suspend_and_claim_race_is_serialized(pool: PgPool) {
         None => panic!("a queued runnable run must be observed by claim_once"),
     }
     // 无论交错顺序：product 终态 = suspended。
-    let final_status: String =
-        sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
-            .bind(product_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let final_status: String = sqlx::query_scalar("SELECT status FROM core.product WHERE id = $1")
+        .bind(product_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(final_status, "suspended");
 }

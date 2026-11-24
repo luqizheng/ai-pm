@@ -267,9 +267,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         &pool,
         project,
         &dev(),
-        pm_application::pc::PublishVersionInput {
-            proposal_id: p1,
-        },
+        pm_application::pc::PublishVersionInput { proposal_id: p1 },
     )
     .await
     .unwrap();
@@ -283,7 +281,10 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     )
     .await;
     assert_eq!(view["status"], "applied");
-    assert_eq!(view["published_version_ref"]["target_type"], "cognition_version");
+    assert_eq!(
+        view["published_version_ref"]["target_type"],
+        "cognition_version"
+    );
     assert_eq!(view["published_version_ref"]["target_id"], version_ref);
 
     // reject：基于版本 1 的新提案被驳回（reason 为 note 别名）
@@ -619,14 +620,9 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
     )
     .await
     .unwrap();
-    let y = upsert_object_draft(
-        &pool,
-        project,
-        &dispatch,
-        draft("feature", "p3.y", "# Y"),
-    )
-    .await
-    .unwrap();
+    let y = upsert_object_draft(&pool, project, &dispatch, draft("feature", "p3.y", "# Y"))
+        .await
+        .unwrap();
 
     // 任务 1：分析起草提案 → Platform 回写 result_ref=proposal（handler 同款 complete_task）
     let task1 = pc_analyze_task(&pool, project).await;
@@ -906,13 +902,20 @@ async fn projc_objects_browse_list_detail_and_scoped(pool: PgPool) {
 
     // 项目作用域：非成员 / 非法 ID / 不存在 → 404；缺 project_id → 400
     for uri in [
-        format!("/v1/projc/objects/{}?project_id={stranger}", receipt.object_id),
+        format!(
+            "/v1/projc/objects/{}?project_id={stranger}",
+            receipt.object_id
+        ),
         format!("/v1/projc/objects/not-a-uuid?project_id={project}"),
         format!("/v1/projc/objects/{}?project_id={project}", Uuid::new_v4()),
     ] {
         let (status, _) = send(&pool, get(&uri)).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
     }
-    let (status, _) = send(&pool, get(&format!("/v1/projc/objects/{}", receipt.object_id))).await;
+    let (status, _) = send(
+        &pool,
+        get(&format!("/v1/projc/objects/{}", receipt.object_id)),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

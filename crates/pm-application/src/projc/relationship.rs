@@ -81,7 +81,9 @@ async fn resolve_endpoint(
                     .fetch_optional(&mut *exec)
                     .await?;
                     Some(ok.ok_or_else(|| {
-                        ProjcError::Invalid(format!("{side} revision does not belong to the object"))
+                        ProjcError::Invalid(format!(
+                            "{side} revision does not belong to the object"
+                        ))
                     })?)
                 }
                 None => Some(current.ok_or_else(|| {

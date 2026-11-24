@@ -369,6 +369,12 @@ pub struct RawTask {
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,
+    /// 一句话目标（B05-01：S04 就绪检查 A 层要求非空 goal；缺省回退 description）。
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// 交付物条目（B05-01：S04 A 层要求非空 deliverables；缺省回退验收口径）。
+    #[serde(default)]
+    pub deliverables: Vec<String>,
     /// 必填：无验收口径的任务一律不生成（E4）。
     #[serde(default)]
     pub acceptance_criteria: Vec<String>,
@@ -799,6 +805,10 @@ struct ValidatedTask {
     kind: BatchTaskKind,
     title: String,
     description: Option<String>,
+    /// 一句话目标（B05-01；None = 模型未给，落库时回退 description/title）。
+    goal: Option<String>,
+    /// 交付物条目（B05-01；空 = 模型未给，落库时回退验收口径）。
+    deliverables: Vec<String>,
     acceptance: Vec<String>,
     /// 批内更早任务的下标（`depends_on` 的键 → 位置）。
     prerequisites: Vec<usize>,
@@ -936,6 +946,18 @@ fn validate_task_batch(
                     .map(str::trim)
                     .filter(|d| !d.is_empty())
                     .map(str::to_string),
+                goal: task
+                    .goal
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|g| !g.is_empty())
+                    .map(str::to_string),
+                deliverables: task
+                    .deliverables
+                    .iter()
+                    .map(|d| d.trim().to_string())
+                    .filter(|d| !d.is_empty())
+                    .collect(),
                 acceptance,
                 prerequisites,
                 role_version_id,
@@ -1252,6 +1274,25 @@ impl WriteBackHook for DiscoveryWriteBack {
                                 verification_kind: Some("manual".to_string()),
                             })
                             .collect(),
+                    ),
+                    // B05-01：S04 就绪检查 A 层要求 goal/deliverables 非空——
+                    // 创建即落，模型未给时回退 description / 验收口径（诚实
+                    // 推导，不编造），避免"建了任务但 A 层全 ⚠"的返工。
+                    goal: Some(
+                        task.goal
+                            .clone()
+                            .or_else(|| task.description.clone())
+                            .unwrap_or_else(|| task.title.clone()),
+                    ),
+                    deliverables: Some(
+                        (if task.deliverables.is_empty() {
+                            task.acceptance.clone()
+                        } else {
+                            task.deliverables.clone()
+                        })
+                        .into_iter()
+                        .map(|path| pm_application::pm_write::DeliverableInput { id: None, path })
+                        .collect(),
                     ),
                 },
                 &actor,

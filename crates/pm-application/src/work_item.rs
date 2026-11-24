@@ -35,14 +35,7 @@ pub type Tx<'a> = sqlx::Transaction<'a, sqlx::Postgres>;
 
 /// V1 首批注册的领域对象（PA-05-01：其他有明确领域语义的对象随后续批次
 /// 显式加入，不强制转化普通文档/讨论）。
-pub const TARGET_TYPES: [&str; 6] = [
-    "task",
-    "requirement",
-    "adr",
-    "issue",
-    "risk",
-    "blocker",
-];
+pub const TARGET_TYPES: [&str; 6] = ["task", "requirement", "adr", "issue", "risk", "blocker"];
 
 /// PA-05-03 V1 首批关系类型。
 pub const RELATION_TYPES: [&str; 6] = [
@@ -121,12 +114,11 @@ pub fn adr_status_semantic(status: &str) -> &'static str {
 
 /// 项目归属租户（接线点上下文补充；项目不存在 → NotFound）。
 pub async fn project_tenant(tx: &mut Tx<'_>, project_id: Uuid) -> Result<Uuid, WorkItemError> {
-    let tenant_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT tenant_id FROM core.project WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let tenant_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await?;
     tenant_id.ok_or(WorkItemError::NotFound)
 }
 
@@ -457,13 +449,11 @@ pub async fn on_task_transition(
         return Ok(());
     }
     // 注册冲突分支不覆盖状态（避免错误注册清真实状态）——迁移接线显式同步。
-    sqlx::query(
-        "UPDATE core.work_item SET status = $1, updated_at = now() WHERE id = $2",
-    )
-    .bind(semantic_after)
-    .bind(item_id)
-    .execute(&mut **tx)
-    .await?;
+    sqlx::query("UPDATE core.work_item SET status = $1, updated_at = now() WHERE id = $2")
+        .bind(semantic_after)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
     let title = target_title(tx, "task", task_id).await?;
     record_activity(
         tx,
@@ -594,13 +584,11 @@ pub async fn my_feed_counts(
         .bind(principal_id)
         .fetch_one(pool)
         .await?;
-    let unread: i64 = sqlx::query_scalar(&format!(
-        "SELECT count(*) {base} AND r.read_at IS NULL"
-    ))
-    .bind(tenant_id)
-    .bind(principal_id)
-    .fetch_one(pool)
-    .await?;
+    let unread: i64 = sqlx::query_scalar(&format!("SELECT count(*) {base} AND r.read_at IS NULL"))
+        .bind(tenant_id)
+        .bind(principal_id)
+        .fetch_one(pool)
+        .await?;
     let attention: i64 = sqlx::query_scalar(&format!(
         "SELECT count(*) {base} AND r.read_at IS NULL AND w.status IN ('open','blocked','in_review')"
     ))
@@ -659,13 +647,11 @@ pub async fn project_feed(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<FeedRow>, WorkItemError> {
-    let rows = sqlx::query_as::<_, FeedRow>(
-        &format!(
-            "{FEED_SELECT} \
+    let rows = sqlx::query_as::<_, FeedRow>(&format!(
+        "{FEED_SELECT} \
           WHERE a.tenant_id = $1 AND a.project_id = $3 \
           ORDER BY a.created_at DESC, a.id DESC LIMIT $4 OFFSET $5"
-        ),
-    )
+    ))
     .bind(tenant_id)
     .bind(principal_id)
     .bind(project_id)
@@ -685,13 +671,11 @@ pub async fn product_feed(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<FeedRow>, WorkItemError> {
-    let rows = sqlx::query_as::<_, FeedRow>(
-        &format!(
-            "{FEED_SELECT} \
+    let rows = sqlx::query_as::<_, FeedRow>(&format!(
+        "{FEED_SELECT} \
           WHERE a.tenant_id = $1 AND a.product_id = $3 \
           ORDER BY a.created_at DESC, a.id DESC LIMIT $4 OFFSET $5"
-        ),
-    )
+    ))
     .bind(tenant_id)
     .bind(principal_id)
     .bind(product_id)
@@ -808,8 +792,16 @@ pub async fn work_item_detail(
     .bind(item_id)
     .fetch_all(pool)
     .await?;
-    let activities =
-        list_activity(pool, tenant_id, Some(item_id), None, None, activity_limit, 0).await?;
+    let activities = list_activity(
+        pool,
+        tenant_id,
+        Some(item_id),
+        None,
+        None,
+        activity_limit,
+        0,
+    )
+    .await?;
     Ok((item, relations, activities))
 }
 
@@ -854,11 +846,9 @@ pub async fn get_activity(
     principal_id: Uuid,
     activity_id: Uuid,
 ) -> Result<FeedRow, WorkItemError> {
-    let row = sqlx::query_as::<_, FeedRow>(
-        &format!(
-            "{FEED_SELECT} WHERE a.tenant_id = $1 AND a.id = $3"
-        ),
-    )
+    let row = sqlx::query_as::<_, FeedRow>(&format!(
+        "{FEED_SELECT} WHERE a.tenant_id = $1 AND a.id = $3"
+    ))
     .bind(tenant_id)
     .bind(principal_id)
     .bind(activity_id)

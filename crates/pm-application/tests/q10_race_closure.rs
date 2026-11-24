@@ -68,11 +68,7 @@ async fn seed(pool: &PgPool, tag: &str) -> (Uuid, Uuid, Uuid) {
     (tenant, project, LEAD)
 }
 
-async fn seed_analyzed_report(
-    pool: &PgPool,
-    project: Uuid,
-    tenant: Uuid,
-) -> (Uuid, Uuid) {
+async fn seed_analyzed_report(pool: &PgPool, project: Uuid, tenant: Uuid) -> (Uuid, Uuid) {
     let source_id = register_source(
         pool,
         project,
@@ -159,9 +155,15 @@ async fn submitted_proposal(pool: &PgPool, project: Uuid, source: Uuid, key: &st
     )
     .await
     .unwrap();
-    submit_proposal(pool, project, &AuditActor::principal(LEAD), drafted.proposal_id, Some(0))
-        .await
-        .unwrap();
+    submit_proposal(
+        pool,
+        project,
+        &AuditActor::principal(LEAD),
+        drafted.proposal_id,
+        Some(0),
+    )
+    .await
+    .unwrap();
     drafted.proposal_id
 }
 
@@ -208,7 +210,10 @@ async fn close_vs_decide_single_submitted_proposal(pool: PgPool) {
     match status.as_str() {
         "withdrawn" => {
             // close 先获提案行锁：decide 后到 → 409（终态不可决）
-            assert!(matches!(decide_r, Err(pm_application::pc::PcError::Conflict(_))), "{decide_r:?}");
+            assert!(
+                matches!(decide_r, Err(pm_application::pc::PcError::Conflict(_))),
+                "{decide_r:?}"
+            );
             assert_eq!(outcome.withdrawn_proposals, 1);
             assert_eq!(outcome.applied_proposals, 0);
         }
@@ -222,13 +227,12 @@ async fn close_vs_decide_single_submitted_proposal(pool: PgPool) {
     }
 
     // 双写不变量：版本至多 1；审计链存在（withdraw 或 approve+publish 二者恰一）
-    let versions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.cognition_version WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let versions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(versions <= 1, "同提案并发至多一版本: {versions}");
 }
 
@@ -260,7 +264,9 @@ async fn close_vs_explicit_publish_same_proposal(pool: PgPool) {
                 &p2,
                 project,
                 &AuditActor::principal(LEAD),
-                PublishVersionInput { proposal_id: proposal },
+                PublishVersionInput {
+                    proposal_id: proposal,
+                },
             )
             .await
         },
@@ -271,13 +277,12 @@ async fn close_vs_explicit_publish_same_proposal(pool: PgPool) {
     // → 恰一版本；先到者首发，后到者 replayed（Q10-R1-FIX R4/II-A 语义：短路确认
     // 计入 replayed_proposals，applied 仅本次 close 自身首发）
     publish_r.unwrap();
-    let versions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.cognition_version WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let versions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(versions, 1, "同键幂等：并发 close/补发布恰一版本");
     let status: String = sqlx::query_scalar("SELECT status FROM pc.proposal WHERE id = $1")
         .bind(proposal)
@@ -289,9 +294,7 @@ async fn close_vs_explicit_publish_same_proposal(pool: PgPool) {
     // close 短路确认→replayed(1)；显式发布先完成且 close 清单已读空→全 0。
     // 不变量=恰一版本 + 单提案至多一个计数事件（applied/replayed/failed）。
     assert!(
-        outcome.applied_proposals
-            + outcome.replayed_proposals
-            + outcome.publish_failed_proposals
+        outcome.applied_proposals + outcome.replayed_proposals + outcome.publish_failed_proposals
             <= 1,
         "单提案至多一个计数事件: {outcome:?}"
     );

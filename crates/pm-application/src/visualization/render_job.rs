@@ -173,7 +173,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            spec: &VizSpec,
+            format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             Ok(RenderOutput {
                 format,
                 content: format!("<svg><text>{}</text></svg>", spec.nodes[0].label),
@@ -193,7 +197,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, _spec: &VizSpec, format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            _spec: &VizSpec,
+            format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             Ok(RenderOutput {
                 format,
                 content: r#"<svg><a href="https://evil.example/x">x</a></svg>"#.to_string(),
@@ -212,7 +220,11 @@ mod tests {
         fn supported_formats(&self) -> &'static [OutputFormat] {
             &[OutputFormat::Svg]
         }
-        fn render(&self, _spec: &VizSpec, _format: OutputFormat) -> Result<RenderOutput, RenderError> {
+        fn render(
+            &self,
+            _spec: &VizSpec,
+            _format: OutputFormat,
+        ) -> Result<RenderOutput, RenderError> {
             Err(RenderError::Rejected("节点超预算".to_string()))
         }
     }

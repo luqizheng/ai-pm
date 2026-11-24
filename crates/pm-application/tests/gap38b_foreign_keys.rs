@@ -157,7 +157,11 @@ async fn orphan_member_insert_rejected_by_fk(pool: PgPool) {
     .await
     .unwrap_err();
     let db = err.as_database_error().unwrap();
-    assert_eq!(db.code().as_deref(), Some("23503"), "孤儿必须被 FK 拒: {db}");
+    assert_eq!(
+        db.code().as_deref(),
+        Some("23503"),
+        "孤儿必须被 FK 拒: {db}"
+    );
 }
 
 /// 并发交错背书：publish×draft upsert×decide 三方并发（多连接）——无死锁无异常，
@@ -166,7 +170,9 @@ async fn orphan_member_insert_rejected_by_fk(pool: PgPool) {
 async fn concurrent_publish_upsert_decide_no_deadlock(pool: PgPool) {
     let project = seed(&pool, "conc").await;
     let lead = AuditActor::principal(LEAD);
-    let a = upsert_object_draft(&pool, project, &lead, draft("b38-ca")).await.unwrap();
+    let a = upsert_object_draft(&pool, project, &lead, draft("b38-ca"))
+        .await
+        .unwrap();
 
     let proposal = create_proposal(
         &pool,
@@ -211,7 +217,9 @@ async fn concurrent_publish_upsert_decide_no_deadlock(pool: PgPool) {
                 &pool1,
                 project,
                 &AuditActor::principal(LEAD),
-                PublishVersionInput { proposal_id: proposal.proposal_id },
+                PublishVersionInput {
+                    proposal_id: proposal.proposal_id,
+                },
             )
             .await
         },
@@ -285,13 +293,12 @@ async fn concurrent_publish_upsert_decide_no_deadlock(pool: PgPool) {
     let _ = r3.unwrap();
 
     // 终态语义：版本 1 落地+两提案 applied/approved
-    let versions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.cognition_version WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let versions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(versions, 1);
     let _ = Duration::from_secs(0); // 保持 import 对齐（分析口径超时语义引用）
 }

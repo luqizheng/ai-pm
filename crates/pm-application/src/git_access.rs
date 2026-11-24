@@ -441,9 +441,7 @@ mod tests {
         assert!(matches!(auth, GitError::AuthFailed), "{auth:?}");
         assert_eq!(auth.stable_code(), "git_auth_failed");
 
-        let network = classify(
-            "fatal: unable to access 'https://x/r/': Could not resolve host: x",
-        );
+        let network = classify("fatal: unable to access 'https://x/r/': Could not resolve host: x");
         assert!(matches!(network, GitError::Network(_)), "{network:?}");
         assert_eq!(network.stable_code(), "git_network_error");
 
@@ -454,11 +452,9 @@ mod tests {
     /// DEF-CHAIN-02（branch-b4 场景）：file:// 路径不存在不得再报 authentication failed。
     #[tokio::test]
     async fn missing_file_url_clone_is_not_authentication_failure() {
-        let missing = std::env::temp_dir()
-            .join(format!("ai-pm-no-such-repo-{}", Uuid::new_v4()));
+        let missing = std::env::temp_dir().join(format!("ai-pm-no-such-repo-{}", Uuid::new_v4()));
         let url = format!("file://{}", missing.to_string_lossy().replace('\\', "/"));
-        let dest = std::env::temp_dir()
-            .join(format!("ai-pm-clone-dest-{}", Uuid::new_v4()));
+        let dest = std::env::temp_dir().join(format!("ai-pm-clone-dest-{}", Uuid::new_v4()));
         let err = clone_bare(&url, None, &dest, Duration::from_secs(30))
             .await
             .unwrap_err();

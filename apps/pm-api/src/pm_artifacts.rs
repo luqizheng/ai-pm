@@ -13,9 +13,9 @@ use std::collections::HashMap;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use pm_application::repo::acceptance_read::{AcceptanceReadRepo, Page};
 use crate::support::repos::acceptance_read_repo;
 use crate::support::{paging, project_filter, require_project_visible, ApiResult};
+use pm_application::repo::acceptance_read::{AcceptanceReadRepo, Page};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/pm/artifacts", get(artifacts))
@@ -42,7 +42,10 @@ async fn artifacts(
             caller.tenant_id,
             caller.principal_id,
             project_id,
-            Page { size: page.size, offset: page.offset },
+            Page {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
     Ok(Json(page.to_response(items, total)))

@@ -44,7 +44,13 @@ async fn seed_task(pool: &PgPool, project_id: uuid::Uuid, title: &str) -> uuid::
 }
 
 /// 建 Product（归属新 Team）+（可选）挂 dev-off 为 Product Owner。
-async fn seed_product(pool: &PgPool, project_id: uuid::Uuid, name: &str, status: &str, with_member: bool) -> uuid::Uuid {
+async fn seed_product(
+    pool: &PgPool,
+    project_id: uuid::Uuid,
+    name: &str,
+    status: &str,
+    with_member: bool,
+) -> uuid::Uuid {
     let product_id: uuid::Uuid = sqlx::query_scalar(
         "WITH t AS ( \
              INSERT INTO core.team (tenant_id, name) \
@@ -153,7 +159,10 @@ async fn task_revisions_timeline_marks_active_and_stale_runs(pool: PgPool) {
 async fn task_revisions_unknown_task_404s(pool: PgPool) {
     let app = router(pool.clone());
     let response = app
-        .oneshot(get(format!("/v1/pm/tasks/{}/revisions", uuid::Uuid::new_v4())))
+        .oneshot(get(format!(
+            "/v1/pm/tasks/{}/revisions",
+            uuid::Uuid::new_v4()
+        )))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -198,10 +207,7 @@ async fn project_products_lists_linked_products_with_task_counts(pool: PgPool) {
 
     let app = router(pool.clone());
     let response = app
-        .oneshot(get(format!(
-            "/v1/pm/projects/{}/products",
-            boot.project_id
-        )))
+        .oneshot(get(format!("/v1/pm/projects/{}/products", boot.project_id)))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -212,7 +218,10 @@ async fn project_products_lists_linked_products_with_task_counts(pool: PgPool) {
     assert_eq!(row["product"]["name"], json!("Auth service"));
     assert_eq!(row["product"]["status"], json!("normal"));
     let key = row["product"]["key"].as_str().unwrap();
-    assert!(key.starts_with("P-"), "product key must carry business key, got {key}");
+    assert!(
+        key.starts_with("P-"),
+        "product key must carry business key, got {key}"
+    );
     assert_eq!(row["task_count"], json!(1));
     assert!(row.get("link_id").is_some());
 }
@@ -232,10 +241,7 @@ async fn project_products_invisible_project_404s(pool: PgPool) {
     .unwrap();
     let app = router(pool.clone());
     let response = app
-        .oneshot(get(format!(
-            "/v1/pm/projects/{}/products",
-            boot.project_id
-        )))
+        .oneshot(get(format!("/v1/pm/projects/{}/products", boot.project_id)))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);

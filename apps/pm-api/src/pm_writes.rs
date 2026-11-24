@@ -16,9 +16,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_human_principal, require_project_visible, ApiError, ApiResult};
 use pm_application::pm_write::{self, CreateTaskRequest, MarkTasksReadyRequest, UpdateTaskRequest};
+use pm_application::repo::GuardQueryRepo;
 use pm_application::supervision::{DecideRequest, Decision, SupervisionError};
 
 fn conflict(message: &'static str) -> Response {
@@ -35,7 +35,10 @@ async fn project_in_tenant(
     project_id: Uuid,
     tenant_id: Uuid,
 ) -> ApiResult<()> {
-    if guard_query_repo(pool).project_exists(tenant_id, project_id).await? {
+    if guard_query_repo(pool)
+        .project_exists(tenant_id, project_id)
+        .await?
+    {
         Ok(())
     } else {
         Err(ApiError::NotFound("unknown project"))
@@ -43,7 +46,10 @@ async fn project_in_tenant(
 }
 
 async fn task_in_tenant(pool: &sqlx::PgPool, task_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
-    if guard_query_repo(pool).task_exists(tenant_id, task_id).await? {
+    if guard_query_repo(pool)
+        .task_exists(tenant_id, task_id)
+        .await?
+    {
         Ok(())
     } else {
         Err(ApiError::NotFound("not found"))

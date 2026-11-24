@@ -4,7 +4,7 @@ import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import AdrView from "./AdrView.vue";
-import { mountShell } from "@/components/shell/test-utils";
+import { mountShell, waitForRoute } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import { useShellStore } from "@/stores/shell";
 import type { AdrEntry, DesignApprovalInboxRow } from "@/api/designs";
@@ -18,11 +18,13 @@ import type { AdrEntry, DesignApprovalInboxRow } from "@/api/designs";
 const listAdrs = vi.fn();
 const listDesignApprovals = vi.fn();
 const getDesignWorkspace = vi.fn();
+const createAdr = vi.fn();
 
 vi.mock("@/api/designs", () => ({
   listAdrs: (...args: unknown[]) => listAdrs(...args),
   listDesignApprovals: (...args: unknown[]) => listDesignApprovals(...args),
-  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args)
+  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args),
+  createAdr: (...args: unknown[]) => createAdr(...args)
 }));
 
 function adr(overrides: Partial<AdrEntry> = {}): AdrEntry {
@@ -87,6 +89,14 @@ beforeEach(() => {
   listAdrs.mockReset();
   listDesignApprovals.mockReset();
   getDesignWorkspace.mockReset();
+  createAdr.mockReset();
+  createAdr.mockResolvedValue({
+    adr: adr({ id: "adr-9", code: "ADR-002", title: "缓存决策" }),
+    revisions: [],
+    design_links: [],
+    requirement_links: [],
+    approvals: []
+  });
   getDesignWorkspace.mockResolvedValue({
     design_count: 0,
     adr_count: 1,
@@ -124,5 +134,41 @@ describe("AdrView", () => {
     expect(wrapper.find('[data-testid="adr-row-ADR-001"]').exists()).toBe(
       false
     );
+  });
+
+  // ── R4/B04-02：新建 ADR 写入口 ─────────────────────────────────────
+
+  it("新建 ADR 调真实命令并跳转详情", async () => {
+    const { wrapper, router } = await mountView();
+
+    await wrapper.find('[data-testid="adrs-create"]').trigger("click");
+    await wrapper.find('[data-testid="adr-create-title"] input').setValue("缓存决策");
+    await wrapper
+      .find('[data-testid="adr-create-question"] input')
+      .setValue("是否引入分布式缓存？");
+    await wrapper.find('[data-testid="adr-create-submit"]').trigger("click");
+    await flushPromises();
+    await waitForRoute(router, "/project/design/adrs/adr-9");
+
+    expect(createAdr).toHaveBeenCalledWith("proj-1", {
+      title: "缓存决策",
+      decision_question: "是否引入分布式缓存？",
+      context: undefined,
+      rationale: undefined,
+      consequences: undefined,
+      blockers_implementation: false
+    });
+    expect(router.currentRoute.value.path).toBe("/project/design/adrs/adr-9");
+  });
+
+  it("决策问题缺失时禁止提交", async () => {
+    const { wrapper } = await mountView();
+
+    await wrapper.find('[data-testid="adrs-create"]').trigger("click");
+    await wrapper.find('[data-testid="adr-create-title"] input').setValue("只有标题");
+    await wrapper.find('[data-testid="adr-create-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(createAdr).not.toHaveBeenCalled();
   });
 });

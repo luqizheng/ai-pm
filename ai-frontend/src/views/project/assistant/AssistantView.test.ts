@@ -52,12 +52,34 @@ vi.mock("@/api/conversations", async importOriginal => {
 // DK-F 访谈段接线：页面经 @/api/discovery 读 discovery 段（详情），
 // 这里 mock IO，断言访谈分隔条/访谈时间线/待办块的呈现。
 const getDiscoverySession = vi.fn();
+const transitionDiscoverySession = vi.fn();
+const getAiReadiness = vi.fn();
 
 vi.mock("@/api/discovery", async importOriginal => {
   const actual = await importOriginal<typeof import("@/api/discovery")>();
   return {
     ...actual,
-    getDiscoverySession: (...args: unknown[]) => getDiscoverySession(...args)
+    getDiscoverySession: (...args: unknown[]) => getDiscoverySession(...args),
+    transitionDiscoverySession: (...args: unknown[]) =>
+      transitionDiscoverySession(...args)
+  };
+});
+
+// R3/B01-01：就绪探针默认就绪（不渲染横幅）；个别用例覆写。
+getAiReadiness.mockResolvedValue({
+  provider_enabled_count: 1,
+  catalog_model_enabled_count: 1,
+  team_wide_authorization_count: 1,
+  general_policy_set: true,
+  router_enabled: true,
+  ready: true
+});
+
+vi.mock("@/api/llm", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/llm")>();
+  return {
+    ...actual,
+    getAiReadiness: (...args: unknown[]) => getAiReadiness(...args)
   };
 });
 
@@ -111,7 +133,9 @@ function discoveryDetail(
       status: "NEEDS_USER_INPUT",
       created_by: "prc-1",
       created_at: "2026-11-08T10:05:00Z",
-      updated_at: "2026-11-08T10:06:00Z"
+      updated_at: "2026-11-08T10:06:00Z",
+      last_round_error: null,
+      last_round_error_at: null
     },
     messages: [
       {
@@ -221,6 +245,15 @@ describe("AssistantView（会话接线）", () => {
       conversation({ id: "nc1", title: "first message" })
     );
     getDiscoverySession.mockResolvedValue(discoveryDetail({}));
+    // R3/B01-01：就绪探针默认就绪（不渲染横幅）；个别用例覆写。
+    getAiReadiness.mockResolvedValue({
+      provider_enabled_count: 1,
+      catalog_model_enabled_count: 1,
+      team_wide_authorization_count: 1,
+      general_policy_set: true,
+      router_enabled: true,
+      ready: true
+    });
     appendMessage.mockImplementation(
       async (_p: string, cid: string, body: { content: string }) =>
         record({
@@ -720,6 +753,111 @@ describe("AssistantView（会话接线）", () => {
     // 既有时间线不受影响
     expect(wrapper.findAll('[data-role="user"]')).toHaveLength(2);
   });
+
+  // ────────────────────────────── B03-01（R1）访谈人工处理入口 ──────────────
+
+  it("B03-01 REVIEW_REQUIRED 访谈给出复核提示与退回/完结入口", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "REVIEW_REQUIRED",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: null,
+          last_round_error_at: null
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    expect(
+      wrapper.find('[data-testid="interview-review-banner"]').exists()
+    ).toBe(true);
+    expect(wrapper.text()).toContain(t("assistant.reviewRequiredNotice"));
+    expect(wrapper.find('[data-testid="interview-resume"]').exists()).toBe(
+      true
+    );
+    expect(wrapper.find('[data-testid="interview-complete"]').exists()).toBe(
+      true
+    );
+  });
+
+  it("B03-01 退回/完结调真实跃迁命令（带项目与会话 id）", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "REVIEW_REQUIRED",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: null,
+          last_round_error_at: null
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    await wrapper.find('[data-testid="interview-resume"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "IN_PROGRESS"
+    );
+
+    await wrapper.find('[data-testid="interview-complete"]').trigger("click");
+    await flushPromises();
+    expect(transitionDiscoverySession).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "COMPLETED"
+    );
+  });
+
+  it("B03-01 编排失败标记在访谈段可见（自动重试提示）", async () => {
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    getDiscoverySession.mockResolvedValue(
+      discoveryDetail({
+        session: {
+          id: "s1",
+          project_id: "p1",
+          source: "WEB",
+          kind: "TASK_DISCOVERY",
+          status: "IN_PROGRESS",
+          created_by: "prc-1",
+          created_at: "2026-11-08T10:05:00Z",
+          updated_at: "2026-11-08T10:06:00Z",
+          last_round_error: "no_provider: general_policy_missing",
+          last_round_error_at: "2026-11-08T10:06:00Z"
+        }
+      })
+    );
+    const { wrapper } = await mountPage();
+
+    expect(
+      wrapper.find('[data-testid="interview-round-error"]').exists()
+    ).toBe(true);
+    expect(
+      wrapper.find('[data-testid="interview-round-error"]').text()
+    ).toContain("no_provider: general_policy_missing");
+  });
 });
 
 // ── Batch 3B：响应卡信封消费（metadata.envelope → interaction）─────────
@@ -926,5 +1064,68 @@ describe("AssistantView（交互写回接线）", () => {
 
     expect(wrapper.text()).toContain("interaction target not found");
     expect(wrapper.text()).not.toContain("INT-");
+  });
+});
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// ────────────────────────────── R3/B01-01：AI 就绪探针横幅 ──────────────
+
+describe("AssistantView（AI 就绪引导横幅）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    md2html.mockReset();
+    md2html.mockResolvedValue("<p>md-rendered</p>");
+    listConversations.mockResolvedValue([conversation({})]);
+    listMessages.mockResolvedValue([]);
+    createConversation.mockResolvedValue(conversation({ id: "nc1" }));
+    getDiscoverySession.mockResolvedValue(discoveryDetail({}));
+    appendMessage.mockImplementation(async (_p: any, cid: any, body: any) =>
+      record({
+        id: `m-${String(body.content).slice(0, 6)}`,
+        conversation_id: cid,
+        content: body.content,
+        created_at: "2026-11-08T10:05:00Z"
+      })
+    );
+  });
+
+  it("未就绪：横幅渲染缺项原因与团队设置入口", async () => {
+    getAiReadiness.mockResolvedValue({
+      provider_enabled_count: 0,
+      catalog_model_enabled_count: 0,
+      team_wide_authorization_count: 0,
+      general_policy_set: false,
+      router_enabled: false,
+      ready: false
+    });
+    const { wrapper } = await mountPage();
+
+    const banner = wrapper.find('[data-testid="assistant-readiness-banner"]');
+    expect(banner.exists()).toBe(true);
+    const text = banner.text();
+    expect(text).toContain(t("assistant.readiness.missingProvider"));
+    expect(text).toContain(t("assistant.readiness.missingGeneralPolicy"));
+    expect(
+      banner.find('[data-testid="assistant-readiness-link"]').attributes("href")
+    ).toBe("/settings/team/ai-providers");
+    // 探针按项目调用过。
+    expect(getAiReadiness).toHaveBeenCalledWith("p1");
+  });
+
+  it("已就绪：不渲染横幅（不制造噪音）", async () => {
+    getAiReadiness.mockResolvedValue({
+      provider_enabled_count: 1,
+      catalog_model_enabled_count: 1,
+      team_wide_authorization_count: 1,
+      general_policy_set: true,
+      router_enabled: true,
+      ready: true
+    });
+    const { wrapper } = await mountPage();
+
+    expect(
+      wrapper.find('[data-testid="assistant-readiness-banner"]').exists()
+    ).toBe(false);
   });
 });

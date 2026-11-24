@@ -10,6 +10,9 @@ pub struct TransitionFacts {
     pub deadline_exhausted: bool,
     pub delivery_submitted: bool,
     pub acceptance_evidence_complete: bool,
+    /// B06-D2：人工任务直接完成（`Ready → Completed`）的守卫证据。仅真人
+    /// 命令通道在核验任务类别与理由后设置；调度/回收路径恒 false。
+    pub manual_completion: bool,
 }
 
 impl TransitionFacts {
@@ -26,6 +29,14 @@ impl TransitionFacts {
     /// 调度/回收路径的事实：全部为默认（`ready↔claimed` 等 guard-free 边）。
     pub fn for_dispatch() -> Self {
         Self::default()
+    }
+
+    /// B06-D2：人工任务直接完成的事实（真人通道核验任务类别与理由后调用）。
+    pub fn for_manual_completion() -> Self {
+        Self {
+            manual_completion: true,
+            ..Self::default()
+        }
     }
 }
 
@@ -93,6 +104,7 @@ pub(crate) async fn apply_task_transition(
         supersede: None,
         delivery_submitted: facts.delivery_submitted,
         acceptance_evidence_complete: facts.acceptance_evidence_complete,
+        manual_completion: facts.manual_completion,
     };
     validate_transition(&input).map_err(|e| {
         CommandError::Validation(format!(
@@ -194,12 +206,10 @@ pub(crate) async fn apply_task_transition(
     .await
     .map_err(|err| match err {
         crate::work_item::WorkItemError::Db(e) => CommandError::Db(e),
-        crate::work_item::WorkItemError::NotFound => CommandError::Validation(format!(
-            "task {task_id} work item target not found"
-        )),
-        crate::work_item::WorkItemError::Validation(m) => {
-            CommandError::Validation(m.to_string())
+        crate::work_item::WorkItemError::NotFound => {
+            CommandError::Validation(format!("task {task_id} work item target not found"))
         }
+        crate::work_item::WorkItemError::Validation(m) => CommandError::Validation(m.to_string()),
     })?;
     // D4（T-024）：上游进入终态时，在**同一事务**里解锁满足依赖的 blocked 下游。
     // `unlock_downstream` 会反过来调用本函数（`blocked → ready`），因此必须用
@@ -228,4 +238,77 @@ pub(crate) async fn system_context(
         actor_kind: ActorKind::Service,
         source: CommandSource::System,
     })
+}
+
+// ───────────────────────────────── B06-D2：人工任务直接完成 ─────────────
+
+/// 人工任务直接完成（真人唯一通道，REST `POST /tasks/{id}/transitions`）。
+///
+/// 约束：任务处于 `Ready`；本函数强制真人主体（AI 主体 Forbidden，E5 同款）；
+/// 理由必填并随审计落库。域层 `Ready → Completed` 边以 `manual_completion`
+/// 标志为守卫证据——执行类任务仍必须走交付/评审生命周期，不得借道。
+pub async fn manual_complete_task(
+    pool: &sqlx::PgPool,
+    tenant_id: Uuid,
+    task_id: Uuid,
+    reason: String,
+    expected_revision: Option<i64>,
+    actor: crate::actor::AuditActor,
+) -> Result<i64, CommandError> {
+    if let Err(err) = crate::requirement::require_human(pool, &actor).await {
+        let detail = match &err {
+            crate::pm_write::PmWriteError::Forbidden(m) => m.to_string(),
+            other => format!("{other:?}"),
+        };
+        return Err(CommandError::Validation(format!(
+            "manual completion is a human-only action: {detail}"
+        )));
+    }
+    let reason_trim = reason.trim().to_string();
+    if reason_trim.is_empty() {
+        return Err(CommandError::Validation(
+            "completion reason is required (human completion must be accountable)".into(),
+        ));
+    }
+    let (project_id, revision): (Uuid, i64) = sqlx::query_as(
+        "SELECT project_id, revision FROM delivery.task WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(task_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?
+    .ok_or_else(|| CommandError::Validation(format!("task {task_id} not found")))?;
+
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let ctx = ExecutionContext {
+        project_id,
+        actor,
+        actor_kind: ActorKind::Human,
+        source: CommandSource::HumanAction,
+    };
+    let (audit_id, new_revision) = apply_task_transition(
+        &mut tx,
+        task_id,
+        expected_revision.or(Some(revision)),
+        TaskStatus::Completed,
+        &TransitionFacts::for_manual_completion(),
+        &ctx,
+    )
+    .await?;
+    // 理由作为独立审计明细落库（与迁移审计互补，可问责）。
+    let _reason_audit = insert_audit(
+        &mut tx,
+        &ctx,
+        "task.manual_complete",
+        "task",
+        Some(task_id),
+        &serde_json::json!({}),
+        &serde_json::json!({ "reason": reason_trim, "transition_audit_id": audit_id }),
+        None,
+        ("manual_completion", None),
+    )
+    .await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(new_revision)
 }

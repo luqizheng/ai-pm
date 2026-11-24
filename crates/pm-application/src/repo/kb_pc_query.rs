@@ -122,10 +122,7 @@ pub trait KbPcQueryRepo: Send + Sync {
     ) -> Result<Option<KbRevisionRow>, sqlx::Error>;
 
     /// KB 修订正文。
-    async fn kb_revision_content(
-        &self,
-        revision_id: Uuid,
-    ) -> Result<Option<String>, sqlx::Error>;
+    async fn kb_revision_content(&self, revision_id: Uuid) -> Result<Option<String>, sqlx::Error>;
 
     /// PC 提案头（P3 PROPOSED 展开）。
     async fn pc_proposal_head(
@@ -148,10 +145,7 @@ pub trait KbPcQueryRepo: Send + Sync {
         object_id: Uuid,
     ) -> Result<Vec<PcObjectRow>, sqlx::Error>;
 
-    async fn list_pc_objects(
-        &self,
-        project_id: Uuid,
-    ) -> Result<Vec<PcObjectListRow>, sqlx::Error>;
+    async fn list_pc_objects(&self, project_id: Uuid) -> Result<Vec<PcObjectListRow>, sqlx::Error>;
 
     async fn list_pc_proposals(
         &self,

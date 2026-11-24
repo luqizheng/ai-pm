@@ -176,7 +176,6 @@ async fn apply_attaches_proposals_to_open_report(pool: PgPool) {
     assert!(statuses.iter().all(|s| s == "submitted"), "{statuses:?}");
 }
 
-
 // ── GAP-02（Batch4a 统一授权实施）：同轮重跑零重复提案 + 异意图 409 ──────────
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -212,13 +211,11 @@ async fn same_round_replay_is_idempotent(pool: PgPool) {
     assert_eq!(first.vision_proposal_id, second.vision_proposal_id);
 
     // 零重复：同源提案仍 2 条；账本两行（profile/vision）completed
-    let n: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.proposal WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM pc.proposal WHERE project_id = $1")
+        .bind(project)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(n, 2, "同轮重跑零重复提案");
     let ops: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pc.write_operation \

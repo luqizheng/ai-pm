@@ -116,7 +116,10 @@ async fn clean_render_persists_output(pool: PgPool) {
         OutputFormat::Svg,
     )
     .await;
-    assert!(matches!(outcome, RenderOutcome::Rendered { .. }), "{outcome:?}");
+    assert!(
+        matches!(outcome, RenderOutcome::Rendered { .. }),
+        "{outcome:?}"
+    );
 
     let (format, renderer_id, size): (String, String, i32) = sqlx::query_as(
         "SELECT format, renderer_id, byte_size FROM viz.render_output WHERE artifact_id = $1",
@@ -166,9 +169,16 @@ async fn failed_render_does_not_persist(pool: PgPool) {
     let project = Uuid::new_v4();
     let artifact = seed_artifact(&pool, tenant, project).await;
 
-    let outcome =
-        render_artifact(Some(&pool), &LeakySvg, artifact, tenant, project, &spec(), OutputFormat::Svg)
-            .await;
+    let outcome = render_artifact(
+        Some(&pool),
+        &LeakySvg,
+        artifact,
+        tenant,
+        project,
+        &spec(),
+        OutputFormat::Svg,
+    )
+    .await;
     assert!(matches!(outcome, RenderOutcome::Failed(_)), "{outcome:?}");
 
     // R-05：失败产物不落表

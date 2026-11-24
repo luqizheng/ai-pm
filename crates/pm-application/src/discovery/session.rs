@@ -1,7 +1,8 @@
 use super::*;
 
 const SESSION_COLS: &str =
-    "id, project_id, source, kind, status, created_by, created_at, updated_at";
+    "id, project_id, source, kind, status, created_by, created_at, updated_at, \
+     last_round_error, last_round_error_at";
 type SessionRow = (
     Uuid,
     Uuid,
@@ -11,6 +12,8 @@ type SessionRow = (
     Uuid,
     DateTime<Utc>,
     DateTime<Utc>,
+    Option<String>,
+    Option<DateTime<Utc>>,
 );
 
 fn to_session(row: SessionRow) -> DiscoverySessionView {
@@ -23,6 +26,8 @@ fn to_session(row: SessionRow) -> DiscoverySessionView {
         created_by: row.5,
         created_at: row.6,
         updated_at: row.7,
+        last_round_error: row.8,
+        last_round_error_at: row.9,
     }
 }
 
@@ -36,6 +41,9 @@ pub struct DiscoverySessionView {
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// 最近一轮编排失败的原因（成功一轮即清除；`None` = 无未恢复失败）。
+    pub last_round_error: Option<String>,
+    pub last_round_error_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -267,4 +275,82 @@ pub(crate) fn session_transition_path(from: &str, to: &str) -> Option<Vec<String
         }
     }
     None
+}
+
+/// 持久化最近一轮编排失败原因（B03-01：失败对用户可见）。
+///
+/// 幂等：同一轮重试覆写同一行；不触碰 `status`/`updated_at`（失败不是状态
+/// 跃迁）。超出 [`ROUND_ERROR_MAX_CHARS`] 的原因截断（错误文本可能极长）。
+pub async fn record_round_error(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    session_id: Uuid,
+    reason: &str,
+) -> Result<(), sqlx::Error> {
+    let reason_owned: String;
+    let mut reason = reason;
+    if reason.chars().count() > ROUND_ERROR_MAX_CHARS {
+        reason_owned = reason.chars().take(ROUND_ERROR_MAX_CHARS).collect();
+        reason = reason_owned.as_str();
+    }
+    sqlx::query(
+        "UPDATE discovery.discovery_session \
+         SET last_round_error = $3, last_round_error_at = now() \
+         WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(session_id)
+    .bind(reason)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// 清除失败标记（编排轮成功后调用；列回 `NULL` = 会话无未恢复失败）。
+pub async fn clear_round_error(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    session_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE discovery.discovery_session \
+         SET last_round_error = NULL, last_round_error_at = NULL \
+         WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(session_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub const ROUND_ERROR_MAX_CHARS: usize = 500;
+
+/// 人工状态跃迁 + 审计（同事务；B03-01：完结/退回复核的人工处理动作留痕）。
+///
+/// 仅供 HTTP 人工入口使用（actor 为真实主体）；编排器内部跃迁不审计——
+/// 状态与消息本身就是事件记录，`REVIEW_REQUIRED` 的解除仍只在这条人工路径上。
+pub async fn transition_session_with_audit(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &crate::actor::AuditActor,
+    tenant_id: Uuid,
+    session_id: Uuid,
+    target: &str,
+) -> Result<DiscoverySessionView, DiscoveryError> {
+    let mut tx = pool.begin().await?;
+    let before = get_session_in(&mut tx, tenant_id, session_id).await?;
+    let view = transition_session_in(&mut tx, tenant_id, session_id, target).await?;
+    crate::pm_write::append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "discovery_session_transitioned",
+        "discovery_session",
+        Some(session_id),
+        serde_json::json!({ "from": before.status, "to": view.status }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(view)
 }

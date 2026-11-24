@@ -17,7 +17,10 @@ async fn load_returns_seed_row(pool: sqlx::PgPool) {
     let (endpoint, model, enabled, _updated_at) = repo.load_embedding_config().await.unwrap();
     assert_eq!(endpoint, "http://192.168.2.10:11434/v1");
     assert_eq!(model, "bge-m3");
-    assert!(!enabled, "vector channel is G-3 gated; seed starts disabled");
+    assert!(
+        !enabled,
+        "vector channel is G-3 gated; seed starts disabled"
+    );
 }
 
 /// **核心回归**：update 经真实仓储往返，四列逐位一致（含 updated_by 落对列）。
@@ -57,7 +60,12 @@ async fn update_roundtrip_writes_all_columns(pool: sqlx::PgPool) {
 async fn https_endpoint_passes_check(pool: sqlx::PgPool) {
     let repo = PgPlatformOpsRepo::new(pool.clone());
     let result = repo
-        .update_embedding_config("https://192.168.2.10:11434/v1", "bge-m3", false, Uuid::new_v4())
+        .update_embedding_config(
+            "https://192.168.2.10:11434/v1",
+            "bge-m3",
+            false,
+            Uuid::new_v4(),
+        )
         .await;
     assert!(
         result.is_ok(),

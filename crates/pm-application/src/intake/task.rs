@@ -1,7 +1,7 @@
 //! P3-3 任务状态推进（Platform 唯一写入面，全 CAS）与人工重试。
 
-use super::*;
 use super::read::TaskRow;
+use super::*;
 
 /// PENDING → DISPATCHED（请求事件被消费时确认；重投递下非 PENDING 时零变更
 /// 即幂等）。

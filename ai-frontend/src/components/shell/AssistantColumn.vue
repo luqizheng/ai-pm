@@ -11,6 +11,7 @@ import { useAssistantConversation } from "@/composables/useAssistantConversation
 import { useShellStore } from "@/stores/shell";
 import CommandBar from "./CommandBar.vue";
 import IconTooltip from "./IconTooltip.vue";
+import AssistantReadinessBanner from "./AssistantReadinessBanner.vue";
 
 /**
  * AI Chat 常驻独立列（AI Collaboration V1.0 / DR-C8 第 ② 步）。
@@ -44,6 +45,7 @@ const {
   sendError,
   pendingText,
   drafting,
+  aiReadiness,
   panelTitle,
   conversationOptions,
   load,
@@ -143,6 +145,8 @@ const contextToggleLabel = computed(() =>
       />
       <template v-else>
         <p v-if="loadError" class="workspace-chat__error">{{ loadError }}</p>
+        <!-- R3/B01-01：AI 未就绪的显式引导（原因 + 配置入口），不伪造可用。 -->
+        <AssistantReadinessBanner :readiness="aiReadiness" />
         <AiConversationPanel
           :messages="timeline"
           :title="panelTitle"

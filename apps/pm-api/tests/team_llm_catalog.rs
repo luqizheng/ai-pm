@@ -189,7 +189,11 @@ async fn world(pool: PgPool) -> World {
         Some(json!({ "role": "owner" })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "owner may appoint another owner: {body}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "owner may appoint another owner: {body}"
+    );
 
     World {
         app,
@@ -808,4 +812,62 @@ async fn audit_four_columns_and_target_type(pool: PgPool) {
         auth_mode.is_some() || identity_id.is_some(),
         "四列身份至少落 actor_auth_mode/identity"
     );
+}
+
+// ── R3（B01-04）：授权清单读取面 ─────────────────────────────────────────
+
+/// GET 授权清单只回 team_wide 行（UI 反映真实授权态的读取面）：
+/// grant → 清单含该行；revoke → 清单不含（revoked 对解析即无授权）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn authorization_list_reflects_current_team_wide_rows(pool: PgPool) {
+    let w = world(pool).await;
+    let provider_id = create_enabled_provider(&w, "p-list").await;
+    let model_id = create_usable_model(&w, provider_id, "glm-4-air").await;
+
+    // 可用模型（已 team_wide）→ 清单含该行。
+    let (status, body) = call(
+        &w.app,
+        "GET",
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
+        &w.admin_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["model_id"], json!(model_id));
+    assert_eq!(items[0]["authorization"], "team_wide");
+
+    // revoke → 清单清空（revoked 行不回）。
+    let (status, body) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
+        &w.admin_token,
+        Some(json!({ "items": [{ "model_id": model_id, "action": "revoke" }] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(
+        &w.app,
+        "GET",
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
+        &w.admin_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["items"].as_array().unwrap().len(), 0);
+
+    // member 403（同 Provider 面权限口径）。
+    let (status, _) = call(
+        &w.app,
+        "GET",
+        &format!("/v1/pm/teams/{}/llm-model-authorizations", w.team_id),
+        &w.member_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

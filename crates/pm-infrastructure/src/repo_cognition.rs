@@ -77,11 +77,7 @@ impl CognitionRepo for PgCognitionRepo {
         Ok(runs)
     }
 
-    async fn active_knowledge_count(
-        &self,
-        tenant_id: Uuid,
-        project_id: Uuid,
-    ) -> RepoResult<i64> {
+    async fn active_knowledge_count(&self, tenant_id: Uuid, project_id: Uuid) -> RepoResult<i64> {
         let n: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM ai.project_knowledge \
              WHERE tenant_id = $1 AND project_id = $2 AND status = 'active'",
@@ -93,11 +89,7 @@ impl CognitionRepo for PgCognitionRepo {
         Ok(n)
     }
 
-    async fn proposed_item_count(
-        &self,
-        tenant_id: Uuid,
-        project_id: Uuid,
-    ) -> RepoResult<i64> {
+    async fn proposed_item_count(&self, tenant_id: Uuid, project_id: Uuid) -> RepoResult<i64> {
         let n: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM ai.cognition_item ci \
              JOIN ai.cognition_run cr ON cr.id = ci.run_id \
@@ -111,11 +103,7 @@ impl CognitionRepo for PgCognitionRepo {
         Ok(n)
     }
 
-    async fn run_items(
-        &self,
-        tenant_id: Uuid,
-        run_id: Uuid,
-    ) -> RepoResult<Vec<CognitionItemRow>> {
+    async fn run_items(&self, tenant_id: Uuid, run_id: Uuid) -> RepoResult<Vec<CognitionItemRow>> {
         let items: Vec<CognitionItemRow> = sqlx::query_as(
             "SELECT id, domain, content, evidence, confidence, has_conflict, \
                     state, decided_by, decided_at, decision_note \
@@ -209,10 +197,7 @@ impl CognitionRepo for PgCognitionRepo {
         .await?;
 
         tx.commit().await?;
-        Ok(RunStarted {
-            run_id,
-            item_count,
-        })
+        Ok(RunStarted { run_id, item_count })
     }
 
     async fn decide_item(

@@ -49,7 +49,9 @@ async fn fetch_customer(
     customer_id: Uuid,
     principal_id: Uuid,
 ) -> Result<Option<CustomerRow>, sqlx::Error> {
-    customer_repo(pool).find_visible_row(tenant_id, customer_id, principal_id).await
+    customer_repo(pool)
+        .find_visible_row(tenant_id, customer_id, principal_id)
+        .await
 }
 
 pub(crate) async fn customer_visible_to(
@@ -58,7 +60,9 @@ pub(crate) async fn customer_visible_to(
     customer_id: Uuid,
     principal_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    customer_repo(pool).visible_to(tenant_id, customer_id, principal_id).await
+    customer_repo(pool)
+        .visible_to(tenant_id, customer_id, principal_id)
+        .await
 }
 
 async fn list_customers(
@@ -84,7 +88,10 @@ async fn list_customers(
             caller.principal_id,
             query.as_deref(),
             status.as_deref(),
-            Page { size: page.size, offset: page.offset },
+            Page {
+                size: page.size,
+                offset: page.offset,
+            },
         )
         .await?;
 

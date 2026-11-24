@@ -462,7 +462,12 @@ pub async fn decide_approval(
             } else {
                 DesignRevisionState::Rejected
             };
-            transition_or_conflict(|f, t| f.can_transition_to(t), from, to, "illegal design revision transition")?;
+            transition_or_conflict(
+                |f, t| f.can_transition_to(t),
+                from,
+                to,
+                "illegal design revision transition",
+            )?;
             if req.decision == "approve" {
                 // SC-05 前置：存在未关闭的 blocker 评审问题 → 拒绝批准。
                 let open_blockers: i64 = sqlx::query_scalar(
@@ -548,7 +553,12 @@ pub async fn decide_approval(
             } else {
                 AdrStatus::Rejected
             };
-            transition_or_conflict(|f, t| f.can_transition_to(t), from, to, "illegal adr transition")?;
+            transition_or_conflict(
+                |f, t| f.can_transition_to(t),
+                from,
+                to,
+                "illegal adr transition",
+            )?;
             // 内容锚定：当前内容版本哈希必须与审批人核准的哈希一致。
             let content_hash: String = sqlx::query_scalar(
                 "SELECT content_hash FROM design.adr_revision \

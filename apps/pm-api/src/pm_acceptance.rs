@@ -19,9 +19,9 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use pm_application::repo::acceptance_read::AcceptanceReadRepo;
 use crate::support::repos::acceptance_read_repo;
 use crate::support::{require_project_visible, require_task_project, ApiError, ApiResult};
+use pm_application::repo::acceptance_read::AcceptanceReadRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

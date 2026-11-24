@@ -56,24 +56,18 @@ pub async fn register_source(
     // SEC-P2-2：按 source_kind 对目标做「对象存在性 + 同 project / 同租户」校验，
     // 落库前拒绝跨租户、跨项目或不存在的目标。通道状态机（上段）保持不变；
     // `manual_input` / `external_reference` 的 target_id 是外部标识，不做对象探测。
-    if let Some(table) = crate::reference_targets::source_kind_target(
-        &input.source_kind,
-        &input.target_type,
-    ) {
+    if let Some(table) =
+        crate::reference_targets::source_kind_target(&input.source_kind, &input.target_type)
+    {
         let target_uuid = Uuid::parse_str(&input.target_id).map_err(|_| {
             PcError::Invalid(format!(
                 "source target_id must be a uuid for `{}` source_kind",
                 input.source_kind
             ))
         })?;
-        let probe = crate::reference_targets::probe(
-            pool,
-            table,
-            target_uuid,
-            tenant_id,
-            Some(project_id),
-        )
-        .await?;
+        let probe =
+            crate::reference_targets::probe(pool, table, target_uuid, tenant_id, Some(project_id))
+                .await?;
         if !probe.in_scope {
             return Err(PcError::NotFound(format!(
                 "source target `{}` not found in this project/tenant (SEC-P2-2)",

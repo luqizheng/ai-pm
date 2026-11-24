@@ -15,7 +15,8 @@ settings:
     confirm: Confirm
     proposed: Proposed
     readOnly: Read-only
-    readOnlyMsg: You have view-only access to this area ({role}). Contact an administrator to request edit rights.
+    readOnlyMsg: You have view-only access to this area ({role}). Contact an
+      administrator to request edit rights.
     permissionDenied: Access denied
     permissionDeniedMsg: Your role ({role}) does not have access to tenant administration settings.
     connected: Connected
@@ -57,35 +58,46 @@ settings:
       projectViewer: Project viewer (read-only)
   architecture:
     title: Settings Architecture Overview
-    desc: A unified settings framework with three separated scopes — personal account, tenant administration, and project.
+    desc: A unified settings framework with three separated scopes — personal
+      account, tenant administration, and project.
     scopesTitle: Three configuration scopes
-    scopesDesc: Every setting belongs to exactly one primary scope; entry points, permissions, and data boundaries are isolated per scope.
+    scopesDesc: Every setting belongs to exactly one primary scope; entry points,
+      permissions, and data boundaries are isolated per scope.
     scope:
       personal:
         title: Personal Account Settings
         entry: Entry — Avatar → Account Settings
-        desc: Display name, security, preferences, notifications, and personal AI interaction preferences.
+        desc: Display name, security, preferences, notifications, and personal AI
+          interaction preferences.
       tenant:
         title: Tenant Administration Settings
         entry: Entry — Tenant Administration → Settings
-        desc: Tenant identity, members & access, integrations, and governance. Restricted to users holding tenant permissions.
+        desc: Tenant identity, members & access, integrations, and governance.
+          Restricted to users holding tenant permissions.
       project:
         title: Project Settings
         entry: Entry — Current Project → Project Settings
-        desc: Project identity, members, repositories, development configuration, and project AI behavior.
+        desc: Project identity, members, repositories, development configuration, and
+          project AI behavior.
     principlesTitle: Framework principles
     principles:
-      p1: A setting belongs to exactly one primary scope; semantics are never reused across scopes.
-      p2: Permissions govern visibility and editability; unauthorized entries never appear.
-      p3: Items whose product capability is unconfirmed are marked "Proposed", never presented as existing features.
-      p4: Page templates and form controls fully reuse Settings components and the ui foundation.
-      p5: High-impact configuration never auto-saves; sensitive actions require explicit confirmation.
+      p1: A setting belongs to exactly one primary scope; semantics are never reused
+        across scopes.
+      p2: Permissions govern visibility and editability; unauthorized entries never
+        appear.
+      p3: Items whose product capability is unconfirmed are marked "Proposed", never
+        presented as existing features.
+      p4: Page templates and form controls fully reuse Settings components and the ui
+        foundation.
+      p5: High-impact configuration never auto-saves; sensitive actions require
+        explicit confirmation.
     legendProposed: Proposed = design placeholder for an unconfirmed capability
     framesTitle: Frame index
   personal:
     landing:
       title: Personal Account Settings
-      desc: Manage your profile, security, and preferences. Tenant-wide policies are not configured here.
+      desc: Manage your profile, security, and preferences. Tenant-wide policies are
+        not configured here.
     categories:
       profile: Display name, avatar, and personal information.
       security: Password, active sessions, and sign-in security.
@@ -168,14 +180,17 @@ settings:
       frequencyDaily: Daily digest
       frequencyWeekly: Weekly digest
       emailTitle: Email notifications
-      emailProposed: The email delivery channel is a proposed capability and cannot be configured yet.
+      emailProposed: The email delivery channel is a proposed capability and cannot be
+        configured yet.
       emailMentions: Email me when mentioned
       emailSummary: Daily change summary email
     ai:
       behaviorTitle: Default AI interaction behavior
-      behaviorDesc: Controls how AI suggestions are presented and advanced; human confirmation can never be skipped.
+      behaviorDesc: Controls how AI suggestions are presented and advanced; human
+        confirmation can never be skipped.
       interactionStyle: Interaction style
-      interactionStyleHelper: Suggest = AI only suggests; Confirm = AI asks before acting; Auto = low-risk actions run automatically.
+      interactionStyleHelper: Suggest = AI only suggests; Confirm = AI asks before
+        acting; Auto = low-risk actions run automatically.
       styleSuggest: Suggest only
       styleConfirm: Confirm before acting
       styleAuto: Auto-run low-risk actions
@@ -183,18 +198,23 @@ settings:
       showReasoning: Show AI reasoning process
       inlineSuggestions: Inline AI suggestions
       proactiveTips: Proactive tips
-      boundary: Personal AI preferences affect you only. Tenant-wide AI policies are configured by tenant administrators under Tenant Administration → Settings.
+      boundary: Personal AI preferences affect you only. Tenant-wide AI policies are
+        configured by tenant administrators under Tenant Administration →
+        Settings.
       boundaryLink: Go to tenant governance (proposed)
   tenant:
     landing:
       title: Tenant Administration Settings
-      desc: Organization-level identity, members & access, integrations, and governance. Restricted to users holding tenant permissions.
+      desc: Organization-level identity, members & access, integrations, and
+        governance. Restricted to users holding tenant permissions.
       deniedTitle: No access to tenant administration
-      deniedDesc: Tenant administration settings are visible only to users with tenant admin permissions. Contact a tenant administrator for access.
+      deniedDesc: Tenant administration settings are visible only to users with tenant
+        admin permissions. Contact a tenant administrator for access.
       categoriesTitle: Setting categories
       categoryGeneral: Tenant name, identity, and organization information.
       categoryMembers: Tenant members, invitations, roles, and permissions.
-      categoryIntegrations: External service integrations, authentication integrations, and provider connections.
+      categoryIntegrations: External service integrations, authentication
+        integrations, and provider connections.
       categoryGovernance: Tenant-level policies and security configuration (proposed).
     general:
       identityTitle: Tenant identity
@@ -211,14 +231,16 @@ settings:
       membersDesc: Manage organization members and their tenant roles.
       invite: Invite member
       inviteTitle: Invite member
-      inviteDesc: Send a join invitation to a new member (demo flow; no real email is sent).
+      inviteDesc: Send a join invitation to a new member (demo flow; no real email is
+        sent).
       tableRole: Role
       tableJoined: Joined
       tableStatus: Status
       statusActive: Active
       statusInvited: Invited
       removeTitle: Remove this member?
-      removeDesc: Once removed, the member loses access to all projects in this organization.
+      removeDesc: Once removed, the member loses access to all projects in this
+        organization.
       rolesTitle: Tenant roles
       rolesDesc: Roles define each member's organization-level permission boundary.
       roleDescOwner: Organization creator with full tenant permissions.
@@ -230,7 +252,8 @@ settings:
       member: Member
     integrations:
       title: External service integrations
-      desc: Connect external services; connection status applies to all projects in the tenant.
+      desc: Connect external services; connection status applies to all projects in
+        the tenant.
       git:
         desc: Tenant-level connection to the code hosting service.
       webhook:
@@ -244,11 +267,14 @@ settings:
   project:
     scopeLabel: Project Settings
     proposedTitle: This section is planned
-    proposedHint: It will land here once the capability is confirmed; continue daily work from the Project Command Center.
+    proposedHint: It will land here once the capability is confirmed; continue daily
+      work from the Project Command Center.
     landing:
       title: Project Settings
-      desc: Identity, members, repositories, and execution configuration for the current project.
-      personaHint: Switch the demo role to see how permissions affect visibility and editability.
+      desc: Identity, members, repositories, and execution configuration for the
+        current project.
+      personaHint: Switch the demo role to see how permissions affect visibility and
+        editability.
       categoriesTitle: Setting categories
       categoryGeneral: Project name, description, and identity.
       categoryMembers: Project members, roles, and access.
@@ -268,11 +294,14 @@ settings:
       createdAt: Created
       tenant: Tenant
       dangerTitle: Danger zone
-      dangerDesc: These actions affect the entire project and require explicit confirmation.
+      dangerDesc: These actions affect the entire project and require explicit
+        confirmation.
       archive: Archive project
       archiveTitle: Archive this project?
-      archiveDesc: Once archived, the project becomes read-only and members stop receiving task notifications.
-      description: Project identity, name, description and dangerous operations (close / reopen).
+      archiveDesc: Once archived, the project becomes read-only and members stop
+        receiving task notifications.
+      description: Project identity, name, description and dangerous operations (close
+        / reopen).
       refresh: Refresh
       loading: Loading project info…
       noProject: Select a project first
@@ -287,15 +316,18 @@ settings:
       savedToast: Project info saved
       dangerSectionTitle: Dangerous operations
       closeTitle: Close project
-      closeHint: Queued runs cancel and in-flight imports finalize; reopening restores writes.
+      closeHint: Queued runs cancel and in-flight imports finalize; reopening restores
+        writes.
       closeAction: Close project
       closeConfirmTitle: Close this project?
-      closeConfirmDescription: The project enters the closed state — AI execution and writes stop; you can reopen it any time.
+      closeConfirmDescription: The project enters the closed state — AI execution and
+        writes stop; you can reopen it any time.
       reopenAction: Reopen project
       reopenConfirmTitle: Reopen this project?
-      reopenConfirmDescription: The project returns to the active state with writes and AI execution restored.
-      reopenedToast: "Project reopened ({status})"
-      closedToast: "Project closed ({status})"
+      reopenConfirmDescription: The project returns to the active state with writes
+        and AI execution restored.
+      reopenedToast: Project reopened ({status})
+      closedToast: Project closed ({status})
       cancel: Cancel
     members:
       membersTitle: Project members
@@ -305,13 +337,15 @@ settings:
       addDesc: Join a tenant member into this project (demo flow).
       tableRole: Project role
       rolesTitle: Project roles
-      rolesDesc: Project roles are independent of tenant roles and govern in-project permissions.
+      rolesDesc: Project roles are independent of tenant roles and govern in-project
+        permissions.
       roleDescLead: Manages project settings, members, and execution configuration.
       roleDescDeveloper: Executes tasks; can read and write project content.
       roleDescViewer: Read-only access to project content.
       removeTitle: Remove this member?
       removeDesc: Once removed, the member loses access to this project.
-      description: Member list, roles and membership actions (grant / remove / ownership transfer).
+      description: Member list, roles and membership actions (grant / remove /
+        ownership transfer).
       refresh: Refresh
       emptyTitle: No project members
       colMember: Member
@@ -321,7 +355,8 @@ settings:
       active: Active
       inactive: Inactive
       addAction: Add member
-      addDescription: Pick an active principal to grant project membership (role is fixed to member).
+      addDescription: Pick an active principal to grant project membership (role is
+        fixed to member).
       pickPrincipal: Pick a principal
       grantAction: Grant
       grantedToast: Member granted
@@ -331,23 +366,29 @@ settings:
       removedToast: Member removed
       transferAction: Transfer ownership
       transferConfirmTitle: Transfer project ownership?
-      transferConfirmDescription: "{name} becomes the project owner; the previous owner steps down to member."
+      transferConfirmDescription: "{name} becomes the project owner; the previous
+        owner steps down to member."
       transferredToast: Ownership transferred
-      authNote: Membership goes through the Product Member authorization surface (P4-ORG); principal activation lives in Team admin and is not duplicated here.
+      authNote: Membership goes through the Product Member authorization surface
+        (P4-ORG); principal activation lives in Team admin and is not duplicated
+        here.
     roles:
       lead: Lead
       developer: Developer
       viewer: Viewer
     repositories:
       title: Associated repositories
-      desc: Repositories linked to this project; the primary repository drives the default execution environment.
+      desc: Repositories linked to this project; the primary repository drives the
+        default execution environment.
       primaryBadge: Primary
       setPrimary: Set as primary
       setPrimaryTitle: Set as primary repository?
-      setPrimaryDesc: The default execution environment and code discovery will switch to this repository.
+      setPrimaryDesc: The default execution environment and code discovery will switch
+        to this repository.
       path: Repository path
       manageTitle: Repository management
-      manageDesc: Creating, importing, and credential management live in Repository Management; this page does not recreate that interface.
+      manageDesc: Creating, importing, and credential management live in Repository
+        Management; this page does not recreate that interface.
       manageLink: Go to Repository Management
     development:
       title: Development environment
@@ -357,18 +398,22 @@ settings:
       templateBasic: Basic (Node + Python)
       templateFull: Full (with container runtime)
       envVars: Environment variables
-      envVarsHelper: Sensitive values are masked; changes follow the execution-environment request flow.
+      envVarsHelper: Sensitive values are masked; changes follow the
+        execution-environment request flow.
       integrationsTitle: Project integrations
       ciWebhook: CI event push
       ciWebhookHelper: Sync project CI events into execution records (proposed).
       deployKey: Deploy key
       deployKeyHelper: Issued by Repository Management; shown read-only as a fingerprint.
-      proposedBanner: Some development capabilities are in proposed status; the confirmed product scope prevails.
+      proposedBanner: Some development capabilities are in proposed status; the
+        confirmed product scope prevails.
     ai:
       executionTitle: Project AI behavior
-      executionDesc: Project execution preferences; human-confirmation constraints always override project configuration.
+      executionDesc: Project execution preferences; human-confirmation constraints
+        always override project configuration.
       execMode: Execution mode
-      execModeHelper: Plan-first = AI produces a plan for approval; Direct = low-risk tasks proceed automatically.
+      execModeHelper: Plan-first = AI produces a plan for approval; Direct = low-risk
+        tasks proceed automatically.
       modePlanFirst: Plan-first
       modeDirect: Direct execution
       notifyComplete: Notify on task completion
@@ -376,13 +421,15 @@ settings:
       contextRepo: Repository context injection
       contextRepoHelper: Feed the primary repository structure to AI as context during execution.
       policiesTitle: Project-specific AI policies
-      policiesBanner: Project-specific AI policies are a proposed capability. Global AI policies, when supported, always live at the tenant governance level.
+      policiesBanner: Project-specific AI policies are a proposed capability. Global
+        AI policies, when supported, always live at the tenant governance level.
   states:
     title: Interaction States
     desc: Itemized demos of the framework's 12 interaction designs (§6).
     navigation:
       title: 1 · Navigate between categories
-      desc: The active sidebar item is highlighted; click entries to switch categories.
+      desc: The active sidebar item is highlighted; click entries to switch
+        categories.
     editing:
       title: 2 · Edit settings
       desc: Editing any field reveals the save bar.
@@ -424,7 +471,8 @@ settings:
     demoOpenDialog: Open dialog
   components:
     title: Settings Component Library
-    desc: The framework's 14 reusable components (§7); all composed from the ui foundation.
+    desc: The framework's 14 reusable components (§7); all composed from the ui
+      foundation.
     specimens:
       pageLayout: Unified settings page template — header + sidebar + main.
       sidebar: Categorized navigation; the caller filters entries by permission.
@@ -443,14 +491,18 @@ settings:
   team:
     landing:
       title: Team Settings
-      desc: Manage team-level members, general information, and AI model services. Editable by team admins only.
+      desc: Manage team-level members, general information, and AI model services.
+        Editable by team admins only.
       membersDesc: Team members, roles and access.
       invitationsDesc: Pending invitations and invite links.
       generalDesc: Team name, identity and general information.
-      aiDesc: Manage the team's LLM providers, credentials and connections (team admins only)
+      aiDesc: Manage the team's LLM providers, credentials and connections (team
+        admins only)
     ai:
-      desc: "Team-owned provider instances: multiple per type allowed; credentials encrypted; a passing test never auto-enables."
-      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters are shown, and no role can read the full key back.
+      desc: "Team-owned provider instances: multiple per type allowed; credentials
+        encrypted; a passing test never auto-enables."
+      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters
+        are shown, and no role can read the full key back.
       loading: Loading providers…
       empty: No providers yet — click "Add provider" to start.
       loadFailed: Failed to load
@@ -459,7 +511,8 @@ settings:
       created: Provider created
       keyReplaced: Key replaced
       addProvider: Add provider
-      nameAutoHint: Left empty, auto-named as "type-model"; built-in types prefill the API endpoint
+      nameAutoHint: Left empty, auto-named as "type-model"; built-in types prefill the
+        API endpoint
       refreshModels: Refresh model list
       create: Create
       cancel: Cancel
@@ -479,7 +532,7 @@ settings:
       deleteFailed: Delete failed (providers with call records cannot be deleted)
       lastTested: "Last tested: {time}"
       neverTested: Never tested
-      keyConfigured: "Configured ({hint})"
+      keyConfigured: Configured ({hint})
       keyMissing: Not configured; leave empty for local models such as Ollama
       keyPlaceholder: Enter a new key (unreadable after saving)
       fields:
@@ -507,13 +560,16 @@ settings:
         emptyFromProvider: Provider returned an empty list; enter a model id manually
         providerEmpty: This provider returned no models; enter a model id manually
         fetchFailedManual: Failed to load models from the provider; enter a model id manually
-        fetchFailedFallback: Failed to load models from the provider; switched to the built-in list; you can enter a model id manually
+        fetchFailedFallback: Failed to load models from the provider; switched to the
+          built-in list; you can enter a model id manually
       modelInputPlaceholder:
-        unsupported: This provider does not support loading models automatically; enter a model id (e.g. llama3:8b)
+        unsupported: This provider does not support loading models automatically; enter
+          a model id (e.g. llama3:8b)
         ready: Preparing…
         fillEndpointAndKey: Enter the API endpoint and key to load models automatically
         loading: Loading…
-        fallback: Unavailable; switched to the built-in list; you can enter a model id manually
+        fallback: Unavailable; switched to the built-in list; you can enter a model id
+          manually
         empty: Enter a model id manually
         success: Select or enter a model id
       models:
@@ -541,3 +597,101 @@ settings:
         enabled: Enabled
         disabled: Disabled
         archived: Archived
+        catalog: null
+        title: Model catalog & policies
+        hint: Register the provider's models, then authorize and map them — AI can reply
+          only when all four hold (provider enabled → model enabled → team-wide
+          authorization → general policy).
+        loading: Loading model catalog…
+        empty: No catalog rows yet — enable a provider first, then register models.
+        loadFailed: Failed to load model catalog
+        saveFailed: Save failed
+        modelAdded: Model registered
+        addModel: Register model
+        providerPlaceholder: Select provider (enabled)
+        modelIdPlaceholder: Model ID (e.g. deepseek-chat)
+        displayNamePlaceholder: Display name (defaults to model ID)
+        contextWindowPlaceholder: Context window (optional)
+        colModel: Model
+        colProvider: Provider
+        colCapabilities: Capabilities
+        colEnabled: Enabled
+        colAuthorization: Authorization
+        on: On
+        off: Off
+        grant: Grant team-wide
+        revoke: Revoke
+        grantDone: Team-wide authorization granted
+        revokeDone: Authorization revoked
+        revokeImpact: "{count} policy/override row(s) still reference this model (not
+          rewritten; resolution will fail — adjust policies too)."
+        policiesTitle: Role model policies
+        generalMissing: The general policy is not configured — model resolution fails
+          without it (general_policy_missing).
+        inheritGeneral: Inherit general
+        savePolicies: Save policies
+        policiesSaved: Policies saved
+        capabilities:
+          text_generation: Text generation
+          reasoning: Reasoning
+          structured_output: Structured output
+          tool_calling: Tool calling
+          vision: Vision
+          long_context: Long context
+        roles:
+          general: general (fallback)
+          ai_pm_lead: AI project lead
+          requirement_analysis: Requirement analysis
+          task_analysis: Task analysis
+          risk_analysis: Risk analysis
+          architecture_analysis: Architecture analysis
+          knowledge_management: Knowledge management
+      catalog:
+        title: Model catalog & policies
+        hint: Register the provider's models, then authorize and map them — AI can reply
+          only when all four hold (provider enabled → model enabled → team-wide
+          authorization → general policy).
+        loading: Loading model catalog…
+        empty: No catalog rows yet — enable a provider first, then register models.
+        loadFailed: Failed to load model catalog
+        saveFailed: Save failed
+        modelAdded: Model registered
+        addModel: Register model
+        providerPlaceholder: Select provider (enabled)
+        modelIdPlaceholder: Model ID (e.g. deepseek-chat)
+        displayNamePlaceholder: Display name (defaults to model ID)
+        contextWindowPlaceholder: Context window (optional)
+        colModel: Model
+        colProvider: Provider
+        colCapabilities: Capabilities
+        colEnabled: Enabled
+        colAuthorization: Authorization
+        on: On
+        off: Off
+        grant: Grant team-wide
+        revoke: Revoke
+        grantDone: Team-wide authorization granted
+        revokeDone: Authorization revoked
+        revokeImpact: "{count} policy/override row(s) still reference this model (not
+          rewritten; resolution will fail — adjust policies too)."
+        policiesTitle: Role model policies
+        generalMissing: The general policy is not configured — model resolution fails
+          without it (general_policy_missing).
+        inheritGeneral: Inherit general
+        savePolicies: Save policies
+        policiesSaved: Policies saved
+        capabilities:
+          text_generation: Text generation
+          reasoning: Reasoning
+          structured_output: Structured output
+          tool_calling: Tool calling
+          vision: Vision
+          long_context: Long context
+        roles:
+          general: general (fallback)
+          ai_pm_lead: AI project lead
+          requirement_analysis: Requirement analysis
+          task_analysis: Task analysis
+          risk_analysis: Risk analysis
+          architecture_analysis: Architecture analysis
+          knowledge_management: Knowledge management

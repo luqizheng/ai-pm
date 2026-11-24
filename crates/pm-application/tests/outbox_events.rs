@@ -19,7 +19,6 @@ use pm_application::run_dispatch::NoopExecutor;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     common::bootstrap_system_project(pool, code).await.0
 }

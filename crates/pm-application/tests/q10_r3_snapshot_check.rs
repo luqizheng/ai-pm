@@ -133,9 +133,15 @@ async fn pc_approved_proposal(pool: &PgPool, project: Uuid) -> Uuid {
     )
     .await
     .unwrap();
-    submit_proposal(pool, project, &AuditActor::principal(LEAD), drafted.proposal_id, Some(0))
-        .await
-        .unwrap();
+    submit_proposal(
+        pool,
+        project,
+        &AuditActor::principal(LEAD),
+        drafted.proposal_id,
+        Some(0),
+    )
+    .await
+    .unwrap();
     pm_application::pc::approve_proposal(
         pool,
         project,
@@ -172,7 +178,9 @@ async fn pc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
                 &p1,
                 project,
                 &AuditActor::principal(LEAD),
-                PublishVersionInput { proposal_id: proposal },
+                PublishVersionInput {
+                    proposal_id: proposal,
+                },
             )
             .await
         },
@@ -286,9 +294,15 @@ async fn projc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
     )
     .await
     .unwrap();
-    projc_submit(&pool, project, &AuditActor::principal(LEAD), drafted.proposal_id, Some(0))
-        .await
-        .unwrap();
+    projc_submit(
+        &pool,
+        project,
+        &AuditActor::principal(LEAD),
+        drafted.proposal_id,
+        Some(0),
+    )
+    .await
+    .unwrap();
     pm_application::projc::approve_proposal(
         &pool,
         project,
@@ -316,7 +330,9 @@ async fn projc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
                 &p1,
                 project,
                 &AuditActor::principal(LEAD),
-                ProjcPub { proposal_id: proposal },
+                ProjcPub {
+                    proposal_id: proposal,
+                },
             )
             .await
         },
@@ -351,5 +367,8 @@ async fn projc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
         "ProjC 单条 JOIN 出现非法观察对: {illegal:?}（合法域同 pc：精确两元）"
     );
     let (last_p, last_w) = observations.last().unwrap();
-    assert_eq!((last_p.as_str(), last_w.as_deref()), ("applied", Some("completed")));
+    assert_eq!(
+        (last_p.as_str(), last_w.as_deref()),
+        ("applied", Some("completed"))
+    );
 }

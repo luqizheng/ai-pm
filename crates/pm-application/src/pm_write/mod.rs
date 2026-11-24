@@ -153,6 +153,15 @@ pub struct CreateTaskRequest {
     /// 且避免"建了任务但还没验收口径"的中间态（AI 生成的任务尤其如此）。
     #[serde(default)]
     pub acceptance_criteria: Option<Vec<AcceptanceCriterionInput>>,
+    /// B05-01（业务验收 2026-11-24）：一句话目标。S04 执行准备度 A 层检查
+    /// 要求非空 goal；AI 任务批在创建时即携带，避免"建了任务但 goal 空"的
+    /// 中间态（与 acceptance_criteria 同一设计动机）。
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// B05-01：交付物清单（落 `deliverables` JSONB，逐条 path 去重校验）。
+    /// 创建时即携带，避免"建了任务但 deliverables 空"的中间态。
+    #[serde(default)]
+    pub deliverables: Option<Vec<DeliverableInput>>,
 }
 
 /// 整批 `draft → ready` 请求（DK-0 §7.4 / D-DK-8：整批预览 + 一次确认）。

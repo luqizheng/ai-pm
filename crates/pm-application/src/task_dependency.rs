@@ -29,8 +29,7 @@ use crate::outbox::{event_is_enabled, OutboxAppend, OutboxEvent, PgOutboxAppend}
 /// PA-07 §9.5 取代——cancelled/superseded 前置**不**满足任何条件，后继保持阻塞
 /// 等待 AI-PM 恢复或调整依赖；满足判定改为按边条件逐条求值
 /// （[`dependencies_satisfied`]）。
-pub const DEPENDENCY_CONDITIONS: [&str; 3] =
-    ["completed", "accepted", "deliverable_approved"];
+pub const DEPENDENCY_CONDITIONS: [&str; 3] = ["completed", "accepted", "deliverable_approved"];
 
 /// 一次解锁迁移允许的下游状态：只有 `blocked` 需要被解锁；`ready` 及之后的状态
 /// 已有自己的事件与 Run，重复投递只会制造第二个语义键（设计稿 §5.3）。
@@ -273,7 +272,9 @@ pub struct AddDependencyOptions {
     pub required_deliverable_ref: Option<serde_json::Value>,
 }
 
-fn validate_condition(options: &AddDependencyOptions) -> Result<(String, Option<serde_json::Value>), DependencyError> {
+fn validate_condition(
+    options: &AddDependencyOptions,
+) -> Result<(String, Option<serde_json::Value>), DependencyError> {
     let condition = options
         .required_condition
         .clone()
@@ -312,8 +313,14 @@ pub async fn add_dependency(
     depends_on_task_id: Uuid,
     actor: &AuditActor,
 ) -> Result<DependencyGraph, DependencyError> {
-    add_dependency_with(pool, task_id, depends_on_task_id, AddDependencyOptions::default(), actor)
-        .await
+    add_dependency_with(
+        pool,
+        task_id,
+        depends_on_task_id,
+        AddDependencyOptions::default(),
+        actor,
+    )
+    .await
 }
 
 /// 建边（POST，带条件选项）：同一事务内完成校验 → 插边 → 审计 → 解锁判定（D7；

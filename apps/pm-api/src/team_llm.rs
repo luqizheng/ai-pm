@@ -29,13 +29,15 @@ use pm_application::team_llm::{
     CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest, TeamLlmError,
     UpdateTeamProviderRequest,
 };
-use pm_application::team_llm_catalog::{get_project_ai_policies, set_project_overrides, PolicyItem};
+use pm_application::team_llm_catalog::{
+    get_project_ai_policies, set_project_overrides, PolicyItem,
+};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::team_llm_guard::{err_forbidden, err_not_found};
+use pm_application::repo::GuardQueryRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -74,8 +76,11 @@ async fn guard_project_manager(
     caller: &AuthedPrincipal,
     project_id: Uuid,
 ) -> Result<(), Response> {
-    let project_tenant: Option<Uuid> =
-        guard_query_repo(&state.pool).project_tenant(project_id).await.ok().flatten();
+    let project_tenant: Option<Uuid> = guard_query_repo(&state.pool)
+        .project_tenant(project_id)
+        .await
+        .ok()
+        .flatten();
     if project_tenant.is_none() {
         return Err(err_not_found("project not found"));
     }
@@ -147,9 +152,14 @@ async fn project_policy_put_handler(
         return error_response(err);
     }
     if let Some(overrides) = body.overrides {
-        if let Err(err) =
-            set_project_overrides(&state.pool, &audit_actor(&caller), caller.tenant_id, project_id, overrides)
-                .await
+        if let Err(err) = set_project_overrides(
+            &state.pool,
+            &audit_actor(&caller),
+            caller.tenant_id,
+            project_id,
+            overrides,
+        )
+        .await
         {
             return error_response(err);
         }

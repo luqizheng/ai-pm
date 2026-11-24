@@ -27,13 +27,11 @@ async fn insert_principal(pool: &PgPool, kind: &str) -> Uuid {
 }
 
 async fn insert_team(pool: &PgPool, tenant_id: Uuid) -> Uuid {
-    sqlx::query_scalar(
-        "INSERT INTO core.team (tenant_id, name) VALUES ($1, 'Team A') RETURNING id",
-    )
-    .bind(tenant_id)
-    .fetch_one(pool)
-    .await
-    .unwrap()
+    sqlx::query_scalar("INSERT INTO core.team (tenant_id, name) VALUES ($1, 'Team A') RETURNING id")
+        .bind(tenant_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 async fn insert_team_member(
@@ -182,12 +180,11 @@ async fn team_fk_and_member_cascade(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let left: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.team_member WHERE team_id = $1")
-            .bind(team)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM core.team_member WHERE team_id = $1")
+        .bind(team)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(left, 0, "team_member must cascade with team");
 }
 
@@ -211,12 +208,11 @@ async fn product_requires_existing_team(pool: PgPool) {
     let team = insert_team(&pool, tenant).await;
     insert_product(&pool, team, tenant).await;
     insert_product(&pool, team, tenant).await;
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.product WHERE team_id = $1")
-            .bind(team)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM core.product WHERE team_id = $1")
+        .bind(team)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(count, 2, "one team manages many products");
 }
 
@@ -308,12 +304,11 @@ async fn product_project_link_fk_and_cascade(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let left: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.product_project_link WHERE product_id = $1",
-    )
-    .bind(product)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.product_project_link WHERE product_id = $1")
+            .bind(product)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(left, 0, "link must cascade with product");
 }

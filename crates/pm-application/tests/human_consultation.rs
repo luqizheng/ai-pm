@@ -7,12 +7,12 @@
 
 use std::sync::Arc;
 
+use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::human_consultation::{
     cancel_consultation, create_consultation, decide_consultation, list_consultations,
     start_consultation, supersede_consultation, ConsultationError,
 };
-use pm_application::actor::AuditActor;
 use pm_application::run_dispatch::{claim_once, ClaimKind, DispatchMode, RunDispatchConfig};
 use pm_application::PolicyEngine;
 use pm_domain::SYSTEM_TENANT;
@@ -173,9 +173,14 @@ async fn lifecycle_pending_in_progress_decided(pool: PgPool) {
     .unwrap();
     assert_eq!(consultation_status(&pool, id).await, "pending");
     // 挂任务 → needs_decision 等待行存在（调度阻塞执法点）。
-    assert_eq!(active_waiting_reason(&pool, task).await.as_deref(), Some("needs_decision"));
+    assert_eq!(
+        active_waiting_reason(&pool, task).await.as_deref(),
+        Some("needs_decision")
+    );
 
-    start_consultation(&pool, SYSTEM_TENANT, id, &actor(&f)).await.unwrap();
+    start_consultation(&pool, SYSTEM_TENANT, id, &actor(&f))
+        .await
+        .unwrap();
     assert_eq!(consultation_status(&pool, id).await, "in_progress");
 
     decide_consultation(
@@ -190,15 +195,19 @@ async fn lifecycle_pending_in_progress_decided(pool: PgPool) {
     .unwrap();
     assert_eq!(consultation_status(&pool, id).await, "decided");
     // decided 四元组完整。
-    let (content, by, at, scope): (String, Uuid, chrono::DateTime<chrono::Utc>, serde_json::Value) =
-        sqlx::query_as(
-            "SELECT decision_content, decided_by, decided_at, product_scope \
+    let (content, by, at, scope): (
+        String,
+        Uuid,
+        chrono::DateTime<chrono::Utc>,
+        serde_json::Value,
+    ) = sqlx::query_as(
+        "SELECT decision_content, decided_by, decided_at, product_scope \
                FROM governance.human_consultation WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(content, "接受追加验收项，纳入正式基线");
     assert_eq!(by, f.actor_id);
     assert_eq!(scope, serde_json::json!([]));
@@ -229,21 +238,37 @@ async fn decide_requires_content_and_cancel_requires_reason(pool: PgPool) {
     let err = decide_consultation(&pool, SYSTEM_TENANT, id, "   ", f.actor_id, &actor(&f))
         .await
         .unwrap_err();
-    assert!(matches!(err, ConsultationError::IncompleteDecision), "got {err:?}");
+    assert!(
+        matches!(err, ConsultationError::IncompleteDecision),
+        "got {err:?}"
+    );
 
     let err = cancel_consultation(&pool, SYSTEM_TENANT, id, "", &actor(&f))
         .await
         .unwrap_err();
-    assert!(matches!(err, ConsultationError::MissingReason), "got {err:?}");
+    assert!(
+        matches!(err, ConsultationError::MissingReason),
+        "got {err:?}"
+    );
 
     // 合法 cancel 后再 decide → 非法迁移。
     cancel_consultation(&pool, SYSTEM_TENANT, id, "事项已由线下协商解决", &actor(&f))
         .await
         .unwrap();
-    let err = decide_consultation(&pool, SYSTEM_TENANT, id, "late decision", f.actor_id, &actor(&f))
-        .await
-        .unwrap_err();
-    assert!(matches!(err, ConsultationError::InvalidTransition(_)), "got {err:?}");
+    let err = decide_consultation(
+        &pool,
+        SYSTEM_TENANT,
+        id,
+        "late decision",
+        f.actor_id,
+        &actor(&f),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, ConsultationError::InvalidTransition(_)),
+        "got {err:?}"
+    );
 }
 
 /// 未回应不得视为同意：pending 长存、无自动 decided 路径；已 decided 的
@@ -268,18 +293,30 @@ async fn no_response_is_never_consent_and_supersede_appends(pool: PgPool) {
     .unwrap();
     // 无任何动作 → 状态停留 pending（结构上不存在自动同意）。
     assert_eq!(consultation_status(&pool, id).await, "pending");
-    assert_eq!(active_waiting_reason(&pool, task).await.as_deref(), Some("needs_decision"));
+    assert_eq!(
+        active_waiting_reason(&pool, task).await.as_deref(),
+        Some("needs_decision")
+    );
     // 该任务的 Run 不能被领取（claim 门禁 task_waiting 拒绝）。
-    let claim = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await.unwrap();
+    let claim = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap();
     assert!(
         matches!(claim, Some(ref o) if o.kind == ClaimKind::Skipped),
         "decision-pending task must not be claimable"
     );
 
     // 决定后改变主意 → supersede：新 pending 行 + 原行 decided 保留。
-    decide_consultation(&pool, SYSTEM_TENANT, id, "选 A 方案", f.actor_id, &actor(&f))
-        .await
-        .unwrap();
+    decide_consultation(
+        &pool,
+        SYSTEM_TENANT,
+        id,
+        "选 A 方案",
+        f.actor_id,
+        &actor(&f),
+    )
+    .await
+    .unwrap();
     let new_id = supersede_consultation(
         &pool,
         SYSTEM_TENANT,
@@ -302,8 +339,13 @@ async fn no_response_is_never_consent_and_supersede_appends(pool: PgPool) {
     .unwrap();
     assert_eq!(sup, Some(id));
     // supersede 写入新等待行 → 任务重新阻塞。
-    assert_eq!(active_waiting_reason(&pool, task).await.as_deref(), Some("needs_decision"));
+    assert_eq!(
+        active_waiting_reason(&pool, task).await.as_deref(),
+        Some("needs_decision")
+    );
 
-    let rows = list_consultations(&pool, SYSTEM_TENANT, f.project_id, None).await.unwrap();
+    let rows = list_consultations(&pool, SYSTEM_TENANT, f.project_id, None)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
 }

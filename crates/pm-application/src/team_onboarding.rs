@@ -470,11 +470,10 @@ pub async fn update_team_profile(
     let Some(current) = current else {
         return Err(TeamOnboardingError::NotFound);
     };
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_one(&mut *tx)
+        .await?;
 
     // 审计 before 快照先行（下方 unwrap_or 会移走 current 的字段）。
     let before = json!({
@@ -565,12 +564,11 @@ pub async fn create_invitation(
 
     let mut tx = pool.begin().await?;
     // Team 锚：邀请挂 Team（0039 team_id），tenant_id 保留租户边界列。
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(TeamOnboardingError::NotFound)?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(TeamOnboardingError::NotFound)?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.tenant_invitation \
              (tenant_id, team_id, email, email_normalized, role, token_hash, invited_by, expires_at) \
@@ -652,11 +650,10 @@ pub async fn revoke_invitation(
     let Some((status,)) = locked else {
         return Err(TeamOnboardingError::NotFound);
     };
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_one(&mut *tx)
+        .await?;
     if status != "PENDING" {
         return Err(TeamOnboardingError::Conflict("invitation_not_pending"));
     }
@@ -740,7 +737,16 @@ pub async fn accept_invitation(
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     // 锁定即取全决策所需列：id/租户/角色/状态/有效期/规范化邮箱/邀请人。
-    type Row = Option<(Uuid, Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)>;
+    type Row = Option<(
+        Uuid,
+        Uuid,
+        Uuid,
+        String,
+        String,
+        DateTime<Utc>,
+        String,
+        Uuid,
+    )>;
     let locked: Row = sqlx::query_as(
         "SELECT id, tenant_id, team_id, role, status, expires_at, email_normalized, invited_by \
                FROM core.tenant_invitation WHERE token_hash = $1 FOR UPDATE",
@@ -748,8 +754,16 @@ pub async fn accept_invitation(
     .bind(hash_token(&req.token))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((invitation_id, tenant_id, team_id, role, status, expires_at, email_normalized, invited_by)) =
-        locked
+    let Some((
+        invitation_id,
+        tenant_id,
+        team_id,
+        role,
+        status,
+        expires_at,
+        email_normalized,
+        invited_by,
+    )) = locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
     };
@@ -804,11 +818,10 @@ pub async fn accept_invitation(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let team_name: String =
-        sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let team_name: String = sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_one(&mut *tx)
+        .await?;
 
     let outcome = if membership.is_some() {
         AcceptOutcome {
@@ -917,12 +930,11 @@ pub async fn create_invitation_link(
     let token = generate_token()?;
 
     let mut tx = pool.begin().await?;
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(TeamOnboardingError::NotFound)?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(TeamOnboardingError::NotFound)?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.tenant_invitation_link \
              (tenant_id, team_id, token_hash, default_role, max_uses, expires_at, created_by) \
@@ -1000,11 +1012,10 @@ pub async fn revoke_invitation_link(
     let Some((status,)) = locked else {
         return Err(TeamOnboardingError::NotFound);
     };
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_one(&mut *tx)
+        .await?;
     if status != "ACTIVE" {
         return Err(TeamOnboardingError::Conflict("link_not_active"));
     }
@@ -1076,7 +1087,16 @@ pub async fn accept_invitation_link(
     token: &str,
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
-    type Row = Option<(Uuid, Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)>;
+    type Row = Option<(
+        Uuid,
+        Uuid,
+        Uuid,
+        String,
+        String,
+        Option<i32>,
+        i32,
+        DateTime<Utc>,
+    )>;
     let locked: Row = sqlx::query_as(
         "SELECT id, tenant_id, team_id, default_role, status, max_uses, used_count, expires_at \
                FROM core.tenant_invitation_link WHERE token_hash = $1 FOR UPDATE",
@@ -1084,7 +1104,8 @@ pub async fn accept_invitation_link(
     .bind(hash_token(token))
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((link_id, tenant_id, team_id, default_role, status, max_uses, used_count, expires_at)) = locked
+    let Some((link_id, tenant_id, team_id, default_role, status, max_uses, used_count, expires_at)) =
+        locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
     };
@@ -1130,11 +1151,10 @@ pub async fn accept_invitation_link(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let team_name: String =
-        sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
-            .bind(team_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let team_name: String = sqlx::query_scalar("SELECT name FROM core.team WHERE id = $1")
+        .bind(team_id)
+        .fetch_one(&mut *tx)
+        .await?;
 
     let outcome = if membership.is_some() {
         // 已加入：记录领用（幂等）但不消耗名额。

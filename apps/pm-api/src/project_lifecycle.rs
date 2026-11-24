@@ -25,8 +25,8 @@ use pm_application::run_executor;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
 use crate::support::require_project_visible;
+use pm_application::repo::GuardQueryRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -49,7 +49,14 @@ async fn close_handler(
     body: Option<Json<CloseBody>>,
 ) -> Response {
     // 生命周期守卫：关联 Products 的任意有效 Product Owner；其余 404（不可见即不存在）。
-    match is_project_lifecycle_manager(&state.pool, caller.tenant_id, project_id, caller.principal_id).await {
+    match is_project_lifecycle_manager(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        caller.principal_id,
+    )
+    .await
+    {
         Ok(true) => {}
         Ok(false) => return not_found(),
         Err(err) => {
@@ -101,7 +108,14 @@ async fn reopen_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    match is_project_lifecycle_manager(&state.pool, caller.tenant_id, project_id, caller.principal_id).await {
+    match is_project_lifecycle_manager(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        caller.principal_id,
+    )
+    .await
+    {
         Ok(true) => {}
         Ok(false) => return not_found(),
         Err(err) => {

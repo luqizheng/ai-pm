@@ -26,8 +26,7 @@ use crate::support::{require_project_visible, ApiError, ApiResult};
 
 use pm_application::work_item::{
     get_activity, item_execution_logs, mark_all_my_feed_read, mark_read_state, my_feed,
-    my_feed_counts, product_feed, project_feed, work_item_detail, MyFeedFilter,
-    WorkItemError,
+    my_feed_counts, product_feed, project_feed, work_item_detail, MyFeedFilter, WorkItemError,
 };
 
 /// WorkItemError → ApiError（NotFound 保持 404 语义；Validation → 400）。
@@ -64,7 +63,10 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/v1/pm/feeds/read-state", post(mark_read_state_handler))
         .route("/v1/pm/feeds/mark-all-read", post(mark_all_read_handler))
-        .route("/v1/pm/feeds/activities/{activity_id}", get(activity_detail_handler))
+        .route(
+            "/v1/pm/feeds/activities/{activity_id}",
+            get(activity_detail_handler),
+        )
         .route("/v1/pm/work-items/{item_id}", get(work_item_detail_handler))
         .route(
             "/v1/pm/work-items/{item_id}/execution-logs",
@@ -137,10 +139,9 @@ async fn mark_all_read_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let updated =
-        mark_all_my_feed_read(&state.pool, principal.tenant_id, principal.principal_id)
-            .await
-            .map_err(api_err)?;
+    let updated = mark_all_my_feed_read(&state.pool, principal.tenant_id, principal.principal_id)
+        .await
+        .map_err(api_err)?;
     Ok(Json(serde_json::json!({ "updated": updated })))
 }
 
@@ -260,7 +261,6 @@ async fn mark_read_state_handler(
     .await?;
     Ok(Json(ReadStateResult { updated }))
 }
-
 
 async fn work_item_detail_handler(
     State(state): State<AppState>,
