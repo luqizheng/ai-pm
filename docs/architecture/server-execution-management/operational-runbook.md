@@ -6,8 +6,9 @@ Workspace, Worktree and Git Mirror are not backup targets. No Workspace RPO/RTO 
 
 ## 1. Startup
 
-1. Verify PostgreSQL availability and schema version.
-2. Verify SEM service identity and least-privilege DB credentials.
+1. Verify Platform API health and Platform database/schema health through Platform health endpoints/operations.
+2. Verify SEM-owned database availability and schema version.
+3. Verify SEM service identity, TLS trust and least-privilege credentials; confirm no Platform DB credentials are mounted.
 3. Verify AI_PM_WORKSPACE_ROOT is mounted, writable by non-root service UID and has sufficient free space.
 4. Verify selected Harness CLI exists and its version is approved.
 5. Start SEM with execution role only; confirm Platform remains the sole outbox consumer.
@@ -25,7 +26,7 @@ Workspace, Worktree and Git Mirror are not backup targets. No Workspace RPO/RTO 
 
 Monitor active Run count by stage/generation; expired leases awaiting evidence; E4/E5 shield count and age; HIR count/age; E1/E2/E3 outcomes; Runner heartbeat age and stale-generation rejection; process poll uncertainty; workspace disk usage; credential issuance/revocation failures; and outbox role configuration.
 
-Alert on requeue attempts for shielded Runs, SEM outbox registration, Platform process spawning, DB connectivity failure, workspace permission failure, disk exhaustion or secret leakage.
+Alert on requeue attempts for shielded Runs, SEM attempting Platform DB access or registering Platform outbox handlers, Platform process spawning, Platform API/SEM DB connectivity failure, workspace permission failure, disk exhaustion or secret leakage.
 
 ## 4. Suspected duplicate execution
 
