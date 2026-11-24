@@ -104,7 +104,7 @@ Persist protocol version in command/event payloads. Unknown mandatory versions f
 | Runner selection / supervised user confirmation | SEM scheduler + SEM user-notification flow | User intent and SEM coordination; no execution right |
 | Claim | SEM HTTPS → Platform Claim API, then WSS dispatch | Platform transaction grants Lease/Generation |
 | Runner Supervisor Heartbeat | Runner → SEM WSS | SEM connection/liveness record only |
-| Lease Renewal | Runner Supervisor → SEM WSS → SEM HTTPS → Platform | Platform validates and commits renewal; this is the proposed single path pending user confirmation |
+| Lease Renewal | Runner Supervisor → SEM WSS → SEM HTTPS → Platform | Platform validates and commits renewal; this is the ratified single path under ADR-SEM-21 |
 | Command delivery / command ACK / cancel / E3 | Platform command intent → SEM WSS → Runner; ACK returns WSS → SEM → Platform API | Platform command business state; SEM transport ledger; Runner OS process observation for E3 |
 | Run/Task context, Agent Activity, Interaction, delivery/result | Harness → Platform MCP | Platform business application services |
 | Recovery / handoff coordination | SEM scheduler + Platform API Claim/recovery operations + WSS | Platform owns lease/generation; HIR and business audit remain Platform |
@@ -114,11 +114,11 @@ After migration, remove Runner MCP polling/write paths for Claim, Lease Renewal,
 
 ## 10. Service authentication, WSS ticket and SEM persistence baseline
 
-The proposed detailed baseline is maintained in `service-protocol-security-and-persistence.md`:
+The ratified detailed baseline under ADR-SEM-21–25 is maintained in `service-protocol-security-and-persistence.md`:
 
 - Platform↔SEM: independent service identities, TLS, short-lived asymmetric-signed JWT, exact audience/scope/key ID, key rotation and idempotent request IDs. Service tokens never enter human-principal resolution.
 - Runner↔SEM: Runner first obtains a short-lived, single-use SEM-audience connect ticket from Platform using its registered device credential; SEM validates signature and consumes ticket `jti`. WSS authorization is continuously refreshed by revocation Outbox events and bounded Platform API revalidation.
 - SEM persistence: `inbox_event`, `runner_connection`, `runner_ticket_use`, `dispatch_operation`, `command_delivery`, `platform_delivery`, `process_observation`. These are SEM transport/execution facts, not business state.
 - Claim crash recovery: persist dispatch intent before Claim; use stable `claim_request_id`; Platform atomically persists the idempotency outcome; SEM retries the same request and never blindly creates a second Claim.
 
-These are proposed design constraints, not current implementation facts.
+These are ratified target design constraints, not current implementation facts.
