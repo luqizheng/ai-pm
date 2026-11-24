@@ -104,7 +104,28 @@ flowchart TD
 - 补 **证据前置**：>1h 只是告警级别证据（E4）。worker spawn 形态：先 poll 三证据（同 3.1 的证据采集器）；E1/E2 → 现行回收语义保留；E4/E5 → 只落 `run.orphan_suspected` + 挂起，不 UPDATE。
 - runner / mcp 形态的孤儿走 **HIR**（见 `runner-supervision-and-handoff.md` §2），由人工决定重派或终止。
 
-### 3.3 Greenfield 落地形态（可直接重构，不留兼容层）
+### 3.3 E4 持久化 Scheduling Shield
+
+E4 不能只写审计事件或依赖租约续期来维持隔离。必须存在 PostgreSQL 持久化的调度屏障，所有自动领取与自动回收入口共同检查：
+
+- Run 进入 E4 时，在同一事务中写入 shield 状态/关联 HIR，并使其不再满足普通 claim 候选条件。
+- shield 生效期间，lease expiry、B06-D3、orphan reconciliation、普通 retry/requeue 均不得将 Run 放回可领取队列。
+- 不通过无限续租伪装执行健康；租约可以自然过期，但 shield 必须独立于租约有效。
+- 迟到心跳只更新可观察性，不自动清除 shield，也不自动恢复旧执行权。
+- 解除 shield 只有两条路径：①取得 E1/E2/E3 终止证据后，由受控事务执行终态化/重派；②经授权人工处置并明确记录外部副作用风险。任何解除都须检查当前 generation、token 和活动执行者，并写审计。
+- shield 是调度安全约束，不等同于 Run 业务终态；HIR 是处置工作流，两者关联但不可互相替代。
+
+### 3.4 凭据与外部副作用安全（Phase 0 必须覆盖）
+
+Generation Fencing 不能撤销已经注入进程的 Git/SSH/API 凭据。Phase 0 必须明确并验证：
+
+- 凭据按 Run/Repository/所需操作最小授权，优先短时、可撤销凭据；不得向通用 Harness 注入长期高权限个人凭据。
+- 终止确认前，不能声称旧进程已失去其进程内凭据；需要撤销时记录撤销对象、时间和结果。
+- SSH 临时文件使用受限权限、RAII 清理；环境变量和命令行不得泄露 secret；日志、事件、错误信息统一脱敏。
+- 若某凭据无法即时撤销，E4/E5 必须视为仍可能产生外部副作用；HIR 处置需检查远端分支/外部系统，不得只依赖 DB fencing。
+- Phase 0 验收增加凭据泄露扫描、权限范围检查、撤销演练和旧进程副作用场景。
+
+### 3.5 Greenfield 落地形态（可直接重构，不留兼容层）
 
 - `recover_lost_run` 增加参数 `evidence: TerminationEvidence`（enum：ExitObserved / ProcessGone / RunnerAck），无证据的调用点编译期即失败——直接改签名，不保留「无证据也可回收」的旧入口。
 - 证据采集器作为 `RunExecutor` 端口新方法（`confirm_termination(&ExecutorSession) -> TerminationEvidence`），mock/noop 实现返回 `Uncertain`。
