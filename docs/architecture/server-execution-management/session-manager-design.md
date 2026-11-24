@@ -10,7 +10,7 @@
 | **Run** | `delivery.task_run.id`（业务执行单） | 平台业务 | PostgreSQL |
 | **Execution / Attempt** | 同一张表：`attempt_no` + `supersedes_run_id`——**一个业务 Run 概念由多条 task_run 行表达**（Greenfield 结论：不新增 execution 表，现状模型已足够） | 平台业务 | PostgreSQL |
 | **Executor Session（进程身份）** | `task_run.executor_session`（`{kind}:{uuid}`，spawn 前写入） | SEM 宿主机进程 | PostgreSQL（声明）+ 宿主机 pid 文件（事实） |
-| **Runner Process Session** | `lease_owner = client:{device_id}` + runner 本地 `runner:{pid}`（不上报） | 用户设备 | PostgreSQL（租约）+ 设备本地 |
+| **Runner Process Session** | `lease_owner = client:{device_id}` + Runner 本地 process identity（目标通过 WSS 上报） | 用户设备 | Platform Lease + Runner OS process evidence |
 | **Harness Native Session** | **当前未采集**（SEM-01 ❌ 结论，复核确认） | Harness（codex rollout 等） | 本设计新增采集（§4） |
 | **平台 Session（生命周期聚合）** | 不存在——**本设计将其定义为「上述事实的投影视图」而非新实体** | — | PostgreSQL |
 
@@ -24,12 +24,17 @@ stateDiagram-v2
     Provisioning --> Active: 进程 spawn 成功且身份确认（stage=started）
     Provisioning --> Failed: spawn 失败（B3-1 重领窗口）
     Active --> Active: poll / 心跳续租（generation 不变）
-    Active --> Detached: 租约过期且无终止证据（E4）
+    Active --> Detached: Runner/监督连接失联或执行事实无法对账
     Active --> Terminating: 正常收尾 / 人工取消 / 回收触发 terminate
     Active --> Closed: poll Done（E1，正常/非零退出）
     Terminating --> Closed: confirm_termination 出证据（E1/E2/E3）
-    Detached --> Closed: 迟到证据（进程后来确认死亡）
-    Detached --> Superseded: HIR 决策 → 人工授权重派
+    Detached --> Reconciling: 同一 Runner 重新连接
+    Reconciling --> Active: 进程身份匹配 + 当前 Lease/Generation 有效
+    Reconciling --> Closed: E1/E2/E3 确认进程退出
+    Reconciling --> Quarantined: E4/E5 或身份无法验证
+    Detached --> Closed: 迟到 E1/E2/E3 证据
+    Quarantined --> RiskAccepted: E6 人工风险接受（旧 Barrier 不释放）
+    RiskAccepted --> Superseded: 唯一 successor Attempt 获授权
     Closed --> [*]
     Superseded --> [*]: 新 attempt（新 task_run 行）另起生命周期
 ```
@@ -109,7 +114,7 @@ HIR/重派时：
 - 一个业务执行 = task_run 行链（attempt 1 → 2 → …，`supersedes_run_id` 血缘）。
 - 一个 Attempt = 一个 task_run 行 = **至多一个** Executor Session + **至多一个** Harness Native Session。
 - Session 生命周期 ⊂ Attempt 生命周期：Attempt 终态后 Session 必为 Closed/Superseded（终态僵尸由 `cleanup_finished_processes` 兜底 terminate，现状保留）。
-- Resume 成功时：新 Attempt 行携带 `harness_session_id`，与旧 Attempt 通过 `supersedes_run_id` + HIR 关联——Session 跨 Attempt 延续，但**执行权（租约/generation）绝不跨行延续**。
+- Native Resume 成功时：新 Attempt 行携带 `harness_session_id`，与旧 Attempt 通过 `supersedes_run_id` + HIR 关联——Session 只有在同一执行主机、同一 CODEX_HOME 且能力实测通过时才可能延续；**执行权（租约/generation）绝不跨行延续**。普通 Interaction continue 是 checkpoint/reply 注入 + Fresh Session，不是 Native Resume。
 
 
 ## 8. 三种连续性能力必须分开（Review Pending）
