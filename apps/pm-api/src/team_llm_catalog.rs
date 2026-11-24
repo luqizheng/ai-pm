@@ -20,8 +20,9 @@ use uuid::Uuid;
 
 use pm_application::team_llm::TeamLlmError;
 use pm_application::team_llm_catalog::{
-    create_model, get_team_policies, list_models, set_team_policies, update_model,
-    upsert_authorizations, AuthorizationItem, CreateModelRequest, PolicyItem, UpdateModelRequest,
+    create_model, get_team_policies, list_authorizations, list_models, set_team_policies,
+    update_model, upsert_authorizations, AuthorizationItem, CreateModelRequest, PolicyItem,
+    UpdateModelRequest,
 };
 
 use crate::auth::AuthedPrincipal;
@@ -42,7 +43,7 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/v1/pm/teams/{team_id}/llm-model-authorizations",
-            axum::routing::put(authorizations_handler),
+            axum::routing::get(list_authorizations_handler).put(authorizations_handler),
         )
         .route(
             "/v1/pm/teams/{team_id}/llm-model-policies",
@@ -93,7 +94,11 @@ async fn list_models_handler(
                 });
             }
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => error_response(err),
     }
@@ -141,7 +146,15 @@ async fn update_model_handler(
         )
             .into_response();
     };
-    match update_model(&state.pool, &audit_actor(&caller), tenant_id, model_row_id, body).await {
+    match update_model(
+        &state.pool,
+        &audit_actor(&caller),
+        tenant_id,
+        model_row_id,
+        body,
+    )
+    .await
+    {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => error_response(err),
     }
@@ -172,6 +185,23 @@ async fn authorizations_handler(
             .into_response();
     };
     match upsert_authorizations(&state.pool, &audit_actor(&caller), tenant_id, body.items).await {
+        Ok(rows) => (StatusCode::OK, Json(json!({ "items": rows }))).into_response(),
+        Err(err) => error_response(err),
+    }
+}
+
+/// `GET .../llm-model-authorizations`：Team 授权清单（R3/B01-04——UI 反映
+/// 真实授权态；只回 team_wide 行）。
+async fn list_authorizations_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(team_id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match require_admin(&state, &caller, team_id).await {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
+    match list_authorizations(&state.pool, tenant_id).await {
         Ok(rows) => (StatusCode::OK, Json(json!({ "items": rows }))).into_response(),
         Err(err) => error_response(err),
     }

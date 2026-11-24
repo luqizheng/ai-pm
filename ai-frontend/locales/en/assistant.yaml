@@ -29,6 +29,14 @@ assistant:
   completeInterview: Approve and complete
   lastRoundError: Last processing round failed (the system retries automatically)
   transitionConflict: The interview status was changed by another action; refreshed to the latest state.
+  readiness:
+    title: AI assistant is not ready — messages will not get replies
+    missingProvider: No model provider is enabled
+    missingModel: The model catalog has no enabled model
+    missingAuthorization: No team-wide model authorization is granted
+    missingGeneralPolicy: The general model policy is not configured
+    hint: AI can only reply after the configuration below; other project features are unaffected meanwhile.
+    settingsLink: Open Team settings → AI services
   todoTitle: To-do
   openQuestions: Open questions
   whyBlockingPrefix: Why this matters

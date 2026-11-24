@@ -24,6 +24,7 @@ import {
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
 import { useAssistantConversation } from "@/composables/useAssistantConversation";
+import AssistantReadinessBanner from "@/components/shell/AssistantReadinessBanner.vue";
 
 /**
  * Project AI conversation page（V2 D-4 会话 REST + Batch G assistant 回复）。
@@ -223,6 +224,7 @@ const {
   sendError,
   pendingText,
   drafting,
+  aiReadiness,
   panelTitle,
   conversationOptions,
   load,
@@ -369,6 +371,8 @@ watch(effectiveProjectId, next => {
           class="assistant-stage"
           :class="{ 'assistant-stage--split': interviewSessionId }"
         >
+          <!-- R3/B01-01：AI 未就绪的显式引导（原因 + 配置入口），不伪造可用。 -->
+          <AssistantReadinessBanner :readiness="aiReadiness" />
           <AiConversationPanel
             :messages="timeline"
             :title="panelTitle"
