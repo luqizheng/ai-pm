@@ -5,7 +5,7 @@
 
 ## 设计冻结前置说明
 
-`sem-02d-closure-design-proposal.md` 是 D-01–D-12 的候选关闭设计，尚待用户确认。该提案未获确认前，不启动 Phase 0；Phase 0 的 HIR 与执行屏障 migration 不得按未批准的假设先行实施。Phase 1 同样须等待服务协议、SEM DDL 和 Ports/Adapters 契约冻结。
+D-01–D-12 的完整候选设计已一次性提交，统一等待用户评审；评审入口为 `sem-02d-review-package.md`，详细设计见 `sem-02d-closure-design-proposal.md`。提交设计不代表批准实施。Phase 0 必须等待 D-01/D-02 及相关安全门槛获得用户批准；Phase 1 必须等待 D-03–D-08 的服务协议、SEM DDL 和 Ports/Adapters 契约获得批准。
 
 ## 总览
 
@@ -100,3 +100,11 @@ flowchart LR
 
 - 每个 Phase 独立可回滚（文件清单见各表）；Greenfield 允许迁移历史重整，回滚不需要向前兼容垫片。
 - 执行安全（Phase 0）一经合并不建议回退——它是后续所有 Phase 的安全地平线；若必须回退，回退到的行为必须保留「E4 挂起不重派」底线。
+
+
+## 批量设计评审门槛（2026-11-25）
+
+- D-01–D-12：完整设计已提交，Review Pending；不再逐项中断等待确认，统一由用户评审后记录 Ratified / Revised / Rejected。
+- D-13：已批准 ADR-SEM-26。
+- D-12：Phase 0 任何凭据相关代码改动前，必须完成当前 Harness 启动链路的只读凭据注入/继承/泄漏面盘点。
+- Phase 0：Not Started。设计评审通过不自动启动实施；仍需用户明确授权开始实施。
