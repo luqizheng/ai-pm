@@ -41,3 +41,14 @@ Workspace, Worktree and Git Mirror are explicitly not backed up. Loss is a safet
 ## 4. Recovery acceptance
 
 Fault injection must prove every ambiguous failure results in no automatic second executor. Recovery may be delayed indefinitely when termination cannot be proven. This is an intentional safety property.
+
+
+## 7. Cross-service recovery additions
+
+- Inbox event is acknowledged only after SEM DB commit. SEM DB outage means no ACK and Platform Outbox retry.
+- Duplicate events are deduplicated by `event_id`; duplicate command deliveries by command ID + Run + Generation + target Runner.
+- Claim operation is persisted before Platform call and uses a stable `claim_request_id`. If the response is lost, retry the same request and retrieve the same Platform idempotency result; never create a second claim because of timeout.
+- If Claim succeeded but WSS delivery did not, keep the same target Runner binding. Do not redirect the lease to another Runner. Recover the same grant while valid or request guarded cancellation/isolation through Platform.
+- Outbound evidence/ACKs are persisted in SEM `platform_delivery` and retried with the same idempotency key.
+- Device revocation events close active WSS sessions; periodic authorization revalidation bounds missed-event exposure. If Platform cannot revalidate before the configured freshness deadline, stop dispatch and close the connection.
+- SEM DB loss or WSS disconnection does not prove process death. Uncertain active Runs remain shielded and enter E4/E5/HIR handling.
