@@ -125,3 +125,35 @@ SEM 负责 Runner 注册后的在线连接管理、候选选择、通知、派�
 ## 8. 同机多任务的资源准入（ADR-SEM-26 — Approved）
 
 Runner Supervisor 通过 WSS 定期上报 CPU、内存和 Workspace 实际所在磁盘卷的容量/可用空间。SEM 结合最新资源快照、任务资源画像、现有活动任务和原子资源预留，决定同一台 PC 是否还能接收新任务。资源报告不是 Heartbeat、Lease Renewal 或进程退出证据。资源样本过期/未知时停止新派发，但不杀死现有任务、不释放其预留；内存或磁盘硬阈值不足时拒绝新任务。V1 不自动暂停、终止或迁移运行中的任务。该设计已由 ADR-SEM-26 正式冻结。
+
+
+## 9. 评审问题修正：Runner 进程证据与 Detached 恢复（Review Pending）
+
+### 9.1 进程退出证据必须主动上报
+
+当前 Runner 自然退出路径会记录日志并清空 active；租约丢失清理路径会本地终止并记录 cleanup evidence。目标协议必须将这些路径变成持久化进程证据：自然退出、terminate 命令、lease-loss cleanup、startup orphan cleanup、shutdown 和 boot transition。Runner 先写本地 evidence spool，再经 WSS 上报 `runner.process.exit` / `runner.process.reconciled`；Lease 过期不能阻止追加旧 Generation 的进程观察。命令 ACK 不能替代 E3。
+
+### 9.2 Runner 重启不只是 Interaction start_wait 恢复
+
+当前 `recovery.rs` 的续领路径要求 `scheduling_shield='start_wait'` 且存在 responded Interaction；它只覆盖“人工已回复、continue 待消费”，不覆盖执行中途失联。目标状态必须包含 `Active → Detached → Reconciling → Active/Terminated/Quarantined`。同设备恢复需重新认证、boot/process identity 对账、当前 Lease/Generation 校验；不满足则 E4/E5 + Barrier + HIR。
+
+### 9.3 E6 与接管不变式
+
+原七条不变式中“原执行端停止或安全隔离”需要区分两种路径：
+- **正常接管**：E1/E2/E3 证明旧进程终止，才释放旧 Barrier 并进入正常 Claim。
+- **E6 风险接受接管**：旧进程仍可能运行；由有权限操作者二次确认并接受残余风险，只能授权一个绑定 successor。旧 Barrier 保持 `risk_accepted_unconfirmed`，不宣称旧执行端已停止。必须独立 Workspace、尽可能撤销凭据、检查 Git/外部副作用并完整审计。
+
+E6 不是 E3，不可写成 terminate ACK，也不可解除旧 Barrier。没有 E6 时，E4/E5 不允许重派。
+
+## 10. Interaction / HIR / Cleanup 映射
+
+- Interaction：Agent 提问与用户回复；由执行端 terminate，再由 continue 注入回复。
+- Continuation：回复 delivery/checkpoint 注入与新 Agent Session 启动。
+- HIR：执行异常、失联、风险接受、跨 Runner 接管的治理流程；Phase 0 已有最小可操作 Inbox，Phase 4 仅扩展高级 handoff。
+- Cleanup Need：Workspace/进程清理人工处理；若同时存在进程不确定性才关联 HIR/Barrier。
+- Execution Barrier：Run+Generation 的执行隔离事实。
+- Interaction scheduling_shield：保持原四值，不新增 Detached。
+
+HIR 与 Interaction 可以互相引用，但 HIR 关闭、Continuation consumed、Cleanup completed 都不能自动释放 Execution Barrier。
+
+完整修正见 [评审问题核验与修正设计](./sem-02d-review-findings-corrective-design.md)。
