@@ -21,7 +21,7 @@
 - 当前 Monorepo 的 Rust CI 对 `crates/**`、`apps/**` 变更运行 workspace 级检查/测试，不能满足 Artifact Service 真正独立构建和发布的长期目标。
 - 一份 2026-11-15 历史数据库盘点快照中 `viz.*` 四张表行数均为 0；该材料未证明其对应当前生产库，不能据此宣称生产数据为空。
 
-**当前建议：** 保留 ART-01 的独立 Artifact Service + 复用 file-service + AI-PM 保留业务授权和审批的方向。下一步先完成 A02-01~A02-05 的真实 IAM / file-service 能力核验，并据结果确定委托凭证签发方案和文件上传协议；在此之前不创建生产迁移、不迁移 SeeCode、不开放生产流量。
+**当前建议：** 保留 ART-01 的独立 Artifact Service + 复用 file-service + AI-PM 保留业务授权和审批的方向。Artifact Service 可进入独立仓库和基础开发阶段；两个 P0（安全授权委托、可验证文件 finalize/checksum 协议）关闭前，不得开放生产流量或将其作为生产 Artifact Version 的最终提交路径。旧 viz.* 数据迁移已由产品负责人决定取消，旧表在新实现切换并移除代码依赖后清理。
 
 ## 1. 证据基准与可信等级
 
@@ -247,15 +247,15 @@
 
 1. **ART-02A（优先）**：取得 lmms 1.8.1 token-service / file-service 的 OpenAPI、SDK 或源代码，冻结真实委托 token 与文件 API 契约。
 2. **ART-02B**：连接实际开发/测试环境，验证 JWT claims、服务身份签发、file-service 对象操作和租户隔离。
-3. **ART-02C**：取得目标生产/内网部署配置，核验 RustFS bucket、备份、生命周期与恢复。
-4. **ART-02D**：对当前目标数据库执行 viz.* 实时数据盘点和所有写入方搜索。
-5. 完成以上步骤后，才能冻结 ART-02 最终版并开始 ART-03 创建独立 Repository。
+3. **ART-02C**：核验 RustFS bucket、备份、生命周期与恢复，作为生产运行准备，不作为旧数据迁移门槛。
+4. **ART-02D/02E**：记录旧表结构、代码依赖和 full-dev 运行态证据；产品负责人已确认不做历史数据迁移。
+5. **ART-03**：创建独立 Artifact Service Repository 并推进安全/存储 P0；生产流量仍受两个 P0 与运行环境安全门禁约束。
 
 ## 10. 审计结论
 
 ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份与对象存储集成模式，也可以复用 SeeCode 的安全实现基础；但不能直接复用 AI-PM 当前的项目授权 SQL，也不能把现有文件上传接口视为已具备完整版本提交协议。
 
-**当前不批准进入生产实现/迁移。** 首先关闭授权委托与 file-service 上传协议两个 P0。其余待核验项应在 ART-02A~D 中取得真实证据，不得用历史快照、设计文档或代码注释替代。
+**当前批准进入独立仓库建设和非生产基础开发。** 两个 P0（安全 Artifact delegation、file-service upload-intent/checksum/finalize/object verification/cleanup-compensation）仍是生产使用阻断项。历史 viz.* 数据迁移已取消；旧表应在新实现切换、旧代码依赖移除并完成测试后删除。
 
 
 ---
@@ -720,3 +720,42 @@ ART-02 第一轮证明：Artifact Service 可以复用现有 file-service 身份
 5. ART-02D 完成的是仓库静态核验与历史证据复核，不代表生产数据核验、迁移演练或退役批准已完成。
 
 **当前状态：ART-02D 静态核验完成；目标环境实时数据、仓库外消费者与迁移演练仍 OPEN。**
+
+
+## 15. ART-02F — 产品使用状态与旧数据处理决策
+
+### 15.1 产品负责人确认
+
+产品负责人于 2026-11-24 明确确认：
+
+- AI-PM 尚未向真实用户开放；
+- 系统没有真实用户使用；
+- 没有产生真实业务数据；
+- 因此不需要迁移旧 Visualization 业务数据，也不需要为历史用户保留兼容路径。
+
+以上是产品负责人确认的项目状态，不是 ART-02E 数据库查询本身能够证明的结论。
+
+### 15.2 与 ART-02E 运行态证据的关系
+
+ART-02E 在 2026-11-24 对本机 full-dev 环境执行只读核验，确认该环境的 `viz.artifact`、`viz.approval`、`viz.render_output`、`viz.slot_config` 四表均为 0 行，Schema 与 migration 0020 一致。该结论只适用于被核验的 full-dev 数据库；不得扩写成对任意环境的数据库事实。
+
+产品负责人确认与 ART-02E full-dev 证据相互一致，但证据来源和适用范围必须分别标注。
+
+### 15.3 正式决定
+
+1. 取消旧 Visualization 数据迁移、backfill、旧 ID 映射、历史文件复制和历史下载兼容工作。
+2. 不为旧 viz.* 表建立长期双写或兼容层。
+3. Artifact Service 使用独立新 schema；AI-PM 的 Approval、Slot Config、VizSpec、Relation Registry、Live Graph 和项目授权职责仍由 AI-PM 持有，并在新模型中实现。
+4. 新实现切换前，先移除旧表的全部应用代码依赖；切换完成后通过后续 AI-PM migration 删除四张旧表及专属数据库对象。
+5. 删除旧表前必须确认旧 handler/service/query/repository/worker/SQL/test fixture 均已移除或改写，并通过全仓搜索、构建、测试和 migration 顺序验证。不能只 DROP 表而保留旧代码。
+6. 两个 P0 仍然有效：Artifact delegation 必须有认证保护、正确 audience/tenant/project/action scope 和越权负例；File Service 必须具备 upload-intent、checksum、finalize、对象验证及清理/补偿协议。
+7. 允许 ART-03 创建独立仓库并进行不承载生产流量的基础开发；两个 P0 未关闭前不得投入生产使用。
+
+### 15.4 下一阶段实施工作包
+
+- **ART-03A**：创建独立 Artifact Service 仓库，建立 Rust workspace、OpenAPI、CI、Docker、配置/健康检查和开发文档。
+- **ART-03B**：设计并实现安全 Artifact delegation；由于 lmms 当前为只读授权，先形成源码修改提示词和契约，待授权后再直接提交。
+- **ART-03C**：设计并实现 File Service upload-intent/finalize/checksum/object verification/cleanup compensation；lmms 仓库修改由用户本地执行或另行授权。
+- **ART-03D**：实现 Artifact 核心数据模型/API、独立测试和 Mermaid/SeeCode Generator Adapter。
+- **ART-03E**：AI-PM Consumer 集成、Approval/Slot Config 新业务模型、旧 viz.* 代码依赖移除和最终 schema 清理。
+
