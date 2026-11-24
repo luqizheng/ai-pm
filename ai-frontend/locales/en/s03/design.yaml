@@ -32,6 +32,8 @@ design:
     noProjectHint: Technical designs and architecture decisions belong to a project — pick a project context first.
     errorTitle: Failed to load
     filters: Filters
+    save: Save
+    cancel: Cancel
   context:
     title: Workspace
     designs: Technical designs
@@ -76,6 +78,8 @@ design:
     design_approved: Designs approved
     requirements_confirmed: Requirement basis confirmed
     adrs_resolved: Key decisions resolved
+    scope_defined: Implementation scope defined
+    acceptance_ready: Acceptance criteria ready
     acceptance_criteria: Acceptance criteria complete
     repositories_verified: Repository baseline verified
   analysis:
@@ -89,6 +93,10 @@ design:
     adrsTitle: Impact relations
     noAdrs: No architecture decision references this design.
   designs:
+    create: New design
+    createTitle: New design
+    fieldTitle: Title
+    fieldMarkdown: First draft content (Markdown, optional)
     emptyTitle: No technical designs
     emptyHint: This project has no technical design yet — create one to manage its revision chain and review.
     notFoundTitle: Design not found
@@ -105,6 +113,23 @@ design:
     openFindings: "{count} open"
     noFindings: None
   detail:
+    newRevision: New revision
+    editDraft: Edit draft
+    submitRevision: Submit revision
+    requestApproval: Request approval
+    newRevisionTitle: New revision draft
+    editDraftTitle: Edit draft
+    fieldSummary: Summary (optional)
+    fieldMarkdown: Content (Markdown)
+    fieldReason: Decision reason (required to reject)
+    approvalTitle: Human approval
+    approvalHint: Design approvals must be decided by a human (AI has no approval path); approving makes this revision the current official one.
+    approve: Approve
+    reject: Reject
+    linkRequirement: Link requirement
+    unlink: Unlink
+    linkSubmit: Link
+    selectRequirement: Select target…
     revisionsTitle: Revision chain
     noRevisions: This design has no revision yet.
     contentTitle: Revision body
@@ -113,6 +138,25 @@ design:
     noFindings: No review finding registered on this revision.
     aiSource: AI-authored
   adrs:
+    create: New ADR
+    createTitle: New ADR
+    fieldTitle: Title
+    fieldQuestion: Decision question
+    fieldContext: Context (optional)
+    fieldRationale: Rationale (optional)
+    fieldConsequences: Consequences (optional)
+    fieldBlocking: Mark as implementation-blocking
+    submitRevision: Submit revision
+    requestApproval: Request human confirmation
+    accept: Accept
+    clearBlocking: Clear blocking flag
+    markBlocking: Mark implementation-blocking
+    linkDesign: Link design
+    linkRequirement: Link requirement
+    linkDesignTitle: Link design (anchors latest revision)
+    linkRequirementTitle: Link requirement
+    noDesignRevision: That design has no revision to link yet.
+    approvalTitle: Human confirmation
     emptyTitle: No architecture decisions
     emptyHint: This project has no architecture decision yet — major technical decisions should be recorded standalone for traceability.
     notFoundTitle: Decision not found

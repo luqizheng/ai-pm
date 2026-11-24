@@ -23,13 +23,30 @@ const getDesign = vi.fn();
 const listDesignRequirements = vi.fn();
 const listDesignFindings = vi.fn();
 const getDesignWorkspace = vi.fn();
+const createDesignRevision = vi.fn();
+const submitDesignRevision = vi.fn();
+const requestDesignApproval = vi.fn();
+const decideDesignApproval = vi.fn();
+const linkDesignRequirement = vi.fn();
+const listProjectRequirements = vi.fn();
 
 vi.mock("@/api/designs", () => ({
   getDesign: (...args: unknown[]) => getDesign(...args),
   listDesignRequirements: (...args: unknown[]) =>
     listDesignRequirements(...args),
   listDesignFindings: (...args: unknown[]) => listDesignFindings(...args),
-  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args)
+  getDesignWorkspace: (...args: unknown[]) => getDesignWorkspace(...args),
+  createDesignRevision: (...args: unknown[]) => createDesignRevision(...args),
+  submitDesignRevision: (...args: unknown[]) => submitDesignRevision(...args),
+  requestDesignApproval: (...args: unknown[]) =>
+    requestDesignApproval(...args),
+  decideDesignApproval: (...args: unknown[]) => decideDesignApproval(...args),
+  linkDesignRequirement: (...args: unknown[]) => linkDesignRequirement(...args)
+}));
+
+vi.mock("@/api/requirements", () => ({
+  listProjectRequirements: (...args: unknown[]) =>
+    listProjectRequirements(...args)
 }));
 
 function detail(): DesignDetail {
@@ -162,6 +179,36 @@ beforeEach(() => {
   getDesign.mockResolvedValue(detail());
   listDesignRequirements.mockResolvedValue([requirementLink()]);
   listDesignFindings.mockResolvedValue([finding()]);
+  createDesignRevision.mockResolvedValue({
+    revision: { id: "rev-new", version: 4, state: "draft" }
+  });
+  submitDesignRevision.mockResolvedValue({ revision: { state: "pending_confirmation" } });
+  requestDesignApproval.mockResolvedValue({ approval: { id: "ap-1" } });
+  decideDesignApproval.mockResolvedValue({ approval: { id: "ap-1" } });
+  linkDesignRequirement.mockResolvedValue({});
+  listProjectRequirements.mockResolvedValue({
+    items: [
+      {
+        id: "req-1",
+        project_id: "proj-1",
+        code: "REQ-001",
+        title: "手机号登录",
+        requirement_type: "functional",
+        priority: "normal",
+        lifecycle_status: "active",
+        row_revision: 1,
+        current_revision_id: "rrev-1",
+        current_version: 1,
+        current_content_hash: "h",
+        latest_revision_id: "rrev-1",
+        latest_version: 1,
+        latest_state: "approved",
+        latest_submitted_at: null,
+        created_at: "2026-11-10T08:00:00Z",
+        updated_at: "2026-11-10T08:00:00Z"
+      }
+    ]
+  });
 });
 
 describe("TechnicalDesignDetailView", () => {
@@ -191,5 +238,121 @@ describe("TechnicalDesignDetailView", () => {
     expect(
       wrapper.find('[data-testid="design-revision-markdown"]').text()
     ).toContain("v3 正文");
+  });
+
+  // ── R4/B04-02：写路径 ──────────────────────────────────────────────
+
+  it("draft 修订：新修订提交真实命令（每次编辑产生新版本）", async () => {
+    const { wrapper } = await mountView();
+
+    // fixture 默认选中 rev-2（approved）；先选中 draft rev-3。
+    await wrapper.find('[data-testid="design-revision-3"]').trigger("click");
+    await flushPromises();
+
+    await wrapper.find('[data-testid="design-new-revision"]').trigger("click");
+    await wrapper
+      .find('[data-testid="design-revision-markdown-input"]')
+      .setValue("# v4 正文");
+    await wrapper.find('[data-testid="design-revision-save"]').trigger("click");
+    await flushPromises();
+
+    expect(createDesignRevision).toHaveBeenCalledWith("design-1", {
+      markdown: "# v4 正文",
+      summary: undefined
+    });
+  });
+
+  it("draft 修订可提交（draft → pending_confirmation）", async () => {
+    const { wrapper } = await mountView();
+
+    await wrapper.find('[data-testid="design-revision-3"]').trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[data-testid="design-submit-revision"]')
+      .trigger("click");
+    await flushPromises();
+
+    expect(submitDesignRevision).toHaveBeenCalledWith("design-1", "rev-3");
+  });
+
+  it("已批准修订不给提交/请求审批入口（状态闸门，UI 不推断）", async () => {
+    const { wrapper } = await mountView();
+
+    // 默认选中 rev-2（approved）。
+    expect(
+      wrapper.find('[data-testid="design-submit-revision"]').exists()
+    ).toBe(false);
+    expect(
+      wrapper.find('[data-testid="design-request-approval"]').exists()
+    ).toBe(false);
+  });
+
+  it("pending 审批行出现人工批准/拒绝面板，拒绝必填理由，带 SC-06 双令牌", async () => {
+    getDesign.mockResolvedValue({
+      ...detail(),
+      approvals: [
+        {
+          id: "ap-1",
+          kind: "design_revision",
+          design_id: "design-1",
+          adr_id: null,
+          baseline_id: null,
+          target_id: "rev-3",
+          target_hash: "hash",
+          status: "pending",
+          requested_by: "u1",
+          decided_by: null,
+          decision_reason: null,
+          decided_at: null,
+          created_at: "2026-11-10T09:00:00Z"
+        }
+      ]
+    });
+    const { wrapper } = await mountView();
+
+    // 默认选中 approved rev-2 → 面板不出现（pending 审批挂在 rev-3）。
+    expect(
+      wrapper.find('[data-testid="design-approval-panel"]').exists()
+    ).toBe(false);
+    await wrapper.find('[data-testid="design-revision-3"]').trigger("click");
+    await flushPromises();
+
+    expect(
+      wrapper.find('[data-testid="design-approval-panel"]').exists()
+    ).toBe(true);
+    await wrapper
+      .find('[data-testid="design-approval-reason"] input')
+      .setValue("通过");
+    await wrapper.find('[data-testid="design-approve"]').trigger("click");
+    await flushPromises();
+
+    expect(decideDesignApproval).toHaveBeenCalledWith("ap-1", {
+      decision: "approve",
+      reason: "通过",
+      expected_current_revision_id: "rev-2",
+      expected_row_revision: 1
+    });
+  });
+
+  it("draft 修订可关联需求（真实命令）", async () => {
+    const { wrapper } = await mountView();
+
+    await wrapper.find('[data-testid="design-revision-3"]').trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[data-testid="design-open-link-form"]')
+      .trigger("click");
+    await flushPromises();
+    await wrapper
+      .find('[data-testid="design-link-requirement-select"]')
+      .setValue("req-1");
+    await wrapper.find('[data-testid="design-link-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(linkDesignRequirement).toHaveBeenCalledWith(
+      "design-1",
+      "rev-3",
+      { requirement_id: "req-1" }
+    );
   });
 });
