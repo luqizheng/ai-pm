@@ -3,7 +3,7 @@
 - 日期：2026-11-24
 - 依据：SEM-01 只读审计（`docs/architecture/sem-01-deployment-audit/`，基于 master `4f047f12`）
 - 本文档基于 SEM-01 / SEM-02A 代码审计基线整理；后续架构决策与文档修订以当前 master 为准
-- 性质：**架构设计与迁移方案定稿**。本阶段只读代码、只写文档，未修改任何业务代码 / 迁移 / Dockerfile / Compose / Worker 主循环。
+- 性质：**架构设计进行中（Corrective Design Review Pending）**。本阶段只读代码、只写设计文档，未修改任何业务代码 / 迁移 / Dockerfile / Compose / Worker 主循环。
 - 工程政策：Greenfield（`docs/architecture/engineering-lifecycle-policy.md`，AGENTS.md 第 7 条引用；
   政策文件与 AGENTS.md 引用均已进入 master；以当前 master 文件内容为准）。
   核心约束：无历史生产数据/客户/正式版本，可直接重构 Schema、Session 数据模型、Worker 角色装配与内部接口，
