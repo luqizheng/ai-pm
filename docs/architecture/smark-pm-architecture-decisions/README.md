@@ -1,8 +1,8 @@
 # smark-pm 架构决策文档
 
-**文档集版本：** 1.3  
-**基线日期：** 2026-11-21  
-**范围：** 共同设计原则、PA-03、PA-04、PA-05、PA-06、PA-07
+**文档集版本：** 1.4  
+**基线日期：** 2026-11-24  
+**范围：** 共同设计原则、PA-03、PA-04、PA-05、PA-06、PA-07、ART-01
 
 ## 文档结构
 
@@ -54,3 +54,17 @@ PA-07 中用户明确确认的决策、用户授权范围内形成的技术裁�
 4. 本文件集应纳入 Git 版本管理。
 5. PA-07 旧 Agent Work Unit / Agent Team 设计仅在与当前基线一致的部分继续参考；冲突部分标记为历史，不得继续作为有效设计依据。
 6. PA-07 Agent Team 文档中的 Agent Work Unit 是逻辑工作包，不是平台独立 Task / Run 生命周期或 Agent 身份体系。
+
+
+## ART-01 基线、实施规范与实施证据
+
+ADR-ART-001 定义 AI-PM 通用 Artifact Service 的独立部署与数据权威边界。它修订既有 Visualization 决策中明确列出的部署与存储部分，但不改变 Visualization 的业务语义权威、VizSpec、Relation Registry、权限投影和 Live Graph 规则。
+
+- Artifact Service 管理通用 Artifact、Version、Reference、文件存储和 Generator Job。
+- AI-PM 业务侧负责业务对象、业务授权上下文、审批和关系语义。
+- Mermaid 与 SeeCode 是 Artifact Service 的 Generator Adapter；SeeCode 继续遵守 SVG-only 安全签收。
+- ART-00 现状审计、ART-01 API/数据模型设计和后续实施证据必须独立归档。
+
+## 基线状态说明
+
+本文件集整理截至 2026-11-24 的架构决策。PA-03 至 PA-07 按各自文档状态执行。ART-01 为本次新增的基础服务架构基线；具体数据模型、API、IAM 适配、对象存储部署和旧数据迁移仍须经过 ART-00 / ART-01 实施设计，不代表已经完成。
