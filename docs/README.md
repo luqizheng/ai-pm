@@ -1,6 +1,6 @@
 # AI-PM 文档总索引
 
-> 本索引对应 `master` 分支，整理基准：2026-11-21。当前统计为本次整理前后的目录快照；新增或移动文件后应重新核对。
+> 本索引对应 `master` 分支，整理基准：2026-11-24。当前统计为本次整理前后的目录快照；新增或移动文件后应重新核对。
 
 本目录包含产品定义、架构决策、实施设计、场景规格、审查证据、验收记录、运维手册及 UI 设计。**目录归属不等于文档权威级别**：判断某项规则是否有效，必须先看文档状态和对应决策索引，不能仅凭文件名或版本号。
 
@@ -18,6 +18,10 @@
 | 查找 PA-07 已完成的代码核对 | [PA07-IMP-001 Schema Mapping](architecture/pa-07-implementation/PA07-IMP-001-schema-mapping.md) |
 | 查找 PA-07 实施审计与当前状态 | [PA-07 实施产物索引](architecture/pa-07-implementation/README.md)（IMP-001~003 + 最终验收报告） |
 | 查找 PA-08 执行可靠性实施计划 | [PA-08 实施索引](architecture/pa-08-implementation/README.md) |
+| 查找 AI-PM 通用 Artifact Service 架构基线 | [ADR-ART-001](architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md) |
+| 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |
+| 查找 Artifact Service API、数据模型和授权契约 | [ART-01 设计基线](architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md) |
+| 查找 Artifact Service 实施前置核验与阻断项（含 lmms v1.8.1 上游源码核验 ART-02A） | [ART-02 核验报告](architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md) |
 | 查找 S01–S05 产品场景与 UI 规格 | [scenarios/](scenarios/) |
 | 查找验收记录 | [acceptance/](acceptance/) |
 | 查找历史审查、代码事实和差距证据 | [audit/](audit/) |
@@ -66,7 +70,20 @@
 
 场景目录按 `scenarios/s01/` 至 `scenarios/s05/` 组织。场景内部可以包含 `docs/`、`ui/`、`qa/`、`figures/` 等子目录。场景索引优先放在对应场景目录，不把场景细节重复堆到本文件。
 
-### 3.3 历史设计与当前基线
+### 3.3 Artifact Service 与 Visualization
+
+- `architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md`：通用 Artifact Service 的独立部署、数据存储、版本和 Generator 架构基线。
+- `architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md`：现有代码、IAM、存储和 Visualization 资产的静态审计。
+- `architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md`：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
+- `architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md`：实施前置核验报告，含 ART-02A 对 lmms v1.8.1 token-service/file-service 源码、SDK 与 OpenAPI 的核验结果，列出已验证能力、P0 阻断项和环境核验任务。
+- `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分和迁移边界。
+
+- ART-02D 现有 viz.* 数据、读写路径与迁移依赖核验（并入 [ART-02 第 14 节](architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md)）：包含历史 full-dev 快照与当前运行态未验证项。
+- ART-02E 目标环境运行态核验（[implementation/artifact-service/art-02e-runtime-audit/](implementation/artifact-service/art-02e-runtime-audit/ART-02E-RUNTIME-AUDIT.md)）：full-dev 库实时身份、migrations 59/59、viz.* 四表 0 行、schema 与 0020 零 drift；结论 A+B（ART-03 可启动、开发可开始），迁移/退役仍以生产与外部消费者确认为前置。
+
+通用 Artifact Service 的部署、数据和 API 权威以 ADR-ART-001 与 ART-01 为准；ART-00 是静态审计证据，ART-02 是实施前置核验记录。未完成的运行态核验不能以静态代码、设计文档或历史快照替代。
+
+### 3.4 历史设计与当前基线
 
 `project-ai-team-v2/`、`slice-d/`、部分早期 `audit/` 与 `superpowers/` 文件可能描述旧架构或已完成阶段。它们用于解释演进、提供代码/验收证据，不应覆盖当前 PA-06 / PA-07 基线。
 
