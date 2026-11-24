@@ -70,7 +70,7 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 - Phase 5: multi-Runner fault matrix green and audit chronology replayable.
 
 
-## 8. Service boundary and authentication acceptance
+## 8. Service boundary and authentication acceptance (ADR-SEM-22/25)
 
 - Platform↔SEM service JWT rejects wrong issuer, audience, scope, expired/not-yet-valid token, revoked key and replayed token ID where one-time semantics apply.
 - Service identity cannot authenticate as a human principal or invoke ordinary user-only routes.
@@ -78,7 +78,7 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 - Claim request timeout/retry with the same idempotency key produces exactly one Run lease and the same recoverable result.
 - SEM logs/traces/DB never contain plaintext Lease Token or WSS ticket.
 
-## 9. Runner WSS authorization acceptance
+## 9. Runner WSS authorization acceptance (ADR-SEM-23)
 
 - Expired, wrong-audience, wrong-scope, invalid-signature and replayed connect tickets are rejected.
 - Device revocation/project unbinding closes active WSS connection and prevents further command delivery.
@@ -86,7 +86,7 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 - Old connection epoch and stale generation messages are rejected after reconnect/handoff.
 - WSS close/revocation does not mark process terminated; E1/E2/E3 evidence remains mandatory.
 
-## 10. Inbox, delivery and dispatch acceptance
+## 10. Inbox, delivery and dispatch acceptance (ADR-SEM-24/25)
 
 - Platform Outbox is acknowledged only after SEM Inbox transaction commit.
 - Duplicate event_id creates one Inbox record and one logical dispatch operation.
@@ -95,3 +95,6 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 - SEM crash after Claim but before WSS send resumes to the same target Runner or performs guarded cancellation; never blind redirection.
 - Command receipt ACK and E3 termination ACK remain distinct and idempotent.
 - SEM outbound reports survive restart through platform_delivery retry ledger.
+
+
+> ADR-SEM-21–25 are approved architecture decisions. The tests in §§8–10 are implementation/acceptance gates and remain unpassed until the actual services and integrations exist and pass them.
