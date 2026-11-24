@@ -3,6 +3,10 @@
 - 性质：架构设计（实施计划定稿），本阶段不实施。
 - Greenfield 前提（`engineering-lifecycle-policy.md`）：Phase 序号是**架构实施阶段**，不是「必须保留旧架构」的约束；允许直接重构 Schema/接口；每个 Phase 后全新库必须可完整初始化；**Phase 0 不做数据迁移**（无历史生产数据，活跃中的开发库按项目惯例处理）。
 
+## 设计冻结前置说明
+
+`sem-02d-closure-design-proposal.md` 是 D-01–D-12 的候选关闭设计，尚待用户确认。该提案未获确认前，不启动 Phase 0；Phase 0 的 HIR 与执行屏障 migration 不得按未批准的假设先行实施。Phase 1 同样须等待服务协议、SEM DDL 和 Ports/Adapters 契约冻结。
+
 ## 总览
 
 ```mermaid
