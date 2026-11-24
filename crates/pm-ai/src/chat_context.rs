@@ -1,27 +1,29 @@
-//! chat 段知识注入（整合计划 Batch 3A；D-IC-2 = 最小两节）。
+//! chat 段知识注入（整合计划 Batch 3A + R2/B09-01 项目记录节）。
 //!
 //! **为什么 chat 需要注入**：原 chat 回复链的模型上下文只有「固定语言镜像
 //! system prompt + 最近 20 轮纯文本」（F-5），AI 不知道当前对着哪个项目/
 //! 仓库说话——UI 承诺的「只读上下文」是空头承诺（DK-0 F20 已如实登记）。
-//! 本模块给 chat 补上**最小两节**注入，使「注入面 = 承诺面」。
 //!
 //! ## 与 DK-C（访谈注入）的关系
 //!
 //! 复用 [`crate::discovery_context`] 的**分节与记账结构**，但**独立预算**：
 //! 访谈 36,000 字符（[`discovery_context::TOTAL_BUDGET_CHARS`]）不动，
-//! chat 用 8,000（[`CHAT_TOTAL_BUDGET_CHARS`]）——访谈是长程结构化任务，
+//! chat 用 16,000（[`CHAT_TOTAL_BUDGET_CHARS`]）——访谈是长程结构化任务，
 //! chat 是一问一答，二者不该共享额度。
 //!
-//! ## 注入面（两节，D-IC-2）
+//! ## 注入面（三节）
 //!
 //! ```text
 //! project_profile  (S1) ← core.project（名称/描述/状态）
-//! repository_facts (S2) ← integration.project_repository（仓库/分支/角色）
+//! project_records  (S2) ← delivery/design/discovery/governance（正式记录投影，
+//!                         R2/B09-01：需求/设计/ADR/任务/风险/待人工/审计，
+//!                         由 project_records::build_project_records_body 构建）
+//! repository_facts (S3) ← integration.project_repository（仓库/分支/角色）
 //! ```
 //!
-//! 注入源 = **线程锚点**（Batch 2 的 `ai.conversation.context_anchor`）：
-//! 锚点声明「这个线程对着哪个仓库」，服务端按锚点**重新投影**实时事实。
-//! 锚点缺失（存量线程）→ **零注入**，行为与注入前逐字节一致（向后兼容）。
+//! 注入源 = 线程所属项目的**实时投影** + 线程锚点（仓库节）：锚点声明
+//! 「这个线程对着哪个仓库」，服务端按锚点**重新投影**实时事实。记录节
+//! 每次回复前实时查询（无缓存）——记录变更后下一轮即取最新版本。
 //!
 //! ## 安全三闸（沿 DK-C §5.5）
 //!
@@ -36,16 +38,23 @@ use uuid::Uuid;
 use crate::discovery_context::{assemble_chat, ContextSection, SectionDraft, CHAT_SECTION_ORDER};
 
 /// chat 注入总量硬预算（字符）。与访谈的 36,000 独立。
-pub const CHAT_TOTAL_BUDGET_CHARS: usize = 8_000;
-/// 单节上限：项目画像 / 仓库事实各半。
+///
+/// R2（B09-01）从 8,000 提到 16,000：新增项目正式记录节（上限 6,000）——
+/// 「AI 项目负责人能读到项目事实」是 1.0 的核心承诺，预算不足以承载记录
+/// 投影时宁可压缩对象节/仓库节，不能没有记录节。
+pub const CHAT_TOTAL_BUDGET_CHARS: usize = 16_000;
+/// 单节上限：项目画像 / 项目记录 / 仓库事实。
 pub const CHAT_CAP_PROJECT_PROFILE: usize = 2_000;
+pub const CHAT_CAP_PROJECT_RECORDS: usize = 6_000;
 pub const CHAT_CAP_REPOSITORY_FACTS: usize = 4_000;
 
-/// 对象节（S3+）总预算：原 8,000 的余量（CX2 终裁，不提总预算）。
+/// 对象节（S3+）总预算。
 pub const CHAT_CAP_OBJECT_CONTEXT: usize = 2_000;
 
 /// 分节键。
 pub const CHAT_KEY_PROJECT_PROFILE: &str = "project_profile";
+/// 项目正式记录投影（R2/B09-01）。
+pub const CHAT_KEY_PROJECT_RECORDS: &str = "project_records";
 pub const CHAT_KEY_REPOSITORY_FACTS: &str = "repository_facts";
 /// 对象节键前缀（B3 / CX2：按对象分节，键 = `object:<type>:<object_id>`）。
 pub const CHAT_KEY_OBJECT_PREFIX: &str = "object:";
@@ -129,9 +138,29 @@ pub async fn build_chat_context(
             "项目画像",
             body,
         ));
+
+        // S2 项目正式记录投影（R2/B09-01：需求/设计/ADR/任务/风险/待人工/审计）。
+        // 只对**存在的项目**投影（缺失项目 → 零注入，防探测语义与画像一致）；
+        // 实时查询、预算内整行裁剪；查询失败 → 整节缺席（与仓库节同语义：
+        // 不报错、不伪造），由外层 WARN 记账。
+        match crate::project_records::build_project_records_body(pool, tenant_id, project_id).await
+        {
+            Ok(records_body) => drafts.push(SectionDraft::new(
+                CHAT_KEY_PROJECT_RECORDS,
+                "项目正式记录",
+                records_body,
+            )),
+            Err(err) => {
+                tracing::warn!(
+                    %project_id,
+                    error = %err,
+                    "chat context: project records projection failed; section omitted"
+                );
+            }
+        }
     }
 
-    // S2 仓库事实（按锚点定位实时仓库）。
+    // S3 仓库事实（按锚点定位实时仓库）。
     if let Some(repo_name) = anchor_repository.map(str::trim).filter(|n| !n.is_empty()) {
         let repo = sqlx::query(SQL_REPOSITORY_FACTS)
             .bind(tenant_id)
@@ -178,7 +207,7 @@ pub fn anchor_repository(anchor: Option<&serde_json::Value>) -> Option<String> {
 }
 
 /// chat 分节顺序（供测试断言；与 `assemble_chat` 的固定顺序同源）。
-pub fn chat_section_order() -> [&'static str; 2] {
+pub fn chat_section_order() -> [&'static str; 3] {
     CHAT_SECTION_ORDER
 }
 

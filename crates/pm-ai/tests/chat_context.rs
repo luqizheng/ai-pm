@@ -1,14 +1,16 @@
-//! Batch 3A：chat 精简注入（S1 项目画像 + S2 仓库事实）的验收测试。
+//! Batch 3A + R2（B09-01）：chat 注入（S1 项目画像 + S2 项目正式记录 + S3 仓库
+//! 事实）的验收测试。
 //!
 //! 覆盖整合计划验收项：
 //! - A-6 注入记账（`sections_included` / `sections_dropped` / `chars_total`）；
 //! - A-7 凭据零注入（D1 关键字扫描断言）；
-//! - A-8 chat 预算独立（8k，与访谈 36k 隔离）；
-//! - A-9 无锚点线程零注入（向后兼容：行为与注入前逐字节一致）。
+//! - A-8 chat 预算独立（16k，与访谈 36k 隔离）；
+//! - A-9 无锚点线程零仓库节（向后兼容）；
+//! - R2：记录节进入注入与记账（B09-01）。
 
 use pm_ai::chat_context::{
-    anchor_repository, build_chat_context, CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS,
-    CHAT_TOTAL_BUDGET_CHARS,
+    anchor_repository, build_chat_context, CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_PROJECT_RECORDS,
+    CHAT_KEY_REPOSITORY_FACTS, CHAT_TOTAL_BUDGET_CHARS,
 };
 use pm_ai::discovery_context::{assemble_chat, SectionDraft, TOTAL_BUDGET_CHARS};
 use pm_domain::SYSTEM_TENANT;
@@ -62,9 +64,9 @@ async fn seed_repository(
     .unwrap()
 }
 
-/// A-6：两节注入 + 记账字段齐备。
+/// A-6：三节注入（画像 + 记录 + 仓库）+ 记账字段齐备。
 #[sqlx::test(migrations = "../../migrations")]
-async fn chat_context_injects_two_sections_with_accounting(pool: PgPool) {
+async fn chat_context_injects_sections_with_accounting(pool: PgPool) {
     let project = seed_project(&pool, "Atlas Platform", "Acme Research").await;
     seed_repository(&pool, project, "atlas-platform", "main").await;
 
@@ -76,7 +78,11 @@ async fn chat_context_injects_two_sections_with_accounting(pool: PgPool) {
     let keys: Vec<&str> = context.sections.iter().map(|s| s.key.as_str()).collect();
     assert_eq!(
         keys,
-        vec![CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS]
+        vec![
+            CHAT_KEY_PROJECT_PROFILE,
+            CHAT_KEY_PROJECT_RECORDS,
+            CHAT_KEY_REPOSITORY_FACTS
+        ]
     );
 
     // 项目画像节含项目名与状态。
@@ -87,6 +93,18 @@ async fn chat_context_injects_two_sections_with_accounting(pool: PgPool) {
         .expect("project profile section");
     assert!(profile.body.contains("Atlas Platform"), "{}", profile.body);
     assert!(profile.body.contains("Acme Research"), "{}", profile.body);
+
+    // 记录节（R2/B09-01）：实时投影，含空态语义与语义头部。
+    let records = context
+        .sections
+        .iter()
+        .find(|s| s.key == CHAT_KEY_PROJECT_RECORDS)
+        .expect("project records section");
+    assert!(
+        records.body.contains("未列出的记录即不存在"),
+        "{}",
+        records.body
+    );
 
     // 仓库事实节含仓库名/分支/HEAD。
     let repo = context
@@ -105,9 +123,10 @@ async fn chat_context_injects_two_sections_with_accounting(pool: PgPool) {
     assert!(meta["sections_included"].as_array().is_some());
 }
 
-/// A-9：无锚点 → 只注入项目画像（零仓库节），存量线程行为不变。
+/// A-9：无锚点 → 不注入仓库节（存量线程行为不变；记录节仍在——它是
+/// 项目维度的，不依赖锚点）。
 #[sqlx::test(migrations = "../../migrations")]
-async fn chat_context_without_anchor_injects_project_only(pool: PgPool) {
+async fn chat_context_without_anchor_injects_no_repo_section(pool: PgPool) {
     let project = seed_project(&pool, "Atlas Platform", "Acme Research").await;
     seed_repository(&pool, project, "atlas-platform", "main").await;
 
@@ -116,7 +135,10 @@ async fn chat_context_without_anchor_injects_project_only(pool: PgPool) {
         .expect("context builds");
 
     let keys: Vec<&str> = context.sections.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, vec![CHAT_KEY_PROJECT_PROFILE]);
+    assert_eq!(
+        keys,
+        vec![CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_PROJECT_RECORDS]
+    );
     assert!(context
         .sections
         .iter()
@@ -133,7 +155,10 @@ async fn chat_context_anchor_to_missing_repository_yields_no_repo_section(pool: 
         .expect("context builds");
 
     let keys: Vec<&str> = context.sections.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, vec![CHAT_KEY_PROJECT_PROFILE]);
+    assert_eq!(
+        keys,
+        vec![CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_PROJECT_RECORDS]
+    );
 }
 
 /// 项目不存在 → 零注入（空 context，调用方完全跳过注入）。
@@ -154,22 +179,26 @@ async fn chat_context_missing_project_is_empty(pool: PgPool) {
     );
 }
 
-/// A-8：chat 预算独立于访谈（8k vs 36k），且互不影响。
+/// A-8：chat 预算独立于访谈（16k vs 36k），且互不影响。
 #[test]
 fn chat_budget_is_independent_from_interview_budget() {
-    assert_eq!(CHAT_TOTAL_BUDGET_CHARS, 8_000);
+    assert_eq!(CHAT_TOTAL_BUDGET_CHARS, 16_000);
     assert_eq!(TOTAL_BUDGET_CHARS, 36_000);
 
-    // 超预算时整节删除（仓库事实先删），记账 dropped。
+    // 超预算时整节删除（仓库事实先删，其次记录节），记账 dropped。
     let long = "x".repeat(20_000);
     let context = assemble_chat(vec![
         SectionDraft::new(CHAT_KEY_PROJECT_PROFILE, "项目画像", long.clone()),
+        SectionDraft::new(CHAT_KEY_PROJECT_RECORDS, "项目正式记录", long.clone()),
         SectionDraft::new(CHAT_KEY_REPOSITORY_FACTS, "仓库事实", long),
     ]);
     assert!(context.chars_total <= CHAT_TOTAL_BUDGET_CHARS);
     assert!(context
         .sections_dropped
         .contains(&CHAT_KEY_REPOSITORY_FACTS.to_string()));
+    assert!(context
+        .sections_dropped
+        .contains(&CHAT_KEY_PROJECT_RECORDS.to_string()));
     assert_eq!(context.sections.len(), 1);
     assert_eq!(context.sections[0].key, CHAT_KEY_PROJECT_PROFILE);
 }
@@ -187,32 +216,46 @@ fn chat_sections_respect_per_section_caps() {
     assert!(context.sections[0].truncated);
 }
 
-/// A-7：注入源不含任何 provider/凭据字段（静态扫描）。
+/// A-7：注入源不含任何 provider/凭据字段（静态扫描；含 R2 记录投影 SQL）。
 #[test]
 fn chat_injection_sql_contains_no_credential_columns() {
-    let source = include_str!("../src/chat_context.rs");
-    for forbidden in [
-        "api_key",
-        "api_secret",
-        "token",
-        "password",
-        "secret",
-        "team_llm_provider",
-        "credential",
-    ] {
-        // 只扫描 SQL 常量区段（注入投影的查询语句）。
+    let scan = |source: &str, start: &str, end: &str, label: &str| {
         let sql_region = source
-            .split("const SQL_PROJECT_PROFILE")
+            .split(start)
             .nth(1)
-            .expect("sql constants present")
-            .split("/// 构造 chat 注入")
+            .unwrap_or_else(|| panic!("{label} sql constants present"))
+            .split(end)
             .next()
-            .expect("sql region bounded");
-        assert!(
-            !sql_region.contains(forbidden),
-            "chat injection SQL must not reference {forbidden}"
-        );
-    }
+            .unwrap_or_else(|| panic!("{label} sql region bounded"));
+        for forbidden in [
+            "api_key",
+            "api_secret",
+            "token",
+            "password",
+            "secret",
+            "team_llm_provider",
+            "credential",
+        ] {
+            assert!(
+                !sql_region.contains(forbidden),
+                "chat injection SQL must not reference {forbidden} ({label})"
+            );
+        }
+    };
+    let chat_source = include_str!("../src/chat_context.rs");
+    scan(
+        chat_source,
+        "const SQL_PROJECT_PROFILE",
+        "/// 构造 chat 注入",
+        "chat_context",
+    );
+    let records_source = include_str!("../src/project_records.rs");
+    scan(
+        records_source,
+        "const SQL_REQUIREMENTS",
+        "// ── 投影装配",
+        "project_records",
+    );
 }
 
 /// 锚点读取：只认字符串型 repository_name，空值/非字符串 → None。
