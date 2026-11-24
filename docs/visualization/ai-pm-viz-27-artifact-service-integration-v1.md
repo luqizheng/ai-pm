@@ -2,7 +2,7 @@
 
 > **状态：** 与 ADR-ART-001 配套的现状映射与实施约束  
 > **日期：** 2026-11-24  
-> **目的：** 防止把新 Artifact Service 当作空白项目，或误将现有 Visualization 全部搬迁为一个新的 Visualization Service。
+> **目的：** 防止把新 Artifact Service 当作空白项目，或误将现有 Visualization 全部搬迁为一个新的 Visualization Service。\n> **审计报告：** [ART-00 Artifact Service 现状与边界审计 V1.0](../architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md)（静态仓库审计完成；部署态核验项开放）。
 
 ## 1. 结论
 
