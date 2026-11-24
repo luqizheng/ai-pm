@@ -122,7 +122,8 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | operational-runbook.md | 启停、监控、排障和卷丢失处置 |
 | testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
 | migration-roadmap.md | Phase 0–5 实施路线图 |
-| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |\n| code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
+| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
+| code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
 
 ## 原始交付索引
 
