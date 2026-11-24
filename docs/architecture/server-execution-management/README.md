@@ -54,7 +54,7 @@ flowchart LR
 | D1 | 循环归属 | 循环 1/2/3/5/6/7/8 + `pm-worker` 全部 + pm-api audit listener 留 Platform；循环 4 执行子步迁 SEM | `worker-role-separation.md` |
 | D2 | outbox 单消费者 | 循环 3（outbox 分发）**只允许存在于一个部署单元**（Platform）；SEM 角色不装配 outbox handler，从根上消除「两侧 handler 集合不一致 → 假死信」 | `worker-role-separation.md` §3 |
 | D3 | 角色化装配 | `AI_PM_WORKER_ROLE=platform\|execution\|all`（默认 `all` 保持开发态零行为漂移）；Phase 1 不拆新二进制 | `worker-role-separation.md` |
-| D4 | 回收安全 | **DB 租约过期 ≠ 进程死亡**。回收必须以终止证据为前提：同主机走 poll 三证据；远程 Runner 走心跳宽限 + 终止 ACK，证据不足只隔离不重派（HIR 兜底） | `execution-safety.md` |
+| D4 | 回收安全 | **DB 租约过期 ≠ 进程死亡**。回收必须以终止证据为前提：同主机走 poll 三证据；远程 Runner 只有在 E3 终止 ACK 通道实现并验收后才可凭 E3 重派；否则按 E4 隔离不重派（HIR 兜底） | `execution-safety.md` |
 | D5 | 工作区唯一所有权 | 一个工作区同一时刻至多一个活进程；新 Attempt 不得复用未确认死亡的旧工作区（新建或等确认后按 reclamation 策略处置） | `execution-safety.md` §5 |
 | D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；新增 `task_run.harness_session_id` 与 `harness_kind` 两列；HIR 使用独立表；Resume 默认关闭，实测通过后按 Harness 版本启用 | `session-manager-design.md` |
 | D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
