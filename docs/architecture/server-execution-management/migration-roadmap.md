@@ -28,11 +28,11 @@ flowchart LR
 |---|---|
 | **前置条件** | 用户 ratify `sem-02d-closure-design-proposal.md` 中 D-01/D-02，并冻结执行安全屏障、最小 HIR 和证据 API 契约后；可在当前单机先行落地 |
 | **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现）、Platform 执行安全状态/HIR 最小持久化与审计 |
-| **预计修改文件** | 上述执行代码 + 一次 Platform migration（执行安全屏障/HIR 最小记录的正式载体由 SEM-02D 冻结）；`pm-api` 仅在需要暴露安全处置入口时增加最小 API。E3 远程通道尚未验收前，Runner 形态全部走 E4 挂起，不得自动重派 |
+| **预计修改文件** | 上述执行代码 + 一次 Platform migration（执行安全屏障/HIR 最小记录的正式载体由 SEM-02D 冻结）；`pm-api` 仅在需要暴露安全处置入口时增加最小 API。Phase 0 先确保 E4/E5 有可操作 HIR；Runner E3 远程证据通道在 Phase 1 WSS 完成后启用，之前不得自动重派 |
 | **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；runner cancel ACK 通道改动触到 runner 主循环（需单独测试；可先落 SEM 侧证据前置，E3 通道 Phase 4 补齐——期间 runner 形态全部走 E4 挂起 + 人工） |
 | **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据挂起；②B06-D3：runner 项目排除、E4 不回收、E1/E2 正常回收；③Uncertain 保留（T1 回归）；④generation fencing 回归（旧 token 拒绝）；⑤凭据最小权限、撤销和日志脱敏；⑥q10 系列单独跑（AGENTS.md 第 6 条） |
 | **验收标准** | 构造「进程活着 + 租约过期」场景：任何路径都不产生第二个进程；构造「进程死了 + 证据在」场景：下一轮回收成功；全新库迁移链可完整初始化 |
-| **回滚方式** | 还原上述文件（无 Schema 变更，纯代码语义回退） |
+| **回滚方式** | 还原上述文件并按 Greenfield 策略重整 Migration；Barrier/HIR/通知收件人属于正式 Schema 变更，不得回退成无屏障的旧派发行为 |
 
 ## Phase 1：Worker 角色化装配与 Platform–SEM API 解耦
 
@@ -67,18 +67,18 @@ flowchart LR
 | **预计修改文件** | `crates/pm-application/src/session_manager/{mod,ports,lifecycle}.rs`（新）、`crates/pm-infrastructure/src/codex_executor.rs`（SessionProbe/Resume 实现 + harness_session_id 采集）、迁移 `00XX_task_run_harness_session.sql`（`harness_session_id`/`harness_kind` 两列，Greenfield 允许直接改）、`apps/ai-pm-worker/src/main.rs`（投影重建接入启动序列） |
 | **风险** | harness 事件格式不稳定（采集失败只降级为不可 resume，不阻塞执行）；Resume 能力未经 codex 实测（默认 false，交付时以实测为准） |
 | **测试** | 生命周期状态机纯函数单测；采集→落库→投影重建端到端；重启后 Detached 分类正确；resume=false harness 走新 Attempt |
-| **验收标准** | 同一 Run 重启 worker 后 Session 投影与宿主机事实一致；`harness_session_id` 在 codex 事件流中成功采集；`supports_resume=false` 时无任何 resume 尝试 |
+| **验收标准** | 同一 Run 重启后 Session 投影与执行主机事实一致；Native Session ID 在实际执行主机采集（Runner 设备或 SEM 主机）；`supports_resume=false` 时无任何 Native Resume 尝试 |
 | **回滚方式** | 删模块 + 回退迁移（Greenfield：迁移历史允许重整为 clean baseline） |
 
-## Phase 4：Human Intervention
+## Phase 4：Advanced HIR / Cross-Runner Handoff / E6
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0 最小 HIR 实体/安全屏障已落地 + Phase 3 Session 投影 |
+| **前置条件** | Phase 0 最小 HIR/通知/Barrier 已可操作 + Phase 1 E3/Detached 对账 + Phase 3 Session continuity |
 | **涉及模块** | Phase 0 已创建的 `governance.human_intervention_request` 的扩展（不重复建表）、`pm-application`（HIR 域服务）、`pm-api`（HIR 查询/处置 REST）、runner（通知/选择交互） |
-| **预计修改文件** | 扩展 Phase 0 的 HIR migration（完整状态字段、索引、通知/处置字段和唯一活动请求约束按 SEM-02D 定稿）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
+| **预计修改文件** | 扩展 Phase 0 已可操作的 HIR（高级 Runner 选择、supervised 通知门、E6 风险接受、handoff 记录；不得把基础收件人/通知/处置再次延后）、`crates/pm-application/src/hir/…`（新）、`apps/pm-api/src/…`（路由）、`apps/ai-pm-runner/src/…`（领取前通知门 + 终止 ACK）、前端告警面（提示 Q3 频次） |
 | **风险** | runner 交互改动（有人监督模式）影响现有自动领取路径（需模式开关：supervised = 领取前确认；unattended（默认）= 自动领取、失败建 HIR，二选一按部署配置） |
-| **测试** | HIR 状态机全迁移路径；接管七不变式逐条集成测试（重点：② token 失效、⑤ 单执行权、⑧ 审计完整）；E4 挂起 → HIR → 授权重派端到端 |
+| **测试** | HIR 状态机全迁移路径；接管七不变式逐条集成测试（重点：② token 失效、⑤ 单执行权、⑧ 审计完整）；E4/E5 → HIR；安全重派必须有 E1/E2/E3，风险接受重派必须有 E6 且旧 Barrier 保持未证实 |
 | **验收标准** | 构造双 Runner 接管场景：全程无双重执行、无身份校验放宽、审计链完整可回放；Q3 高频只提示不改策略 |
 | **回滚方式** | 关闭 HIR 触发开关（E4 行为退化为「永久挂起 + 告警」，安全但需人工 DB 介入）→ 删迁移 |
 
