@@ -92,7 +92,7 @@ SEM 可以持有执行侧私有事实，例如本机 PID/进程句柄、进程�
 | Run Context | pm_get_run_context → Platform MCP | 评估保留 Harness 直连 MCP，或由 Runner/SEM 代理读取；授权语义不变 |
 | Agent Progress / Result | Harness → Platform MCP | 默认保留业务工具语义；任何代理路径都必须由 Platform 校验 Lease Token 与 Generation |
 | Runner Supervisor Heartbeat | 当前 pm_report_progress → Platform MCP | **迁至 Runner→SEM WSS；只记录 Runner supervisor liveness，不等同 Agent Activity 或进程存活** |
-| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | **已关闭：Runner Supervisor→SEM WSS→Platform HTTPS API 是唯一续租路径；Harness Agent Activity 不续租** |
+| Runner Lease Renewal | 当前 pm_report_progress → Platform MCP | **待关闭：Platform 是唯一续租权威；必须在 Runner WSS 与 Harness MCP 之间选择唯一续租路径；WSS liveness 不等同续租** |
 | Interaction Marker | Runner → pm_report_interaction | 可保留 Platform 业务 API/MCP；若经 SEM 转发，需保持事件幂等与租约校验 |
 | Command Delivery | pm_poll_commands → Platform MCP | **迁至 SEM WSS 推送/投递；SEM 保存传输账本，Platform 保留 worker_command 状态权威；Runner 不再 MCP 轮询** |
 | Command ACK / Termination ACK | pm_ack_command → Platform MCP | **迁至 WSS 回传，SEM 转 Platform API；E3 终止证据绑定 Run、Generation、Command、进程身份** |
@@ -175,13 +175,13 @@ Runner 当前通过 MCP 做 Claim、Lease Renewal、命令轮询/ACK、恢复和
 
 ## 10. ADR-SEM-20 已关闭的控制通道契约
 
-用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。此前 §9 中 Claim 发起方、Lease Renewal 唯一路径和 Runner 控制轮询归属不再是开放问题：
+用户已确认 SEM 是 Runner 控制面的唯一派发与接管协调者。Claim 发起方和 Runner 控制轮询归属已关闭；Lease Renewal 唯一路径仍是开放问题：
 
 - SEM Scheduler 选择目标 Runner；`supervised` 必须先完成用户通知与明确选择，`unattended` 默认自动选择。
 - SEM 使用专用 service identity 调用 Platform HTTPS Claim API，并显式传入目标 Runner/device identity。Platform 不能信任裸 device_id，必须从注册/绑定记录验证身份、租户、项目、权限、监督策略、Scheduling Shield 和并发条件。
 - Claim 成功前禁止向 Runner 派发可执行命令；Claim 成功响应是 Platform 授予执行权的唯一事实。
 - Runner WSS 是控制通道唯一入口：Supervisor Heartbeat、Lease Renewal 请求、命令、ACK、取消、E3、重连同步和接管控制。
-- Lease Renewal 唯一路径：Runner Supervisor → WSS → SEM → Platform HTTPS API。Harness MCP 的 Agent Activity/Progress 只记录活动，不续租；WSS liveness 也不自动续租。
+- Lease Renewal：Platform 是唯一续租权威；具体由 Runner Supervisor WSS 还是 Harness MCP 发起仍待决定。WSS liveness 不自动续租；最终只能存在一个续租路径。
 - Harness Platform MCP 保留业务面：项目/任务上下文、Agent Activity、Interaction、交付/结果与知识业务操作。不得将业务 MCP 整体迁到 SEM。
 - 删除 Runner 对 Platform MCP 的 Claim、Lease Renewal、命令轮询/ACK、恢复/接管控制路径；不保留双控制面。迁移必须一次性关闭旧写路径并有集成测试证明无旁路。
 
