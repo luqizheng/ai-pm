@@ -1,9 +1,9 @@
-# SEM-02D — 阻断项关闭设计提案（D-01–D-12）
+# SEM-02D — 阻断项关闭设计提案（D-01–D-13）
 
-- 状态：**Technical Design Proposal — 待用户逐项确认；不是已冻结 ADR**
+- 状态：**D-01–D-12 Proposed；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
 - 日期：2026-11-25
 - 基线：当前 master 的 SEM-02D 审查报告及 ADR-SEM-01–25
-- 范围：把 D-01–D-12 从“问题清单”推进为可审阅、可实现的具体设计。
+- 范围：把 D-01–D-13 从“问题清单”推进为可审阅、可实现的具体设计；D-13 已批准，其余 D 项仍待确认。
 - 明确边界：本文件只提出设计，不代表已修改代码、Migration、API、WSS、Docker 或运行配置；Phase 0 仍未启动。
 - 不重开：独立 DB、单一 Git origin、不备份 Workspace、不引入消息中间件、SEM 唯一 Runner 控制面、Lease Renewal 唯一路径、Runner 默认 unattended 等已确认决策。
 
@@ -14,7 +14,7 @@
 3. 对所有自动 Claim、重派、回收和 retry/requeue，使用同一个 Platform 侧执行安全屏障谓词。
 4. 任何不确定的进程状态都 fail closed：保留隔离、创建/关联 HIR，不自动重派。
 5. HTTP/WSS 采用显式版本、稳定幂等键和可恢复状态；传输 ACK 不等于业务完成，命令 receipt 不等于进程终止。
-6. D-01–D-12 的技术提案须经用户确认后才能从 Proposed 转为 Ratified；代码事实仍须在 Phase 0 前按最新 HEAD 复核。
+6. D-01–D-12 的技术提案须经用户确认后才能从 Proposed 转为 Ratified；D-13 已按 ADR-SEM-26 冻结。代码事实仍须在 Phase 0 前按最新 HEAD 复核。
 
 ## 1. D-01（P0）执行不确定性屏障物理模型
 
@@ -244,9 +244,9 @@ Phase 0 前需按实际 Codex/其他 Harness 启动器逐项验证：环境变�
 - D-12 凭据盘点必须在 Phase 0 代码改动前完成，Phase 0/1/2 各自验收真实注入与撤销行为。
 
 
-## 15. D-13（新增 P1）Runner 资源感知与同机并发准入
+## 15. D-13（P1）Runner 资源感知与同机并发准入
 
-**用户提出：Runner 应提交 CPU、磁盘空间和内存信息，并由 SEM 据此决定同一台 PC 是否可以派发多个任务。** 该能力纳入 SEM-02D 关闭范围。以下为建议基线，待确认后正式冻结。
+**已确认并冻结为 ADR-SEM-26。** Runner 必须报告 CPU、内存和 Workspace 所在磁盘卷资源；SEM 必须基于资源快照、任务资源画像和原子预留，决定同一台 PC 是否可接收并发任务。
 
 ### 15.1 资源采集与上报
 
@@ -339,6 +339,6 @@ SEM 对每个 Runner 维护最新资源快照，并在选择 Runner 时同时检
 7. D-09：是否接受 V1 将已注册未撤权 Runner Supervisor 视为 E3 可信观察者，而不提供硬件证明。
 8. D-10/D-11：是否批准命令双层状态映射与上述 HIR 状态推进条件。
 9. D-12：实际 Harness 凭据清单需要按当前实现逐项复核；本文是目标边界，不冒充已完成代码盘点。
-10. D-13：是否批准 Runner CPU/Memory/Workspace-volume 资源报告、资源画像、SEM 原子准入预留与资源未知时停止新派发的方案。
+10. D-13 已关闭：用户确认纳入统一架构，正式登记为 ADR-SEM-26；其余 D-01–D-12 仍待确认。
 
-在这些事项确认并同步更新所有权威文档前，状态保持 `Design In Progress`，不得启动 Phase 0。
+在 D-01–D-12 确认并同步更新所有权威文档前，整体状态保持 `Design In Progress`，不得启动 Phase 0。
