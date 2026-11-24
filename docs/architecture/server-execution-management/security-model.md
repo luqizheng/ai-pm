@@ -78,3 +78,12 @@ The proposed minimum SEM-owned tables are `sem.inbox_event`, `sem.runner_connect
 - WSS Heartbeat and Harness Agent Activity never renew a Lease.
 - Claim and cross-service mutations use stable idempotency keys; Platform stores Claim result in the same transaction as Lease/Generation mutation.
 - SEM does not persist plaintext Lease Token; token may exist only in bounded process memory for dispatch/relay and is always redacted.
+
+
+## 12. Runner process evidence trust boundary（Review Pending）
+
+Runner 进程退出报告通过已认证设备 WSS 连接上报，必须绑定 Runner/device、boot_id、Run、Generation、process creation identity、exit observation、source 和 digest。Lease token 失效不应阻止提交历史进程观察，但该接口只允许追加证据，不授予 Run 状态写权限。SEM 持久化后再转 Platform；Platform 校验精确 Generation 和身份。无法验证 boot/process identity 时降级 E5。
+
+## 13. E6 Human Risk Acceptance authorization
+
+E6 需要独立高风险权限、二次确认、操作者/时间/原因、残余风险展示、缓解措施、唯一 successor 绑定和不可变审计。E6 不代表进程终止，不替代 E1/E2/E3，不释放旧 Execution Barrier，不绕过租户/项目/设备授权、lease_client_id 或 Generation fencing。旧进程仍可能持有 Git/SSH/API 凭据；风险确认界面必须明确该事实。
