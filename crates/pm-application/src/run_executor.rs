@@ -518,13 +518,18 @@ pub async fn reconcile_orphans(
 
         // B06-D3（业务验收 2026-11-24）：此前只告警不回收——Model A（MCP 认领）
         // 的孤儿 Run 没有任何执行体处理，任务永久卡 running。首次确认即回收：
-        // Run=timed_out（isolate 语义）+ 任务 Running→Blocked→Ready（域合法边，
-        // 可被 runner 重新认领）；`run.orphan_reclaimed` 审计留痕。
+        // Run 退回 `queued`（lease_expired，可重试语义——不终态化）+ 任务
+        // Running→Blocked→Ready（域合法边，可被 runner 重新认领）；
+        // `run.orphan_reclaimed` 审计留痕。
         let Ok(mut tx) = pool.begin().await else {
             continue;
         };
         let run_reclaimed = sqlx::query(
-            "UPDATE delivery.task_run               SET status = 'timed_out', outcome = 'timed_out', finished_at = now(),                   termination_reason = 'lease_expired',                   lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL             WHERE id = $1 AND project_id = $2 AND status = 'running'",
+            "UPDATE delivery.task_run \
+              SET status = 'queued', outcome = NULL, finished_at = NULL, \
+                  termination_reason = 'lease_expired', next_dispatch_at = now(), \
+                  lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
+            WHERE id = $1 AND project_id = $2 AND status = 'running'",
         )
         .bind(run_id)
         .bind(project_id)
