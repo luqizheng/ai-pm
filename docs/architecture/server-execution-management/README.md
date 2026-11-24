@@ -119,7 +119,8 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | security-model.md | 身份、凭据、租约、E3 和审计安全 |
 | operational-runbook.md | 启停、监控、排障和卷丢失处置 |
 | testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
-| migration-roadmap.md | Phase 0–5 实施路线图 |\n| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
+| migration-roadmap.md | Phase 0–5 实施路线图 |
+| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
 
 ## 原始交付索引
 
@@ -135,4 +136,8 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 ## 本阶段状态
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
-- **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**\n- **SEM-02C：尚待完成代码契约映射与全量一致性审查。** 详细门槛见 `consistency-review.md`。\n- 架构状态：`Design In Progress`；尚未达到 `Design Complete`。\n- 未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。\n- 未开始 Phase 0 实施。
+- **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
+- **SEM-02C：尚待完成代码契约映射与全量一致性审查。** 详细门槛见 `consistency-review.md`。
+- 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
+- 未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
+- 未开始 Phase 0 实施。
