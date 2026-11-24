@@ -533,14 +533,30 @@ pub async fn reconcile_orphans(
         .map(|r| r.rows_affected())
         .unwrap_or(0);
         if run_reclaimed > 0 {
-            let task_reclaimed = sqlx::query(
-                "WITH stale AS (                     UPDATE delivery.task SET status = 'blocked', updated_at = now()                      WHERE id = (SELECT task_id FROM delivery.task_run WHERE id = $1)                        AND status = 'running' RETURNING id                  ), released AS (                     UPDATE delivery.task SET status = 'ready', updated_at = now()                      WHERE id = (SELECT id FROM stale) AND status = 'blocked' RETURNING id                  )                  SELECT count(*) FROM released",
+            // 同事务两条顺序语句（数据修改 CTE 共享同一快照，链式 WHERE 互相不可见）。
+            let task_id: Uuid =
+                sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+                    .bind(run_id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(RunDispatchError::Db)?;
+            sqlx::query(
+                "UPDATE delivery.task SET status = 'blocked', updated_at = now() \
+                 WHERE id = $1 AND status = 'running'",
             )
-            .bind(run_id)
-            .fetch_one(&mut *tx)
+            .bind(task_id)
+            .execute(&mut *tx)
             .await
-            .map(|row| row.get::<i64, _>(0))
-            .unwrap_or(0);
+            .map_err(RunDispatchError::Db)?;
+            let task_reclaimed = sqlx::query(
+                "UPDATE delivery.task SET status = 'ready', updated_at = now() \
+                 WHERE id = $1 AND status = 'blocked' RETURNING id",
+            )
+            .bind(task_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(RunDispatchError::Db)?
+            .rows_affected();
             let _ = crate::pm_write::append_audit(
                 &mut tx,
                 project_id,
