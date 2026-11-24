@@ -125,13 +125,13 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | migration-roadmap.md | Phase 0–5 实施路线图 |
 | consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
 | code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
-| service-protocol-security-and-persistence.md | Lease Renewal、服务身份、WSS 认证撤权、SEM Inbox/Delivery Ledger、幂等和故障恢复建议基线 |
+| service-protocol-security-and-persistence.md | ADR-SEM-21–25 的服务协议、安全、SEM 私有持久化、幂等和故障恢复详细基线 |
 
-## ADR-SEM-20：SEM 统一负责 Runner 任务派发与接管
+## ADR-SEM-20–25：Runner 控制面与 Platform–SEM 服务协议
 
 用户于 2026-11-24 确认：SEM 是 Runner 任务派发与接管的唯一协调入口。Runner 不再主动轮询 Platform MCP 领取任务。SEM 选择/确认目标 Runner 后，通过 Platform 服务 API 请求 Claim；Platform 仍在自身数据库事务中校验设备身份、项目绑定、资格、Scheduling Shield、并发互斥并签发 Lease/Generation。SEM 只有在成功 Claim 后才可通过 WSS 派发执行授权。Harness 继续通过 Platform MCP 使用业务工具。
 
-控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 建议采用 Runner Supervisor 专用 WSS 消息 → SEM → Platform HTTPS API；WSS Heartbeat 和 Harness Agent Activity 均不续租。该方案待用户确认后登记为正式 ADR。
+控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 唯一路径已由 ADR-SEM-21 冻结：Runner Supervisor 专用 WSS 消息 → SEM → Platform HTTPS API；WSS Heartbeat 和 Harness Agent Activity 均不续租。
 
 ## 原始交付索引
 
@@ -148,7 +148,20 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：代码契约映射初审已完成；本轮新增服务协议/安全/持久化建议基线，仍需用户确认关键方案并完成全量一致性审查。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。新增 `service-protocol-security-and-persistence.md` 是设计建议，不代表已实现或已获用户最终批准。
+- **SEM-02C：ADR-SEM-21–25 已由用户确认并登记；服务协议、安全和持久化设计基线已冻结。全量一致性复审及代码映射细节仍在收口，尚未授权实施。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。`service-protocol-security-and-persistence.md` 是已批准的目标架构基线，不代表已实现。
 - 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
 - 本轮新增 `service-protocol-security-and-persistence.md`，并同步更新 README、决策登记、协议、安全、一致性、代码映射、故障恢复和验收文档；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
+
+
+### ADR-SEM-21–25：服务协议、安全与持久化
+
+用户于 2026-11-24 确认并冻结：
+
+- **ADR-SEM-21**：Lease Renewal 唯一路径为 Runner Supervisor → WSS → SEM → Platform HTTPS；Heartbeat 与 Harness Agent Activity 不续租。
+- **ADR-SEM-22**：Platform↔SEM 使用独立服务身份、TLS、短时非对称签名 JWT、audience/scope 和密钥轮换；服务身份不进入 human principal。
+- **ADR-SEM-23**：Runner 使用 Platform 签发的短时一次性设备绑定 WSS Ticket；SEM 原子消费 ticket ID；Outbox 撤权事件 + 有界周期重验证，失去授权新鲜度时 fail closed。
+- **ADR-SEM-24**：SEM DB 使用 7 张最小私有表：Inbox、Runner Connection、Ticket Use、Dispatch Operation、Command Delivery、Platform Delivery、Process Observation；不复制业务权威状态。
+- **ADR-SEM-25**：Claim 和跨服务副作用必须幂等可恢复；Platform Claim 与幂等结果同事务；SEM 不持久化明文 Lease Token。
+
+详细协议与故障语义见 `service-protocol-security-and-persistence.md`。上述是已确认的架构决策，不代表代码已经实现。
