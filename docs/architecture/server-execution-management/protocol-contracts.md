@@ -175,3 +175,8 @@ Platform `worker_command` remains business command state; SEM `command_delivery`
 - All Platform Claim/recovery/requeue paths use the same dispatchability predicate and check both Interaction shield and Execution Barrier, including queued Runs and B06-D3.
 
 See [corrective design](./sem-02d-review-findings-corrective-design.md).
+
+
+## 14. E6 Human Risk Acceptance protocol (Review Pending)
+
+E6 is a Platform-authorized human risk decision, not a Runner process observation. It is recorded through the Platform HIR disposition API, with authenticated human principal, high-risk permission, explicit second confirmation, reason, displayed residual risks, mitigation record and a single bound successor Run/Generation. SEM may dispatch only the exact successor authorized by Platform after Claim succeeds. E6 must never be serialized as `process.terminated`, E3, command ACK or successful OS exit. The old Execution Barrier remains `risk_accepted_unconfirmed` until E1/E2/E3 independently proves termination. Duplicate or broader successor requests are rejected.
