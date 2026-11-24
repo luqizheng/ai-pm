@@ -225,3 +225,12 @@ Platform `worker_command` 是业务命令权威，SEM `command_delivery` 只是�
 ## 9. Follow-up: closure design proposal (2026-11-25)
 
 A separate proposed design package has been added at `sem-02d-closure-design-proposal.md`, covering candidate resolutions for D-01–D-12. This is a design proposal only: it does not alter the original review findings, does not create or ratify new ADRs, and does not mark any blocker closed. The explicit decisions in §14 of that proposal require user confirmation. D-12 additionally requires a current code-level credential inventory. Until the proposal is ratified and a final cross-document review passes, the architecture remains `Design In Progress` and Phase 0 remains not started.
+
+
+## 10. 批量设计包后续状态（2026-11-25）
+
+用户要求将剩余设计一次性提交、后续集中评审。D-01–D-12 的候选设计现已整理为完整评审包：`sem-02d-review-package.md`，专题提案：`sem-02d-closure-design-proposal.md`。本次仅完成文档设计，不代表 D-01–D-12 已获批准，不修改原始代码审计结论，不新增已 ratified ADR。D-13 仍为已批准 ADR-SEM-26。
+
+本轮一致性处理要求：Interaction scheduling shield 与 Run execution barrier 分开建模；前者处理业务交互等待，后者处理执行进程不确定性。两者共同参与 Platform dispatchability predicate。WSS 协议必须包含资源报告消息 `runner.resource.report`，但它不承担 Heartbeat、Lease Renewal 或终止证据职责。
+
+D-12 设计边界已完成；当前 Harness 启动链路的实际凭据注入/继承/泄漏面仍须在 Phase 0 代码变更前完成只读盘点。当前结论：**Design In Progress / Review Pending；Phase 0 Not Started**。
