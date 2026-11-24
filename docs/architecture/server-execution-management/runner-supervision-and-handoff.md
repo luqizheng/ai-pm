@@ -97,8 +97,10 @@ sequenceDiagram
 
 ### 5.2 有人监督 Runner 的任务接收通知（Q2=B）
 
-- 仅当 Runner 明确配置为 `supervised` 时，Runner 调 `pm_claim_task_run_as_client` **之前**插入「通知 + 用户确认」门（Runner 侧 UI/交互）；用户选择后 Runner 才发起 claim。`unattended` 是默认模式，按平台授权自动领取。
-- 平台不感知「用户何时点确认」——那是设备端交互；平台只认 claim 请求本身（前置③）。
+- SEM 是唯一调度与派发入口。仅当目标 Runner 明确配置为 `supervised` 时，SEM 在请求 Platform Claim **之前**通知用户并收集目标 Runner 选择/确认；用户选择只是授权意图，不是 Claim，也不授予执行权。
+- `unattended` 是默认模式，SEM 可按 Platform 授权策略自动选择候选 Runner。
+- 用户确认后由 SEM 代表目标 Runner 请求 Platform Claim。Platform 必须独立校验目标 device identity、项目绑定、授权和可执行性；Claim 成功后 SEM 才能通过该 Runner 的 WSS 连接派发。
+- Runner 不再主动调用 Platform MCP Claim，也不再自行轮询命令/恢复控制接口。Platform 只接受来自受认证 SEM 服务身份的控制面请求；Harness 业务 MCP 不受影响。
 - Q3=A：HIR 高频项目只产出提示事件（审计/告警面），**不**自动 shield、不自动换 Runner、不自动改 retry 策略。
 
 ## 6. 无人监督 Runner 失败的处置流（Q1=B）
@@ -107,3 +109,14 @@ sequenceDiagram
 2. 优先恢复判定（`session-manager-design.md` §4.3）：原 Runner 重连且 harness 可 resume → 恢复原 Session。
 3. 不可恢复 → 用户（或值班流程）通过 HIR 决定：终止（Run 终态化）或授权重派（新 Attempt）。
 4. 全程不自动重派——这是与 B06-D3 现状行为的关键差异（现状 >1h 自动回 queued，正是 Phase 0 要修复的点）。
+
+
+## 7. Runner 控制面唯一入口（ADR-SEM-20）
+
+SEM 负责 Runner 注册后的在线连接管理、候选选择、通知、派发、命令路由、执行监督和接管协调。Runner 只与 SEM 建立 WSS 控制连接；不得并行维护 Platform MCP 控制轮询。
+
+- Claim：SEM → Platform HTTPS Claim API（包含目标 Runner 身份），Platform 原子签发 Lease/Generation。
+- Lease Renewal：Runner Supervisor → SEM WSS → Platform HTTPS API。Harness Agent Activity 走 Platform MCP，但不续租。
+- Command/Cancel/ACK/E3：经 WSS；Platform 保留命令业务状态，SEM 仅保存投递账本。
+- 业务上下文、Agent Activity、Interaction、结果/交付：Harness → Platform MCP。
+- 接管：SEM 协调停止/隔离旧执行端，等待 E3 或按 E4/E5 保持 shield/HIR；随后通过 Platform 正常 Claim 流程为目标 Runner 申请新 Generation。不得改写 lease owner 或绕过 `lease_client_id`。
