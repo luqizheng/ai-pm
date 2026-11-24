@@ -2,7 +2,7 @@
 
 - 状态：**D-01–D-12 Proposed；D-13 已由用户确认并正式冻结为 ADR-SEM-26**
 - 日期：2026-11-25
-- 基线：当前 master 的 SEM-02D 审查报告及 ADR-SEM-01–25
+- 基线：当前 master 的 SEM-02D 审查报告及 ADR-SEM-01–26
 - 范围：把 D-01–D-13 从“问题清单”推进为可审阅、可实现的具体设计；D-13 已批准，其余 D 项仍待确认。
 - 明确边界：本文件只提出设计，不代表已修改代码、Migration、API、WSS、Docker 或运行配置；Phase 0 仍未启动。
 - 不重开：独立 DB、单一 Git origin、不备份 Workspace、不引入消息中间件、SEM 唯一 Runner 控制面、Lease Renewal 唯一路径、Runner 默认 unattended 等已确认决策。
