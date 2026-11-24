@@ -55,19 +55,26 @@ A process's own self-report that it is stopping is insufficient. A generic HTTP 
 Audit claim, generation rotation, shield creation/release, termination evidence, credential issuance/revocation, HIR transitions, Runner supervision changes and handoff. Redact secrets before persistence.
 
 
-## 8. Platform–SEM service identity
+## 8. Platform–SEM service identity (ADR-SEM-22)
 
 - Use separate service identities for Platform→SEM and SEM→Platform. Service identity is not a human principal and must not pass through ordinary human-principal resolution.
 - Proposed V1: TLS plus short-lived asymmetric-signed JWT; issuer, subject, audience, scope, issued/not-before/expiry, key ID and token ID are validated. Maximum token lifetime 5 minutes; public keys rotate with overlap. mTLS is optional defense-in-depth, not the application authorization contract.
 - SEM receives only Claim-for-Runner, Lease Renewal, command read/ACK, execution report, E3 submit and Runner authorization-read scopes. Platform→SEM delivery is limited to Inbox write.
 - Every mutation has a stable idempotency key and correlation/causation identifiers. Same key/same semantic body returns prior result; conflicting reuse is rejected.
 
-## 9. Runner WSS connect ticket and revocation
+## 9. Runner WSS connect ticket and revocation (ADR-SEM-23)
 
 - Runner authenticates to Platform with its registered device credential and obtains a short-lived, single-use ticket scoped to SEM audience and exact device identity. SEM validates Platform signature and atomically consumes ticket `jti`; never trust a payload-supplied Runner ID.
 - Platform authorization changes (credential revoke, device disable, project unbind, tenant suspension) are emitted through Outbox to SEM; SEM closes affected connections. Periodic Platform API revalidation detects missed events. Proposed default authorization freshness window is 30 seconds; if it expires without successful revalidation, stop dispatch and close WSS.
 - Revoking a connection does not prove the process is dead. Pending commands stop; active execution follows E1–E5 and HIR rules.
 
-## 10. SEM persistence boundary
+## 10. SEM persistence boundary (ADR-SEM-24)
 
 The proposed minimum SEM-owned tables are `sem.inbox_event`, `sem.runner_connection`, `sem.runner_ticket_use`, `sem.dispatch_operation`, `sem.command_delivery`, `sem.platform_delivery` and `sem.process_observation`. Exact fields and exclusions are specified in `service-protocol-security-and-persistence.md`. SEM stores no Platform Run/Lease/Generation/HIR/command business authority and no plaintext Lease Token.
+
+## 11. Lease Renewal and cross-service idempotency (ADR-SEM-21 / ADR-SEM-25)
+
+- Lease Renewal is initiated only by Runner Supervisor over WSS and forwarded by SEM to Platform HTTPS. Platform alone validates and commits the renewal.
+- WSS Heartbeat and Harness Agent Activity never renew a Lease.
+- Claim and cross-service mutations use stable idempotency keys; Platform stores Claim result in the same transaction as Lease/Generation mutation.
+- SEM does not persist plaintext Lease Token; token may exist only in bounded process memory for dispatch/relay and is always redacted.
