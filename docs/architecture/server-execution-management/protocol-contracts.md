@@ -135,3 +135,12 @@ These are ratified target design constraints, not current implementation facts.
 ## 12. Resource-aware Runner reporting (ADR-SEM-26 — approved)
 
 Runner Supervisor may send `runner.resource.report` over the authenticated WSS control channel. The report contains `boot_id`, monotonic `sample_seq`, `observed_at`, CPU logical count and normalized utilization windows, memory total/available/pressure, and free/total bytes for the configured Workspace volume. Runner identity is derived from the authenticated connection, not trusted from payload. Resource reports are separate from Heartbeat and never renew Lease. Stale, out-of-order, invalid, or unavailable samples make the Runner resource state `unknown` and block new dispatch; they do not prove process termination. SEM persists the latest snapshot in `runner_connection` and associates resource-profile/reservation metadata with `dispatch_operation`. Exact sampling intervals and admission thresholds are deployment-tuned and must be validated under Windows load tests; no unsupported fixed CPU/memory/disk threshold is assumed.
+
+
+## 10. Resource telemetry and admission (ADR-SEM-26)
+
+Runner Supervisor reports resource facts over the authenticated Runner–SEM WSS connection using `runner.resource.report`. The report includes `boot_id`, monotonically increasing `sample_seq`, UTC `observed_at`, CPU logical capacity and utilization windows, memory total/available/pressure, and total/free capacity of the actual Workspace volume. Runner identity is taken from the authenticated connection, never from a self-asserted payload field.
+
+SEM stores the latest accepted snapshot in `runner_connection`; `dispatch_operation` stores the task Resource Profile and atomic CPU/memory/Workspace-volume reservation. This does not add an eighth mandatory SEM table. Samples that are stale, duplicated, out of order, invalid, or from an old boot must not overwrite the latest snapshot. Unknown/stale resources block new dispatch only; they do not stop active Runs or release reservations.
+
+Resource reports are distinct from Runner Heartbeat, Lease Renewal and Harness Agent Activity. They never renew a Lease and never prove process start/exit or E1/E2/E3. A resource reservation is released only after definitive Platform Claim rejection (no Lease created) or after the relevant Run reaches a safe terminal/termination disposition. Unknown Claim outcomes retain the reservation and reuse the same `claim_request_id`.
