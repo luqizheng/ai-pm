@@ -101,7 +101,27 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | 循环 4 执行器选择与 reclamation 三重开关 | `apps/ai-pm-worker/src/main.rs:143-220` |
 | Uncertain 不回收（T1 三证据） | `run_executor.rs:620-625` |
 
-## 最终交付索引
+## 架构文档索引
+
+| 文档 | 内容 |
+|---|---|
+| README.md | 总览、部署边界和决策摘要 |
+| decision-record.md | ADR-SEM-01–18、OQ-1–8 裁决及验证门槛 |
+| deployment-topology.md | Platform / SEM / Runner 部署与运行期卷 |
+| worker-role-separation.md | Worker 循环归属和角色化装配 |
+| session-manager-design.md | Session 概念、生命周期和 Harness Resume |
+| execution-safety.md | E1–E5、Scheduling Shield、进程和凭据安全 |
+| runner-supervision-and-handoff.md | Runner 监督模式、HIR 和跨 Runner 接管 |
+| domain-model.md | Run/Attempt/Session/Runner/HIR 领域模型 |
+| protocol-contracts.md | Claim、Heartbeat、Cancel ACK、Result 协议契约 |
+| state-machines.md | Run、Lease、HIR、Handoff 状态机 |
+| failure-recovery.md | 故障矩阵与恢复顺序 |
+| security-model.md | 身份、凭据、租约、E3 和审计安全 |
+| operational-runbook.md | 启停、监控、排障和卷丢失处置 |
+| testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
+| migration-roadmap.md | Phase 0–5 实施路线图 |
+
+## 原始交付索引
 
 1. SEM-01 复核 → 本文件 §「SEM-01 结论复核结果」
 2. B3-2 根因与修复 → `execution-safety.md`
