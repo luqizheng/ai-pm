@@ -112,3 +112,49 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 - Memory pressure and Workspace-volume low-space thresholds reject new dispatch; CPU saturation may lower scheduling priority or pause new admission according to configured policy.
 - Reservations release only after safe terminal/termination handling; WSS disconnect, heartbeat loss, Workspace loss or resource sample expiry alone is insufficient.
 - Windows Runner long-duration concurrent load tests calibrate thresholds and verify no runaway memory/disk consumption; Linux/macOS implementations must satisfy the same normalized contract before being enabled.
+
+
+## 8. Corrective review acceptance matrix（Review Pending）
+
+### 8.1 Interaction execution loop
+
+- Agent 在 Runner 执行时创建 Interaction：terminate 命令必须通过 SEM WSS 到达正确 Runner，进程终止后报告 E3；用户回复后 continue 必须注入 checkpoint + response、启动新 Session 并完成消费回执。
+- Agent 在 SEM-local CodexExecutor 执行时创建 Interaction：必须由 SEM-local Execution Control Adapter 消费 terminate/continue；不得因为命令消费者只有 Runner 而挂起。
+- Command receipt、command result、E3、continuation-consumed 分别断言；任何一项不能冒充另一项。
+- continue 重复投递必须幂等，不得启动第二个 Agent；continue 未成功注入时 Interaction 不得 consumed，shield 不得清除。
+
+### 8.2 Runner process evidence and restart
+
+- 自然退出、terminate、lease-loss cleanup、startup orphan cleanup、shutdown 均写入本地 evidence spool 并经 WSS 上报。
+- WSS 断线时 spool 保留；重连后重复发送幂等；SEM ACK 前不得删除。
+- Lease 已过期时仍允许报告旧 Run/Generation 的进程观察，但不得修改新 Generation 业务状态。
+- Runner 重启后测试 same boot process reattach、boot transition proof、无法验证时 E5；覆盖 Detached → Reconciling → Active/Terminated/Quarantined。
+
+### 8.3 Workspace loss / Lost semantics
+
+- 对 stage=started Run 删除 PID、logs 和 Workspace volume：必须 E5/Uncertain，不得 Done{Lost}、释放 Barrier 或重派。
+- stage=dispatch 且权威证明未 spawn：才可按 B3-1 处理。
+
+### 8.4 HIR / notification
+
+- Phase 0 即验证 HIR 创建、责任人解析、收件人通知、Inbox 可见、证据追加、hold/受控处置和审计。
+- interaction.created 与 HIR created 在事务内产生 Outbox notification；收件人缺失进入项目级未分派队列并告警。
+- 通知投递失败不改变 Interaction/HIR/Barrier 状态；120s deadline 不延迟通知。
+
+### 8.5 E6
+
+- E4/E5 默认拒绝自动重派；无 E6 时必须保持 Barrier。
+- E6 必须二次确认、记录风险/缓解措施、绑定唯一 successor、保留旧 Barrier；重复点击或并发请求不能产生第二个 successor。
+- E6 不能生成 E3，也不能把旧 Barrier 标成 released。
+
+### 8.6 Unified dispatchability
+
+- 对 shield=human_wait/start_wait/timed_out 的 queued Run，普通 claim 必须拒绝。
+- B06-D3 不能把带 Interaction shield 或 active Execution Barrier 的 Run 回队并被普通 queued claim 领取。
+- B3-1/B3-2、retry/requeue、orphan reconciliation、handoff 和 SEM Claim 全部验证同一谓词；锁内重验防竞态。
+
+### 8.7 Session continuity
+
+- Runner 本机采集 native session id 并上报；SEM 不读取 Runner CODEX_HOME。
+- Interaction Continuation（checkpoint/reply 注入 + Fresh Session）、Process Reattachment、Harness Native Resume 分别测试。
+- Native Resume 默认 false；跨设备仅复制 session id 必须失败/降级 Fresh Session。
