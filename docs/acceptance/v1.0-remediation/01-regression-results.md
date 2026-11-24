@@ -8,7 +8,7 @@
 
 | 门禁 | 结果 |
 |---|---|
-| 后端全量（pm-api/pm-application/pm-infrastructure/pm-mcp/pm-ai，`--skip q10`） | 集成分支重跑，全绿（数字见 §4 汇总） |
+| 后端全量（pm-api/pm-application/pm-infrastructure/pm-mcp/pm-ai，`--skip q10`） | **215 个测试二进制 / 1832 passed / 0 failed**（cargo exit 0；集成分支完整输出留存 /tmp/integration-test-full.log） |
 | q10 系列单独跑（AGENTS 规则 6） | 18/18 绿（q10_race_closure 14 + q10_r3_snapshot_check 2 + q10_classify_matrix 2） |
 | 前端全量 vitest | 230 文件 / 1386 用例全绿（R4 分支口径；R3 分支口径 1387） |
 | vue-tsc --noEmit | 干净 |
