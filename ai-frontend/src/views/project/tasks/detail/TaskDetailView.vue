@@ -7,7 +7,11 @@ import { ArrowLeft, Sparkles } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
-import { getTaskDetail, type TaskDetailView } from "@/api/task-plans";
+import {
+  completeTaskManually,
+  getTaskDetail,
+  type TaskDetailView
+} from "@/api/task-plans";
 import TasksFrame from "../TasksFrame.vue";
 import TaskDetailTabs from "./TaskDetailTabs.vue";
 import TaskPriorityChip from "../components/TaskPriorityChip.vue";
@@ -60,6 +64,42 @@ const task = computed<DetailViewModel | null>(() =>
 );
 
 const approval = computed(() => task.value?.approval ?? "none");
+
+// ── B06-D2：人工任务直接完成（真人通道；AI 主体 403）──────────────
+// 「无可用执行者」的人工任务此前没有任何收尾入口（状态机无 Ready→Completed
+// 边、REST 无迁移端点），成为 DAG 永久阻塞头。后端新增
+// POST /v1/pm/tasks/{id}/transitions（理由必填、AI 403、审计留痕）。
+const canManualComplete = computed(() => task.value?.status === "ready");
+const manualDialogOpen = ref(false);
+const manualReason = ref("");
+const manualActing = ref(false);
+const manualError = ref("");
+
+function openManualDialog() {
+  manualReason.value = "";
+  manualError.value = "";
+  manualDialogOpen.value = true;
+}
+
+async function submitManualComplete() {
+  if (!task.value || manualActing.value) return;
+  const reason = manualReason.value.trim();
+  if (!reason) {
+    manualError.value = t("s04.tasks.detail.manualReasonRequired");
+    return;
+  }
+  manualActing.value = true;
+  manualError.value = "";
+  try {
+    await completeTaskManually(task.value.id, { reason });
+    manualDialogOpen.value = false;
+    await load();
+  } catch {
+    manualError.value = t("s04.tasks.detail.manualFailed");
+  } finally {
+    manualActing.value = false;
+  }
+}
 
 const breadcrumbs = computed(() => [
   { label: t("shell.app.side.item.taskManagement"), to: "/project/tasks" },
@@ -131,7 +171,48 @@ function goBack() {
             }}
           </span>
         </div>
+        <div v-if="canManualComplete" class="dt-manual">
+          <Button
+            variant="primary"
+            size="sm"
+            data-testid="dt-manual-complete"
+            @click="openManualDialog"
+          >
+            {{ t("s04.tasks.detail.manualComplete") }}
+          </Button>
+        </div>
       </section>
+      <div
+        v-if="manualDialogOpen"
+        class="dt-manual-form"
+        data-testid="dt-manual-form"
+      >
+        <textarea
+          v-model="manualReason"
+          class="dt-manual-form__reason"
+          :placeholder="t('s04.tasks.detail.manualReasonPlaceholder')"
+          rows="3"
+        />
+        <div class="dt-manual-form__row">
+          <Button
+            variant="secondary"
+            size="sm"
+            data-testid="dt-manual-cancel"
+            @click="manualDialogOpen = false"
+          >
+            {{ t("s04.tasks.detail.manualCancel") }}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            :disabled="manualActing || !manualReason.trim()"
+            data-testid="dt-manual-submit"
+            @click="submitManualComplete"
+          >
+            {{ t("s04.tasks.detail.manualSubmit") }}
+          </Button>
+        </div>
+      </div>
 
       <div class="dt-layout">
         <div class="dt-main">
@@ -623,5 +704,31 @@ function goBack() {
   .dt-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.dt-manual {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+.dt-manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-1) solid var(--ws-border);
+}
+
+.dt-manual-form__reason {
+  width: 100%;
+  resize: vertical;
+}
+
+.dt-manual-form__row {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
 }
 </style>

@@ -253,6 +253,7 @@ pub async fn update_task(
             supersede: None,
             delivery_submitted: false,
             acceptance_evidence_complete: false,
+            manual_completion: false,
         };
         pm_domain::task_transition::validate_transition(&input).map_err(|_| {
             PmWriteError::Validation(

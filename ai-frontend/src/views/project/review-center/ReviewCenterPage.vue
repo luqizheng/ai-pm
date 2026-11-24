@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 
+import { useDesignProject } from "@/views/project/design/use-design-project";
+
 import Button from "@/components/ui/button/Button.vue";
 import Alert from "@/components/ui/alert/Alert.vue";
 import { PageFrame } from "@/components/shell";
@@ -40,14 +42,17 @@ import DeliveryReviewContext from "./components/DeliveryReviewContext.vue";
  */
 const { t } = useI18n();
 const route = useRoute();
+const { projectId: storeProjectId } = useDesignProject();
 const router = useRouter();
 const shell = useShellStore();
 const store = useReviewCenterStore();
 
+// B06-D5：query 优先，回退壳 scope store（与 useDesignProject 口径一致）。
 function currentProjectId(): string {
   const raw = route.query.project_id;
   const value = Array.isArray(raw) ? (raw[0] ?? "") : raw;
-  return String(value ?? "");
+  if (value) return String(value);
+  return storeProjectId.value;
 }
 
 // ── 时间展示 ─────────────────────────────────────────────────────────

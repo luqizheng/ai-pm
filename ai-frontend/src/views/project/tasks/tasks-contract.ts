@@ -307,6 +307,7 @@ export function formatDateTime(value: string | null | undefined): string {
 /** 任务池行模型：DTO + 展示辅助 */
 export interface TaskRowModel {
   id: string;
+  code: string;
   title: string;
   description: string | null;
   status: string;
@@ -315,11 +316,14 @@ export interface TaskRowModel {
   milestoneId: string | null;
   revision: number;
   updatedAt: string;
+  /** 最新一次 run 的状态（null = 从未执行）；执行类型/执行中判定的展示源 */
+  runStatus: string | null;
 }
 
 export function toTaskRow(task: Task): TaskRowModel {
   return {
     id: task.id,
+    code: task.code,
     title: task.title,
     description: task.description,
     status: task.status,
@@ -327,6 +331,7 @@ export function toTaskRow(task: Task): TaskRowModel {
     assigneeId: task.assignee_id,
     milestoneId: task.milestone_id,
     revision: task.revision,
-    updatedAt: task.updated_at
+    updatedAt: task.updated_at,
+    runStatus: task.latest_run?.status ?? null
   };
 }

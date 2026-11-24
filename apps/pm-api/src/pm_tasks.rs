@@ -5,7 +5,8 @@
 
 use axum::{
     extract::{Extension, Path, State},
-    routing::{get, patch},
+    response::IntoResponse,
+    routing::{get, patch, post},
     Json, Router,
 };
 use uuid::Uuid;
@@ -20,6 +21,8 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pm/tasks/{task_id}", get(task_detail))
         .route("/v1/pm/tasks/{task_id}/revisions", get(task_revisions))
         .route("/v1/pm/tasks/{task_id}/schedule", patch(set_task_schedule))
+        // B06-D2：人工任务直接完成（真人唯一通道；状态机 Ready→Completed 边）
+        .route("/v1/pm/tasks/{task_id}/transitions", post(task_transition))
         .route(
             "/v1/pm/projects/{project_id}/dependency-graph",
             get(dependency_graph),
@@ -81,6 +84,74 @@ async fn set_task_schedule(
     )
     .await?;
     Ok(Json(serde_json::json!({ "task": task })))
+}
+
+/// B06-D2：`POST /v1/pm/tasks/{task_id}/transitions`——人工任务直接完成。
+///
+/// 真人唯一通道（AI 主体 403）；body：`{ to: "completed", reason, expected_revision? }`。
+/// 理由必填落审计；状态机侧 `Ready → Completed` 边以 manual_completion 事实守卫。
+#[derive(serde::Deserialize)]
+struct TaskTransitionBody {
+    to: String,
+    reason: String,
+    #[serde(default)]
+    expected_revision: Option<i64>,
+}
+
+async fn task_transition(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(task_id): Path<Uuid>,
+    Json(body): Json<TaskTransitionBody>,
+) -> ApiResult<axum::response::Response> {
+    if body.to != "completed" {
+        return Err(crate::support::ApiError::BadRequest(
+            "only `completed` is supported on this endpoint",
+        ));
+    }
+    if body.reason.trim().is_empty() {
+        return Err(crate::support::ApiError::BadRequest(
+            "completion reason is required (human completion must be accountable)",
+        ));
+    }
+    require_task_project(&state.pool, task_id, &caller).await?;
+    match pm_application::command_executor::manual_complete_task(
+        &state.pool,
+        caller.tenant_id,
+        task_id,
+        body.reason,
+        body.expected_revision,
+        caller.audit_actor(),
+    )
+    .await
+    {
+        Ok(revision) => Ok(axum::Json(serde_json::json!({
+            "task_id": task_id,
+            "status": "completed",
+            "revision": revision,
+        }))
+        .into_response()),
+        Err(pm_application::CommandError::RevisionConflict { expected, actual }) => Ok((
+            axum::http::StatusCode::CONFLICT,
+            axum::Json(serde_json::json!({
+                "error": "revision_conflict",
+                "expected_revision": expected,
+                "actual_revision": actual,
+            })),
+        )
+            .into_response()),
+        Err(pm_application::CommandError::Validation(detail)) => Ok((
+            axum::http::StatusCode::CONFLICT,
+            axum::Json(serde_json::json!({ "error": "transition_rejected", "detail": detail })),
+        )
+            .into_response()),
+        Err(err) => {
+            tracing::error!(error = %err, "manual task completion failed");
+            Err(crate::support::ApiError::Internal(
+                sqlx::Error::Configuration("manual completion failed".into()),
+            ))
+        }
+    }
 }
 
 /// `GET /v1/pm/projects/{project_id}/dependency-graph`：项目级依赖图（S04-UI-05）。

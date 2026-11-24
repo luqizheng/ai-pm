@@ -90,6 +90,21 @@ tasks:
     attentionGo: 去处理
     attentionEmpty: 暂无需要人工处理的事项。
     upcomingTitle: 近期任务
+    aiAnalysisEntry: AI 任务分析
+    chipAll: 全部任务
+    chipUnassigned: 未分配
+    chipBlocked: 阻塞
+    chipDraft: 草稿
+    chipReady: 待执行
+    chipCompleted: 已完成
+    executingTitle: 执行中
+    executingEmpty: 当前没有执行中的任务
+    execKindLabel: 执行类型
+    execKindAi: AI 执行
+    execKindHuman: 人工执行
+    execKindUnassigned: 未指派
+    recentCompletedTitle: 最近完成
+    recentCompletedEmpty: 暂无已完成的任务
     insightsTitle: AI 规划建议
     insightsEmpty: 暂无 AI 规划建议。
     insightsDevNote: 演示数据（dev mock），AI 规划建议接口尚未接线。
@@ -173,6 +188,12 @@ tasks:
     mockNote: 演示数据（dev mock）：AI 拆解接口尚未接线，提案仅存在于本页会话。
   detail:
     back: 返回任务池
+    manualComplete: 人工完成
+    manualReasonPlaceholder: 填写完成理由（必填，落审计留痕）…
+    manualReasonRequired: 完成理由必填（人工完成必须可问责）
+    manualSubmit: 确认完成
+    manualCancel: 取消
+    manualFailed: 人工完成失败，请重试
     approve: 批准
     unapprove: 撤销确认
     approvalState: 审批状态
