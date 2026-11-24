@@ -13,6 +13,7 @@ import {
   confirmDiscoveryFinding,
   getDiscoverySession,
   listDiscoverySessions,
+  transitionDiscoverySession,
   type DiscoveryFinding,
   type DiscoveryQuestion,
   type DiscoverySession,
@@ -29,9 +30,11 @@ import { useDesignProject } from "@/views/project/design/use-design-project";
  * 确认或否决**——`verification_status` 的每一次流转都是人工动作，页面不
  * 提供「自动确认」。
  *
- * 本页只做**只读 + 人工确认/答复**两件事：
+ * 本页做**人工确认/答复/会话处理**三件事：
  * - 确认/否决 finding（真实命令 confirmDiscoveryFinding）；
- * - 回答阻塞问题（真实命令 answerDiscoveryQuestion）。
+ * - 回答阻塞问题（真实命令 answerDiscoveryQuestion）；
+ * - 处理会话状态（B03-01：REVIEW_REQUIRED 退回/完结、NEEDS_USER_INPUT 完结，
+ *   真实命令 transitionDiscoverySession——没有这一步，等待复核的会话就是死信）。
  * 会话创建（startDiscoverySession）在此只给入口说明，不做隐式启动。
  */
 const { t } = useI18n();
@@ -139,6 +142,44 @@ async function decideFinding(
   }
 }
 
+// ──────────────────────────────────── 会话人工处理（B03-01 死信修复）
+//
+// REVIEW_REQUIRED / NEEDS_USER_INPUT 的会话在编排扫描集之外（或等用户输入）：
+// 没有人工退回/完结入口时，chat 续接进来的消息永远无人消费。动作本身走
+// 既有状态机（非法跃迁服务端 409）。
+
+/** 会话处理动作进行中（防重复提交）。 */
+const transitioning = ref(false);
+const transitionError = ref("");
+
+const sessionStatus = computed(() => detail.value?.session.status ?? "");
+const awaitingReview = computed(() => sessionStatus.value === "REVIEW_REQUIRED");
+const needsUserInput = computed(() => sessionStatus.value === "NEEDS_USER_INPUT");
+
+/**
+ * 人工处理会话：REVIEW_REQUIRED 退回 IN_PROGRESS（编排器恢复消费未处理
+ * 消息）或完结 COMPLETED；NEEDS_USER_INPUT 完结 COMPLETED。失败（含 409
+ * 竞态）重拉详情对齐服务端真源。
+ */
+async function transitionSession(status: "IN_PROGRESS" | "COMPLETED") {
+  if (!selectedId.value || transitioning.value) return;
+  transitioning.value = true;
+  transitionError.value = "";
+  try {
+    await transitionDiscoverySession(
+      projectId.value,
+      selectedId.value,
+      status
+    );
+    await load();
+  } catch {
+    transitionError.value = t("s01.discovery.transitionConflict");
+    await loadDetail();
+  } finally {
+    transitioning.value = false;
+  }
+}
+
 /** 四值 → 语义档：CONFLICT 是「冲突待裁决」，与 PENDING 同属待人工。 */
 function verificationTone(
   status: string
@@ -220,6 +261,53 @@ function verificationTone(
       </Card>
 
       <div class="dc-main">
+        <!-- B03-01：等待人工复核/输入的会话处理面板（不做 = 消息死信）。 -->
+        <Card
+          v-if="awaitingReview || needsUserInput"
+          class="dc-section"
+          data-testid="dc-session-actions"
+        >
+          <template #header>
+            {{ t("s01.discovery.sessionActionsTitle") }}
+          </template>
+          <p class="dc-note">
+            {{
+              awaitingReview
+                ? t("s01.discovery.reviewRequiredNotice")
+                : t("s01.discovery.needsInputNotice")
+            }}
+          </p>
+          <p
+            v-if="detail?.session.last_round_error"
+            class="dc-note"
+            data-testid="dc-round-error"
+          >
+            {{ t("s01.discovery.lastRoundError") }}:
+            {{ detail.session.last_round_error }}
+          </p>
+          <div class="dc-actions">
+            <Button
+              v-if="awaitingReview"
+              variant="secondary"
+              size="sm"
+              :disabled="transitioning"
+              data-testid="dc-resume-session"
+              @click="transitionSession('IN_PROGRESS')"
+            >
+              {{ t("s01.discovery.resumeSession") }}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              :disabled="transitioning"
+              data-testid="dc-complete-session"
+              @click="transitionSession('COMPLETED')"
+            >
+              {{ t("s01.discovery.completeSession") }}
+            </Button>
+          </div>
+        </Card>
+
         <Card class="dc-section" data-testid="dc-findings">
           <template #header>
             {{
@@ -444,4 +532,10 @@ function verificationTone(
   font-size: var(--font-size-caption);
   color: var(--ws-text-secondary);
 }
+
+.dc-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 </style>

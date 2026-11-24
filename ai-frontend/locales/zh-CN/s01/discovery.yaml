@@ -17,6 +17,15 @@ discovery:
   questionsTitle: 阻塞问题（未答 {open} / 共 {total}）
   questionsEmpty: 该会话暂无问题。
   answerNote: 问题答复入口尚未在页面开放；答复后状态与回答会显示在此。
+  sessionActionsTitle: 会话处理
+  reviewRequiredNotice: >-
+    该会话已进入待人工复核：发现已全部裁决，等你确认结果。复核前 AI
+    不会继续处理会话内的新消息；退回或完结后才会恢复。
+  needsInputNotice: 该会话在等你输入：回答阻塞问题后 AI 会继续；确认结束后可完结会话。
+  lastRoundError: 最近一轮处理失败（系统会自动重试）
+  resumeSession: 退回继续访谈
+  completeSession: 复核通过并完结
+  transitionConflict: 会话状态已被其他操作推进，已刷新为最新状态。
   verification:
     PENDING: 待确认
     CONFIRMED: 已确认

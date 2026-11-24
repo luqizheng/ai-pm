@@ -17,12 +17,13 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
-use pm_application::repo::GuardQueryRepo;
+use pm_application::actor::AuditActor;
 use pm_application::discovery::{
     add_finding, add_question, answer_question, defer_question, get_session_detail, list_sessions,
-    record_finding_verification, start_session_from_import, transition_session, DiscoveryError,
-    FindingCreator, NewFinding,
+    record_finding_verification, start_session_from_import, transition_session_with_audit,
+    DiscoveryError, FindingCreator, NewFinding,
 };
+use pm_application::repo::GuardQueryRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -260,7 +261,25 @@ async fn status_handler(
     {
         return resp;
     }
-    match transition_session(&state.pool, principal.tenant_id, session_id, &body.status).await {
+    // 人工处理入口（B03-01：REVIEW_REQUIRED/NEEDS_USER_INPUT 的完结/退回）。
+    // 跃迁与审计同事务；actor 取真实主体。
+    let actor = AuditActor {
+        principal_id: principal.principal_id,
+        identity_id: principal.identity_id,
+        client: None,
+        auth_mode: Some(principal.auth_mode.clone()),
+        claimed_device_id: None,
+    };
+    match transition_session_with_audit(
+        &state.pool,
+        project_id,
+        &actor,
+        principal.tenant_id,
+        session_id,
+        &body.status,
+    )
+    .await
+    {
         Ok(session) => (StatusCode::OK, Json(session)).into_response(),
         Err(err) => discovery_error(err),
     }
