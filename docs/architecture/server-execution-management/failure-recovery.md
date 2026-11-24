@@ -43,7 +43,7 @@ Workspace, Worktree and Git Mirror are explicitly not backed up. Loss is a safet
 Fault injection must prove every ambiguous failure results in no automatic second executor. Recovery may be delayed indefinitely when termination cannot be proven. This is an intentional safety property.
 
 
-## 7. Cross-service recovery additions
+## 7. Cross-service recovery additions (ADR-SEM-25; authentication/revocation per ADR-SEM-22/23)
 
 - Inbox event is acknowledged only after SEM DB commit. SEM DB outage means no ACK and Platform Outbox retry.
 - Duplicate events are deduplicated by `event_id`; duplicate command deliveries by command ID + Run + Generation + target Runner.
