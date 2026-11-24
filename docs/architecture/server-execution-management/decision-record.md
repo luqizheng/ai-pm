@@ -45,11 +45,11 @@
 
 | OQ | 正式裁决 | 实施约束 / 验收门槛 |
 |---|---|---|
-| OQ-1 HIR 载体 | **关闭：采用独立表** `governance.human_intervention_request` | Phase 4 定义字段、唯一活动请求约束、状态迁移与审计；HIR 不替代 `task_interaction` |
+| OQ-1 HIR 载体 | **候选修正：采用独立表** `governance.human_intervention_request` | Phase 0 建立最小可操作 HIR、收件人、通知与受控处置；Phase 4 只扩展高级 handoff；HIR 不替代 `task_interaction` |
 | OQ-2 Codex Resume | **设计关闭，能力验证门槛保留**：默认 `supports_resume=false` | 每个 Harness/版本需在真实环境通过采集、重启、恢复、上下文连续性测试后，才可单独启用；未通过一律 Fresh Attempt |
-| OQ-3 E3 ACK | **关闭：通过认证 WSS 承载 Runner 命令/ACK** | ACK 绑定 run_id、attempt/run 行、lease_generation、command_id、process identity、exit observation；仅在 OS wait/handle 确认进程退出后发送；送达/接收 ACK 不等于终止 ACK |
+| OQ-3 E3 进程证据 | **候选修正：通过认证 WSS 承载 Runner 进程退出事实** | 自然退出、主动终止、lease-loss cleanup、startup cleanup、boot transition 均上报；命令 receipt ACK、command result、E3、continuation consumed 四者分离 |
 | OQ-4 监督模式 | **关闭：默认 `unattended`** | 注册持久化字段；首次注册未提供值时取 unattended；supervised 必须在领取前取得用户确认；在线状态不推导监督模式 |
-| OQ-5 E4 租约卫生 | **关闭：持久化 scheduling shield** | shield 是 claim 与所有自动回收路径共同遵守的 DB 条件；E4 期间不得因 lease expiry 回 queued；不无限续租伪装健康；只通过证据确认死亡或经授权的人工处置解除 |
+| OQ-5 E4 租约卫生 | **候选修正：持久化 Execution Barrier** | Interaction scheduling_shield 保持四值；Execution Barrier 独立承载 E4/E5；E6 是人工风险授权，不是终止证据，旧 Barrier 不释放 |
 | OQ-6 凭据面 | **关闭：纳入执行安全基线并前移至 Phase 0** | 最小权限、短时凭据、可撤销、日志脱敏；终止旧进程后才可确认其进程内凭据失效；无法即时撤销的凭据必须按最坏情况评估外部副作用 |
 | OQ-7 Workspace 备份 | **关闭：不备份 Workspace/Worktree/Git Mirror** | 运行期间单一持久卷；日志/审计/执行状态按各自保留策略持久化；卷丢失不等于进程死亡，所有无法确认的活跃 Run 进入 E4/E5 |
 | OQ-8 双远端 | **关闭：每个 Repository 只有一个权威 `origin`** | SEM 不配置、不同步、不合并第二远端；Git Mirror 从唯一 origin 重建；远端托管/镜像策略不属于 SEM V1 |
@@ -102,3 +102,8 @@
 用户要求将剩余设计一次性提交、后续集中评审。D-01–D-12 已形成完整候选设计包，统一为 Review Pending，详见 `sem-02d-review-package.md` 与 `sem-02d-closure-design-proposal.md`。本节不是 ADR，不改变 A 节已裁决项，也不把候选设计标记为 Ratified。D-13 已由用户批准并登记为 ADR-SEM-26。
 
 评审通过后，仅将用户明确批准的项目登记为新的 ADR；如用户要求修订，先更新设计和所有引用，再记录批准状态。Phase 0 仍未启动。D-12 的代码级凭据注入/继承/泄漏面盘点是 Phase 0 前的强制只读门槛。
+
+
+## I. 十项评审问题的修正状态（2026-11-25，Review Pending）
+
+十项问题经只读核验整体成立。修正设计见 `sem-02d-review-findings-corrective-design.md`。特别注意：本节对 OQ-1/OQ-3/OQ-5 的改写是候选修正，**尚未批准，不改变 ADR-SEM-01–26 已确认记录**。HIR 最小可操作闭环前移 Phase 0；E3 进程退出报告与 Detached reconnect 放入 Phase 1；E6 不是终止证据；Detached 不加入 scheduling_shield；所有派发路径统一 dispatchability predicate。
