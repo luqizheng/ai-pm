@@ -51,7 +51,7 @@ flowchart TD
 ```
 
 - 取值：`platform` | `execution` | `all`（**默认 `all`**——单机开发/部署零行为漂移，独立主机部署时显式设值）。
-- 唯一业务代码改动点：`apps/ai-pm-worker/src/main.rs` 的循环装配处按角色过滤 `tokio::spawn`。
+- **角色装配本身**可集中在 `apps/ai-pm-worker/src/main.rs`；但 Platform–SEM 独立 DB/API 边界不是单文件改动。当前 `run_executor`、`claim`、`worker_command`、执行事件和 `CodexExecutor` 等路径直接依赖 Platform `PgPool`，必须抽取应用层 ports，并分别提供 Platform SQL adapter 与 SEM HTTPS client adapter。禁止把这项服务边界重构误估为只改 main.rs。
 - Greenfield 允许把循环 4 拆成两个显式函数（`run_db_only_round` / `run_execution_round`）再按角色装配，不保留「一个循环内部 if 角色」的纠缠写法。
 - **不拆新二进制**（Phase 1）；常态化后可选派生 `apps/ai-pm-execution-worker`（复用 pm-application/pm-infrastructure，零新依赖）——属 Phase 2 之后的可选项，非必需。
 
