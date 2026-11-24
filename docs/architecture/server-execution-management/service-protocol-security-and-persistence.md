@@ -1,13 +1,13 @@
 # SEM-02C — Service Protocol, Security and Persistence Baseline
 
-- Status: **Proposed architecture baseline for review; not implemented**
+- Status: **User-ratified architecture baseline (ADR-SEM-21–25); not implemented**
 - Scope: Platform ↔ SEM service authentication, Runner ↔ SEM WSS authentication/revocation, Lease Renewal, SEM-owned persistence, idempotency and cross-service recovery.
 - Authority: Platform remains the only authority for Run, Lease, Generation, command business state, HIR and business audit. SEM owns transport and execution-side private state only.
 - Constraints: independent databases; no shared SQL; no Redis/Kafka/RabbitMQ; no Workspace backup; one Git origin; Runner default is unattended.
 
-## 1. Lease Renewal — recommended single path
+## 1. Lease Renewal — ratified single path
 
-### 1.1 Decision proposal
+### 1.1 Ratified decision (ADR-SEM-21)
 
 Use exactly one Lease Renewal path:
 
@@ -67,7 +67,7 @@ Only Platform updates lease expiry and writes the audit event. A duplicate reque
 - SEM may hold the lease token only in process memory long enough to dispatch it over the authenticated WSS connection and relay renewal. It must not persist the token, place it in delivery ledgers, or emit it in logs/traces/errors.
 - Runner receives the token only for the exact Run and Generation. A generation change invalidates it.
 
-## 2. Platform ↔ SEM service authentication
+## 2. Platform ↔ SEM service authentication (ADR-SEM-22)
 
 ### 2.1 Identity model
 
@@ -79,7 +79,7 @@ Service identities are not human principals and must not pass through the ordina
 
 ### 2.2 HTTPS request authentication
 
-Recommended V1 mechanism:
+Ratified V1 mechanism:
 - TLS for every connection.
 - Short-lived asymmetric-signed service JWTs; no shared static bearer secret.
 - Each service has a registered `service_id`, public verification key(s), allowed audience(s), and explicit scopes.
@@ -121,13 +121,13 @@ Retries use the same idempotency key and identical semantic payload. Platform st
 - Service identity disablement and key revocation are audited.
 - If service authentication or key status cannot be established, fail closed for Claim, renewal, command mutation and termination evidence. Do not fall back to shared DB or unauthenticated internal network trust.
 
-## 3. Runner ↔ SEM WSS authentication and revocation
+## 3. Runner ↔ SEM WSS authentication and revocation (ADR-SEM-23)
 
 ### 3.1 Connection establishment
 
 1. Runner authenticates to Platform using its existing registered Client/Device credential through a dedicated Platform connect-ticket endpoint. This does not make the credential a SEM service credential.
 2. Platform verifies device registration, status, tenant/project binding, credential validity and authorization.
-3. Platform issues a short-lived, single-use WSS ticket scoped to the SEM audience and the exact Runner/device identity. The ticket includes `jti`, `kid`, `iat`, `exp`, allowed scopes and the credential/device binding. Recommended ticket lifetime is at most 60 seconds.
+3. Platform issues a short-lived, single-use WSS ticket scoped to the SEM audience and the exact Runner/device identity. The ticket includes `jti`, `kid`, `iat`, `exp`, allowed scopes and the credential/device binding. Ticket lifetime is at most 60 seconds.
 4. Runner opens WSS to SEM and presents the ticket. SEM validates the Platform signature, audience, expiry, scope and device identity, then atomically consumes `jti` in SEM DB. A replayed ticket is rejected.
 5. SEM creates a new `connection_id` and monotonically increasing `connection_epoch`. The authenticated identity is derived from the validated ticket; payload `runner_id` is never trusted as identity.
 
@@ -152,7 +152,7 @@ A WSS handshake is not perpetual authorization.
 - Heartbeat, command receipt ACK, process termination ACK and Lease Renewal are distinct message types.
 - A connection close does not prove Runner process termination.
 
-## 4. SEM database — minimum ownership model
+## 4. SEM database — minimum ownership model (ADR-SEM-24)
 
 SEM DB is a private execution/transport database. It must not mirror Platform business state.
 
@@ -226,7 +226,7 @@ The exact route strings may be finalized during implementation, but the logical 
 | Runner → SEM WSS | `process.terminated` | SEM forwards E3 evidence; Platform remains authoritative |
 | Runner → SEM WSS | `runner.reconnect_sync` | SEM connection state; Platform reconciliation required |
 
-## 7. Design rules
+## 7. Design rules (ADR-SEM-21–25)
 
 1. Platform is the only authority for Run, Lease, Generation, command business state, HIR and business audit.
 2. SEM is the only Runner dispatch/handoff coordinator, not an execution-right authority.
