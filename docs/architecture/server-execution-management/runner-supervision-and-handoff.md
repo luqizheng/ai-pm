@@ -120,3 +120,8 @@ SEM 负责 Runner 注册后的在线连接管理、候选选择、通知、派�
 - Command/Cancel/ACK/E3：经 WSS；Platform 保留命令业务状态，SEM 仅保存投递账本。
 - 业务上下文、Agent Activity、Interaction、结果/交付：Harness → Platform MCP。
 - 接管：SEM 协调停止/隔离旧执行端，等待 E3 或按 E4/E5 保持 shield/HIR；随后通过 Platform 正常 Claim 流程为目标 Runner 申请新 Generation。不得改写 lease owner 或绕过 `lease_client_id`。
+
+
+## 8. 同机多任务的资源准入（D-13 — Proposed）
+
+Runner Supervisor 通过 WSS 定期上报 CPU、内存和 Workspace 实际所在磁盘卷的容量/可用空间。SEM 结合最新资源快照、任务资源画像、现有活动任务和原子资源预留，决定同一台 PC 是否还能接收新任务。资源报告不是 Heartbeat、Lease Renewal 或进程退出证据。资源样本过期/未知时停止新派发，但不杀死现有任务、不释放其预留；内存或磁盘硬阈值不足时拒绝新任务。V1 不自动暂停、终止或迁移运行中的任务。该设计仍待用户确认。
