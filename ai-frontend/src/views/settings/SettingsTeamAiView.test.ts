@@ -25,6 +25,14 @@ const replaceLlmCredential = vi.fn();
 const setLlmProviderStatus = vi.fn();
 const testLlmProvider = vi.fn();
 const deleteLlmProvider = vi.fn();
+// R3/B01-04：目录三面 + 授权清单（TeamModelCatalog 子组件消费）。
+const listLlmModels = vi.fn();
+const createLlmModel = vi.fn();
+const updateLlmModel = vi.fn();
+const listLlmAuthorizations = vi.fn();
+const upsertLlmAuthorizations = vi.fn();
+const listLlmTeamPolicies = vi.fn();
+const setLlmTeamPolicies = vi.fn();
 
 vi.mock("@/api/llm", () => ({
   resolveTenantId: (...args: unknown[]) => resolveTenantId(...args),
@@ -34,7 +42,33 @@ vi.mock("@/api/llm", () => ({
   replaceLlmCredential: (...args: unknown[]) => replaceLlmCredential(...args),
   setLlmProviderStatus: (...args: unknown[]) => setLlmProviderStatus(...args),
   testLlmProvider: (...args: unknown[]) => testLlmProvider(...args),
-  deleteLlmProvider: (...args: unknown[]) => deleteLlmProvider(...args)
+  deleteLlmProvider: (...args: unknown[]) => deleteLlmProvider(...args),
+  listLlmModels: (...args: unknown[]) => listLlmModels(...args),
+  createLlmModel: (...args: unknown[]) => createLlmModel(...args),
+  updateLlmModel: (...args: unknown[]) => updateLlmModel(...args),
+  listLlmAuthorizations: (...args: unknown[]) => listLlmAuthorizations(...args),
+  upsertLlmAuthorizations: (...args: unknown[]) =>
+    upsertLlmAuthorizations(...args),
+  listLlmTeamPolicies: (...args: unknown[]) => listLlmTeamPolicies(...args),
+  setLlmTeamPolicies: (...args: unknown[]) => setLlmTeamPolicies(...args),
+  // 词表常量（组件 import 的值）。
+  LLM_ROLE_KEYS: [
+    "general",
+    "ai_pm_lead",
+    "requirement_analysis",
+    "task_analysis",
+    "risk_analysis",
+    "architecture_analysis",
+    "knowledge_management"
+  ],
+  LLM_CAPABILITIES: [
+    "text_generation",
+    "reasoning",
+    "structured_output",
+    "tool_calling",
+    "vision",
+    "long_context"
+  ]
 }));
 
 vi.mock("@/components/ui/toast", () => ({
@@ -121,7 +155,50 @@ beforeEach(() => {
               : "archived"
       })
   );
+  // R3/B01-04：目录面默认空态（行内启用 Provider 以驱动目录表单下拉）。
+  listLlmProviders.mockResolvedValue({ items: [row()], total: 1 });
+  listLlmModels.mockResolvedValue({ items: [], total: 0 });
+  listLlmTeamPolicies.mockResolvedValue({ items: [] });
+  listLlmAuthorizations.mockResolvedValue({ items: [] });
+  createLlmModel.mockImplementation(
+    (_t: string, body: Record<string, unknown>) => modelRow(body)
+  );
+  upsertLlmAuthorizations.mockResolvedValue({
+    items: [
+      {
+        model_id: "mrow-1",
+        authorization: "team_wide",
+        granted_at: "2026-11-24T00:00:00Z",
+        revision: 1,
+        team_policy_refs: 0,
+        project_override_refs: 0
+      }
+    ]
+  });
+  setLlmTeamPolicies.mockImplementation((_t: string, items: unknown) => ({
+    items
+  }));
 });
+
+function modelRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "mrow-1",
+    provider_id: "id-1",
+    provider_name: "DeepSeek 主力",
+    model_id: "deepseek-chat",
+    display_name: "DeepSeek Chat",
+    capabilities: ["text_generation"],
+    context_window: null,
+    enabled: true,
+    source: "human",
+    last_verified_at: null,
+    revision: 1,
+    created_by: "usr",
+    created_at: "2026-11-24T00:00:00Z",
+    updated_at: "2026-11-24T00:00:00Z",
+    ...overrides
+  };
+}
 
 describe("SettingsTeamAiView（团队 AI 配置）", () => {
   it("路由可达：/settings/team/ai-providers 注册进 buildRoutes", async () => {
@@ -249,5 +326,138 @@ describe("SettingsTeamAiView（团队 AI 配置）", () => {
       "enable",
       1
     );
+  });
+});
+
+// ────────────────────────────── R3/B01-04：模型目录/授权/策略区 ──────────
+
+describe("SettingsTeamAiView（模型目录区）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveTenantId.mockResolvedValue(TENANT_ID);
+    listLlmProviders.mockResolvedValue({
+      items: [row({ status: "enabled" })],
+      total: 1
+    });
+    listLlmTeamPolicies.mockResolvedValue({ items: [] });
+    listLlmAuthorizations.mockResolvedValue({ items: [] });
+    createLlmModel.mockImplementation(
+      (_t: string, body: Record<string, unknown>) => modelRow(body)
+    );
+    upsertLlmAuthorizations.mockResolvedValue({
+      items: [
+        {
+          model_id: "mrow-1",
+          authorization: "team_wide",
+          granted_at: "2026-11-24T00:00:00Z",
+          revision: 1,
+          team_policy_refs: 0,
+          project_override_refs: 0
+        }
+      ]
+    });
+    setLlmTeamPolicies.mockImplementation((_t: string, items: unknown) => ({
+      items
+    }));
+  });
+
+  it("渲染目录行与真实授权态（team_wide → 显示撤销钮）", async () => {
+    listLlmModels.mockResolvedValue({
+      items: [modelRow()],
+      total: 1
+    });
+    listLlmAuthorizations.mockResolvedValue({
+      items: [
+        {
+          model_id: "mrow-1",
+          authorization: "team_wide",
+          granted_at: "2026-11-24T00:00:00Z",
+          revision: 1,
+          team_policy_refs: 0,
+          project_override_refs: 0
+        }
+      ]
+    });
+    const w = await mountAt();
+    await flushPromises();
+
+    expect(listLlmModels).toHaveBeenCalledWith(TENANT_ID);
+    expect(w.find("[data-test='model-catalog']").exists()).toBe(true);
+    expect(w.find("[data-test='catalog-row-deepseek-chat']").exists()).toBe(
+      true
+    );
+    // 已授权 → 撤销钮可见、授权钮不渲染。
+    expect(w.find("[data-test='catalog-revoke-deepseek-chat']").exists()).toBe(
+      true
+    );
+    expect(w.find("[data-test='catalog-grant-deepseek-chat']").exists()).toBe(
+      false
+    );
+  });
+
+  it("未授权行显示授权钮；撤销调真实命令", async () => {
+    listLlmModels.mockResolvedValue({ items: [modelRow()], total: 1 });
+    const w = await mountAt();
+    await flushPromises();
+
+    expect(w.find("[data-test='catalog-grant-deepseek-chat']").exists()).toBe(
+      true
+    );
+    await w
+      .find("[data-test='catalog-grant-deepseek-chat']")
+      .trigger("click");
+    await flushPromises();
+    expect(upsertLlmAuthorizations).toHaveBeenCalledWith(TENANT_ID, [
+      { model_id: "mrow-1", action: "grant" }
+    ]);
+  });
+
+  it("登记模型提交 createLlmModel（provider/model_id 必填）", async () => {
+    const w = await mountAt();
+    await flushPromises();
+
+    // Provider 下拉（reka-ui portal）：选「DeepSeek 主力」。
+    await w
+      .find("[data-test='model-catalog'] [role='combobox']")
+      .trigger("pointerdown");
+    await flushPortal();
+    const option = Array.from(
+      document.body.querySelectorAll("[role='option']")
+    ).find(el => el.textContent?.includes("DeepSeek 主力"));
+    option!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    await flushPortal();
+
+    await w
+      .find("[data-test='catalog-add-model-id'] input")
+      .setValue("deepseek-reasoner");
+    await w.find("[data-test='catalog-add-submit']").trigger("click");
+    await flushPromises();
+
+    expect(createLlmModel).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({
+        provider_id: "id-1",
+        model_id: "deepseek-reasoner",
+        display_name: "deepseek-reasoner"
+      })
+    );
+  });
+
+  it("未配置 general 策略显示缺口警告；保存策略按七 Role 提交", async () => {
+    const w = await mountAt();
+    await flushPromises();
+
+    expect(
+      w.find("[data-test='catalog-general-missing']").exists()
+    ).toBe(true);
+    await w.find("[data-test='catalog-policies-save']").trigger("click");
+    await flushPromises();
+    expect(setLlmTeamPolicies).toHaveBeenCalledTimes(1);
+    const items = setLlmTeamPolicies.mock.calls[0][1] as {
+      role_key: string;
+      model_id: string | null;
+    }[];
+    expect(items).toHaveLength(7);
+    expect(items[0]).toEqual({ role_key: "general", model_id: null });
   });
 });

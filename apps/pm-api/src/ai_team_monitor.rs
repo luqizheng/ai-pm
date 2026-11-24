@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, repos::ai_team_monitor_repo, ApiError, ApiResult};
+use crate::support::{repos::ai_team_monitor_repo, require_project_visible, ApiError, ApiResult};
 use pm_application::repo::ai_team_monitor::{AiTeamEventRow, AiTeamMonitorRepo, AiTeamRunRow};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -40,6 +40,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/projects/{project_id}/ai-team/monitor",
             get(monitor_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/ai-readiness",
+            get(readiness_handler),
         )
 }
 
@@ -123,15 +127,18 @@ async fn overview_handler(
     let tenant_id = require_read_access(&state, project_id, &principal).await?;
 
     // ① roles 计数（1 条标量聚合）
-    let (enabled, disabled, templates) =
-        ai_team_monitor_repo(&state.pool).roles_summary(project_id).await?;
+    let (enabled, disabled, templates) = ai_team_monitor_repo(&state.pool)
+        .roles_summary(project_id)
+        .await?;
 
     // ② runs / tasks 计数（2 条聚合）
-    let (active, succeeded_24h, failed_24h) =
-        ai_team_monitor_repo(&state.pool).runs_summary(project_id).await?;
+    let (active, succeeded_24h, failed_24h) = ai_team_monitor_repo(&state.pool)
+        .runs_summary(project_id)
+        .await?;
 
-    let (awaiting_decision, blocked) =
-        ai_team_monitor_repo(&state.pool).tasks_summary(project_id).await?;
+    let (awaiting_decision, blocked) = ai_team_monitor_repo(&state.pool)
+        .tasks_summary(project_id)
+        .await?;
 
     // ③ Provider 绑定态：复用 team_llm::resolve_repo_call_config 的解析语义，
     //    但只读名字与状态，不触碰凭证表（不查密）。项目指定分支严格不回退。
@@ -150,8 +157,9 @@ async fn overview_handler(
         }
         // 未指定：Team 首个 enabled + 有模型（创建序）
         None => {
-            let team_default =
-                ai_team_monitor_repo(&state.pool).team_default_provider(tenant_id).await?;
+            let team_default = ai_team_monitor_repo(&state.pool)
+                .team_default_provider(tenant_id)
+                .await?;
             AiTeamProviderBinding {
                 bound: team_default.is_some(),
                 provider_name: team_default,
@@ -211,4 +219,54 @@ async fn monitor_handler(
         .await?;
 
     Ok(Json(AiTeamMonitorView { runs, events }))
+}
+
+// ── AI 就绪探针（R3 / B01-01）───────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AiReadinessView {
+    /// enabled Provider 实例数（无凭证的 not_configured 不计）。
+    pub provider_enabled_count: i64,
+    /// 目录中 enabled 模型行数（`ai.team_llm_model`）。
+    pub catalog_model_enabled_count: i64,
+    /// 指向 enabled 模型的 team_wide 授权数。
+    pub team_wide_authorization_count: i64,
+    /// Team 级 general 策略行是否存在（worker 选模末级兜底的通过前提）。
+    pub general_policy_set: bool,
+    /// 发送入口的意图路由开关（本进程 env `AI_PM_CONVERSATION_ROUTER`）。
+    ///
+    /// **诚实边界**：回复/访谈两个 worker 循环的开关在 ai-pm-worker 进程内，
+    /// 本 API 如实不观测（不伪造「已就绪」）——`ready=true` 表示模型解析的
+    /// 数据条件齐备；worker 开关属于部署配置面。
+    pub router_enabled: bool,
+    /// 数据面四项全绿（provider/catalog/授权/general 策略）。
+    pub ready: bool,
+}
+
+/// `GET /v1/pm/projects/{id}/ai-readiness`：项目成员可读的 AI 配置就绪探针。
+///
+/// B01-01：默认部署无 Provider 时，前端没有任何信号源能告知「AI 为什么不可
+/// 用」——本端点给出可判定、不伪造的最小事实面（DB 四项 + 本进程路由开关），
+/// 由 chat 面板渲染为引导提示。
+async fn readiness_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> ApiResult<Json<AiReadinessView>> {
+    let tenant_id = require_read_access(&state, project_id, &principal).await?;
+    let (providers, models, authorizations, general) = ai_team_monitor_repo(&state.pool)
+        .llm_readiness_counts(tenant_id)
+        .await?;
+    let router_enabled = std::env::var("AI_PM_CONVERSATION_ROUTER")
+        .map(|v| v.trim().eq_ignore_ascii_case("on"))
+        .unwrap_or(false);
+    let ready = providers > 0 && models > 0 && authorizations > 0 && general > 0;
+    Ok(Json(AiReadinessView {
+        provider_enabled_count: providers,
+        catalog_model_enabled_count: models,
+        team_wide_authorization_count: authorizations,
+        general_policy_set: general > 0,
+        router_enabled,
+        ready,
+    }))
 }

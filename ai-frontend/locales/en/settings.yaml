@@ -541,3 +541,49 @@ settings:
         enabled: Enabled
         disabled: Disabled
         archived: Archived
+    # Model catalog / authorizations / policies (R3/B01-04): activation step 2.
+    catalog:
+      title: Model catalog & policies
+      hint: Register the provider's models, then authorize and map them — AI can reply only when all four hold (provider enabled → model enabled → team-wide authorization → general policy).
+      loading: Loading model catalog…
+      empty: No catalog rows yet — enable a provider first, then register models.
+      loadFailed: Failed to load model catalog
+      saveFailed: Save failed
+      modelAdded: Model registered
+      addModel: Register model
+      providerPlaceholder: Select provider (enabled)
+      modelIdPlaceholder: Model ID (e.g. deepseek-chat)
+      displayNamePlaceholder: Display name (defaults to model ID)
+      contextWindowPlaceholder: Context window (optional)
+      colModel: Model
+      colProvider: Provider
+      colCapabilities: Capabilities
+      colEnabled: Enabled
+      colAuthorization: Authorization
+      on: On
+      off: Off
+      grant: Grant team-wide
+      revoke: Revoke
+      grantDone: Team-wide authorization granted
+      revokeDone: Authorization revoked
+      revokeImpact: "{count} policy/override row(s) still reference this model (not rewritten; resolution will fail — adjust policies too)."
+      policiesTitle: Role model policies
+      generalMissing: The general policy is not configured — model resolution fails without it (general_policy_missing).
+      inheritGeneral: Inherit general
+      savePolicies: Save policies
+      policiesSaved: Policies saved
+      capabilities:
+        text_generation: Text generation
+        reasoning: Reasoning
+        structured_output: Structured output
+        tool_calling: Tool calling
+        vision: Vision
+        long_context: Long context
+      roles:
+        general: general (fallback)
+        ai_pm_lead: AI project lead
+        requirement_analysis: Requirement analysis
+        task_analysis: Task analysis
+        risk_analysis: Risk analysis
+        architecture_analysis: Architecture analysis
+        knowledge_management: Knowledge management

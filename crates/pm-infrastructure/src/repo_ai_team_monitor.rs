@@ -3,9 +3,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use pm_application::repo::ai_team_monitor::{
-    AiTeamEventRow, AiTeamMonitorRepo, AiTeamRunRow,
-};
+use pm_application::repo::ai_team_monitor::{AiTeamEventRow, AiTeamMonitorRepo, AiTeamRunRow};
 
 /// 无状态连接句柄（`PgPool` 内部是 Arc，clone 廉价）。
 #[derive(Clone)]
@@ -30,10 +28,7 @@ impl AiTeamMonitorRepo for PgAiTeamMonitorRepo {
         Ok(t)
     }
 
-    async fn roles_summary(
-        &self,
-        project_id: Uuid,
-    ) -> Result<(i64, i64, i64), sqlx::Error> {
+    async fn roles_summary(&self, project_id: Uuid) -> Result<(i64, i64, i64), sqlx::Error> {
         let row: (i64, i64, i64) = sqlx::query_as(
             "SELECT \
                (SELECT count(*) FROM ai.project_ai_role \
@@ -48,10 +43,7 @@ impl AiTeamMonitorRepo for PgAiTeamMonitorRepo {
         Ok(row)
     }
 
-    async fn runs_summary(
-        &self,
-        project_id: Uuid,
-    ) -> Result<(i64, i64, i64), sqlx::Error> {
+    async fn runs_summary(&self, project_id: Uuid) -> Result<(i64, i64, i64), sqlx::Error> {
         let row: (i64, i64, i64) = sqlx::query_as(
             "SELECT \
                count(*) FILTER (WHERE status IN ('queued', 'claimed', 'running')), \
@@ -67,10 +59,7 @@ impl AiTeamMonitorRepo for PgAiTeamMonitorRepo {
         Ok(row)
     }
 
-    async fn tasks_summary(
-        &self,
-        project_id: Uuid,
-    ) -> Result<(i64, i64), sqlx::Error> {
+    async fn tasks_summary(&self, project_id: Uuid) -> Result<(i64, i64), sqlx::Error> {
         let row: (i64, i64) = sqlx::query_as(
             "SELECT \
                count(*) FILTER (WHERE status = 'awaiting_decision'), \
@@ -112,6 +101,29 @@ impl AiTeamMonitorRepo for PgAiTeamMonitorRepo {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|(name,)| name))
+    }
+
+    async fn llm_readiness_counts(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<(i64, i64, i64, i64), sqlx::Error> {
+        let row: (i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT \
+               (SELECT count(*) FROM ai.team_llm_provider \
+                 WHERE tenant_id = $1 AND status = 'enabled'), \
+               (SELECT count(*) FROM ai.team_llm_model \
+                 WHERE tenant_id = $1 AND enabled), \
+               (SELECT count(*) FROM ai.team_llm_model_authorization a \
+                 WHERE a.tenant_id = $1 AND a.state = 'team_wide' \
+                   AND EXISTS (SELECT 1 FROM ai.team_llm_model m \
+                               WHERE m.tenant_id = $1 AND m.id = a.model_id AND m.enabled)), \
+               (SELECT count(*) FROM ai.team_llm_model_policy \
+                 WHERE tenant_id = $1 AND role_key = 'general')",
+        )
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
     }
 
     async fn recent_runs(

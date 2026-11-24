@@ -181,3 +181,164 @@ export function testLlmProvider(teamId: string, providerId: string) {
     `/v1/pm/teams/${teamId}/llm-providers/${providerId}/test`
   );
 }
+
+// ───────────────────────────────── 模型目录/授权/策略（R3 / B01-04）──────────
+//
+// B01-04：后端三面齐全（`/v1/pm/teams/{id}/llm-models*`）但前端零调用——
+// Provider 启用后 worker 报 general_policy_missing，普通用户走 UI 永远无法
+// 激活 AI。以下函数把目录三面接进设置页。
+
+/** 目录模型行（`ai.team_llm_model`）。 */
+export interface LlmModelRow {
+  id: string;
+  provider_id: string;
+  provider_name: string;
+  model_id: string;
+  display_name: string;
+  capabilities: string[];
+  context_window: number | null;
+  enabled: boolean;
+  /** human = 人工登记；其余为登记来源标注（不伪造自动发现）。 */
+  source: string;
+  last_verified_at: string | null;
+  /** 乐观锁：update 必须携带 expected_revision。 */
+  revision: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Team 授权行（`ai.team_llm_model_authorization`）。 */
+export interface LlmAuthorizationRow {
+  model_id: string;
+  /** team_wide = 全团队可用（唯一可用值；缺失 = 未授权，解析拒绝）。 */
+  authorization: string;
+  granted_at: string;
+  revision: number;
+  /** 撤销影响面（只报告不自动改写）：引用该模型的 Team/项目策略行数。 */
+  team_policy_refs: number;
+  project_override_refs: number;
+}
+
+/** Team 策略行（role_key → model；未配置 Role 继承 general）。 */
+export interface LlmPolicyRow {
+  role_key: string;
+  model_id: string | null;
+  model_display_name: string | null;
+  provider_name: string | null;
+  /** 未配置（无行）→ 解析继承 general。 */
+  inherit_general: boolean;
+}
+
+export function listLlmModels(
+  teamId: string,
+  query?: { provider_id?: string; q?: string }
+) {
+  const params = new URLSearchParams();
+  if (query?.provider_id) params.set("provider_id", query.provider_id);
+  if (query?.q) params.set("q", query.q);
+  const qs = params.toString();
+  return http.get<ListResponse<LlmModelRow>>(
+    `/v1/pm/teams/${teamId}/llm-models${qs ? `?${qs}` : ""}`
+  );
+}
+
+export interface CreateLlmModelBody {
+  provider_id: string;
+  model_id: string;
+  display_name: string;
+  capabilities?: string[];
+  context_window?: number;
+}
+
+export function createLlmModel(teamId: string, body: CreateLlmModelBody) {
+  return http.post<LlmModelRow>(`/v1/pm/teams/${teamId}/llm-models`, body);
+}
+
+export interface UpdateLlmModelBody {
+  expected_revision: number;
+  display_name?: string;
+  capabilities?: string[];
+  context_window?: number | null;
+  enabled?: boolean;
+}
+
+export function updateLlmModel(
+  teamId: string,
+  modelRowId: string,
+  body: UpdateLlmModelBody
+) {
+  return http.patch<LlmModelRow>(
+    `/v1/pm/teams/${teamId}/llm-models/${modelRowId}`,
+    body
+  );
+}
+
+/** Team 范围授权（grant/revoke；PUT 全量 upsert 语义按项生效）。 */
+export function upsertLlmAuthorizations(
+  teamId: string,
+  items: { model_id: string; action: "grant" | "revoke" }[]
+) {
+  return http.put<{ items: LlmAuthorizationRow[] }>(
+    `/v1/pm/teams/${teamId}/llm-model-authorizations`,
+    { items }
+  );
+}
+
+export function listLlmTeamPolicies(teamId: string) {
+  return http.get<{ items: LlmPolicyRow[] }>(
+    `/v1/pm/teams/${teamId}/llm-model-policies`
+  );
+}
+
+export function setLlmTeamPolicies(
+  teamId: string,
+  items: { role_key: string; model_id: string | null }[]
+) {
+  return http.put<{ items: LlmPolicyRow[] }>(
+    `/v1/pm/teams/${teamId}/llm-model-policies`,
+    { items }
+  );
+}
+
+/** Role 词表（与后端 ROLE_KEYS 同源顺序；general = 选模末级兜底）。 */
+export const LLM_ROLE_KEYS = [
+  "general",
+  "ai_pm_lead",
+  "requirement_analysis",
+  "task_analysis",
+  "risk_analysis",
+  "architecture_analysis",
+  "knowledge_management"
+] as const;
+
+/** 模型能力词表（与后端 CAPABILITIES 同源；未知能力=空数组，禁止编造）。 */
+export const LLM_CAPABILITIES = [
+  "text_generation",
+  "reasoning",
+  "structured_output",
+  "tool_calling",
+  "vision",
+  "long_context"
+] as const;
+
+/** AI 数据面就绪探针（R3/B01-01；项目成员可读，不含任何密钥）。 */
+export interface AiReadiness {
+  provider_enabled_count: number;
+  catalog_model_enabled_count: number;
+  team_wide_authorization_count: number;
+  general_policy_set: boolean;
+  router_enabled: boolean;
+  ready: boolean;
+}
+
+export function getAiReadiness(projectId: string) {
+  return http.get<AiReadiness>(`/v1/pm/projects/${projectId}/ai-readiness`);
+}
+
+/** Team 授权清单（只回 team_wide 行；R3/B01-04 补的读取面）。 */
+export function listLlmAuthorizations(teamId: string) {
+  return http.get<{ items: LlmAuthorizationRow[] }>(
+    `/v1/pm/teams/${teamId}/llm-model-authorizations`
+  );
+}

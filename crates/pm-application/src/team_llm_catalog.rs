@@ -278,9 +278,7 @@ async fn ensure_provider_writable(
     .await?;
     match status.as_deref() {
         None => Err(TeamLlmError::NotFound),
-        Some("archived") => {
-            Err(TeamLlmError::StatusTransition("provider is archived"))
-        }
+        Some("archived") => Err(TeamLlmError::StatusTransition("provider is archived")),
         Some(_) => Ok(()),
     }
 }
@@ -295,7 +293,9 @@ pub async fn create_model(
     let model_id = req.model_id.trim();
     let display_name = req.display_name.trim();
     if model_id.is_empty() || display_name.is_empty() {
-        return Err(TeamLlmError::Validation("model_id and display_name are required"));
+        return Err(TeamLlmError::Validation(
+            "model_id and display_name are required",
+        ));
     }
     if let Some(w) = req.context_window {
         if w <= 0 {
@@ -390,28 +390,34 @@ pub async fn update_model(
         if display_name.trim().is_empty() {
             return Err(TeamLlmError::Validation("display_name cannot be empty"));
         }
-        sqlx::query("UPDATE ai.team_llm_model SET display_name = $1 WHERE tenant_id = $2 AND id = $3")
-            .bind(display_name.trim())
-            .bind(tenant_id)
-            .bind(model_row_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE ai.team_llm_model SET display_name = $1 WHERE tenant_id = $2 AND id = $3",
+        )
+        .bind(display_name.trim())
+        .bind(tenant_id)
+        .bind(model_row_id)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(caps) = &req.capabilities {
-        sqlx::query("UPDATE ai.team_llm_model SET capabilities = $1 WHERE tenant_id = $2 AND id = $3")
-            .bind(caps)
-            .bind(tenant_id)
-            .bind(model_row_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE ai.team_llm_model SET capabilities = $1 WHERE tenant_id = $2 AND id = $3",
+        )
+        .bind(caps)
+        .bind(tenant_id)
+        .bind(model_row_id)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(ctx) = req.context_window {
-        sqlx::query("UPDATE ai.team_llm_model SET context_window = $1 WHERE tenant_id = $2 AND id = $3")
-            .bind(ctx)
-            .bind(tenant_id)
-            .bind(model_row_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE ai.team_llm_model SET context_window = $1 WHERE tenant_id = $2 AND id = $3",
+        )
+        .bind(ctx)
+        .bind(tenant_id)
+        .bind(model_row_id)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(enabled) = req.enabled {
         sqlx::query("UPDATE ai.team_llm_model SET enabled = $1 WHERE tenant_id = $2 AND id = $3")
@@ -424,7 +430,11 @@ pub async fn update_model(
             &mut tx,
             tenant_id,
             actor,
-            if enabled { "llm_model.enabled" } else { "llm_model.disabled" },
+            if enabled {
+                "llm_model.enabled"
+            } else {
+                "llm_model.disabled"
+            },
             model_row_id,
             Some(json!({ "enabled": enabled })),
         )
@@ -470,13 +480,12 @@ pub async fn upsert_authorizations(
             "revoke" => "revoked",
             _ => return Err(TeamLlmError::Validation("action must be grant or revoke")),
         };
-        let exists: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM ai.team_llm_model WHERE tenant_id = $1 AND id = $2",
-        )
-        .bind(tenant_id)
-        .bind(item.model_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let exists: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM ai.team_llm_model WHERE tenant_id = $1 AND id = $2")
+                .bind(tenant_id)
+                .bind(item.model_id)
+                .fetch_optional(&mut *tx)
+                .await?;
         if exists.is_none() {
             return Err(TeamLlmError::NotFound);
         }
@@ -536,6 +545,49 @@ pub async fn upsert_authorizations(
     Ok(rows)
 }
 
+/// Team 授权清单（R3/B01-04：UI 需要反映真实授权态——PUT 之外此前无读取面）。
+/// 只回 team_wide 行；revoked 行对解析即「无授权」，不出现在清单里。
+pub async fn list_authorizations(
+    pool: &PgPool,
+    tenant_id: Uuid,
+) -> Result<Vec<AuthorizationRow>, TeamLlmError> {
+    let rows: Vec<(Uuid, String, DateTime<Utc>, i64, i64, i64)> = sqlx::query_as(
+        "SELECT a.model_id, a.state, a.granted_at, a.revision, \
+                (SELECT count(*) FROM ai.team_llm_model_policy p \
+                  WHERE p.tenant_id = a.tenant_id AND p.model_id = a.model_id), \
+                (SELECT count(*) FROM ai.project_ai_model_override o \
+                  WHERE o.tenant_id = a.tenant_id AND o.model_id = a.model_id) \
+         FROM ai.team_llm_model_authorization a \
+         WHERE a.tenant_id = $1 AND a.state = 'team_wide' \
+         ORDER BY a.granted_at DESC, a.model_id",
+    )
+    .bind(tenant_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                model_id,
+                authorization,
+                granted_at,
+                revision,
+                team_policy_refs,
+                project_override_refs,
+            )| {
+                AuthorizationRow {
+                    model_id,
+                    authorization,
+                    granted_at,
+                    revision,
+                    team_policy_refs,
+                    project_override_refs,
+                }
+            },
+        )
+        .collect())
+}
+
 // ─────────────────────────────────────────────────────────── 严格可用性校验
 
 /// 写路径与解析链同款口径（§6.1）：enabled ∧ team_wide ∧ Provider enabled。
@@ -562,7 +614,9 @@ async fn ensure_model_usable(
         return Err(TeamLlmError::Validation("model is disabled"));
     }
     if authorization.as_deref() != Some("team_wide") {
-        return Err(TeamLlmError::Validation("model is not authorized for projects"));
+        return Err(TeamLlmError::Validation(
+            "model is not authorized for projects",
+        ));
     }
     if provider_status != "enabled" {
         return Err(TeamLlmError::Validation("model's provider is not enabled"));
@@ -590,12 +644,11 @@ pub async fn get_team_policies(
     pool: &PgPool,
     tenant_id: Uuid,
 ) -> Result<Vec<PolicyRow>, TeamLlmError> {
-    let configured: Vec<(String, Uuid, String, String)> = sqlx::query_as(&format!(
-        "{POLICY_SELECT} WHERE pol.tenant_id = $1"
-    ))
-    .bind(tenant_id)
-    .fetch_all(pool)
-    .await?;
+    let configured: Vec<(String, Uuid, String, String)> =
+        sqlx::query_as(&format!("{POLICY_SELECT} WHERE pol.tenant_id = $1"))
+            .bind(tenant_id)
+            .fetch_all(pool)
+            .await?;
     let general_exists = configured.iter().any(|(role, ..)| role == "general");
     let mut rows: Vec<PolicyRow> = configured
         .into_iter()
@@ -799,8 +852,7 @@ pub async fn set_project_overrides(
         }
         match item.model_id {
             Some(model_row_id) => {
-                let provider_id =
-                    ensure_model_usable(&mut tx, tenant_id, model_row_id).await?;
+                let provider_id = ensure_model_usable(&mut tx, tenant_id, model_row_id).await?;
                 if let Some(constrained) = constraint {
                     if provider_id != constrained {
                         return Err(TeamLlmError::Validation(
@@ -864,13 +916,17 @@ pub async fn set_project_overrides(
 #[derive(Debug, thiserror::Error)]
 pub enum ModelResolutionError {
     #[error("{reason}: {detail}")]
-    Configuration { reason: &'static str, detail: String },
+    Configuration {
+        reason: &'static str,
+        detail: String,
+    },
     #[error(transparent)]
     Infrastructure(#[from] sqlx::Error),
 }
 
 /// 四级解析的行取数 JOIN（三级 source 表不同，JOIN 面同构）。
-const RESOLVE_JOINS: &str = "JOIN ai.team_llm_model m ON m.id = o.model_id AND m.tenant_id = o.tenant_id \
+const RESOLVE_JOINS: &str =
+    "JOIN ai.team_llm_model m ON m.id = o.model_id AND m.tenant_id = o.tenant_id \
     JOIN ai.team_llm_provider p ON p.id = m.provider_id AND p.tenant_id = m.tenant_id \
     LEFT JOIN ai.team_llm_model_authorization a ON a.tenant_id = m.tenant_id AND a.model_id = m.id \
     LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id";

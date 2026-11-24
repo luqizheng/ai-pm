@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { translateError } from "@/api/base";
 import TeamProviderCard from "./TeamProviderCard.vue";
+import TeamModelCatalog from "./TeamModelCatalog.vue";
 import {
   cardFormOf,
   configurationOf,
@@ -487,6 +488,13 @@ onMounted(load);
         />
       </div>
     </div>
+
+    <!-- 模型目录/授权/策略（R3/B01-04）：Provider 启用后 AI 激活的第二步。 -->
+    <TeamModelCatalog
+      v-if="tenantId"
+      :tenant-id="tenantId"
+      :providers="providers"
+    />
   </PageFrame>
 </template>
 
