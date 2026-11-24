@@ -22,7 +22,7 @@
 
 | 子步 | 归属 | 理由 |
 |---|---|---|
-| `claim_and_start` 的 spawn 半边（领取+租约签发+spawn） | **SEM** | spawn 与工作区/pid 必须**同主机**（SEM-01 结论 10） |
+| `claim_and_start` 的执行半边（向 Platform API 请求 claim；成功后 spawn 本机进程） | **SEM** | spawn 与工作区/pid 必须**同主机**（SEM-01 结论 10） |
 | `poll_active_runs`（三证据 poll + 终止确认） | **SEM** | 同上 |
 | `run_cleanup_round`（收尾/失败落库编排） | **SEM** | 需访问本地进程证据 |
 | `cleanup_finished_processes`（终态僵尸兜底 terminate） | **SEM** | terminate 必须在本机 |
@@ -46,7 +46,7 @@
 flowchart TD
     M[ai-pm-worker main] --> R{AI_PM_WORKER_ROLE}
     R -->|platform 默认 all 的 Platform 半边| P[循环 1/2/3/5/6/7/8<br/>+ 循环4 DB-only 子步]
-    R -->|execution| E[循环4 执行子步<br/>claim_and_start spawn 半边<br/>poll_active_runs / run_cleanup_round<br/>cleanup_finished_processes / reclamation<br/>reconcile_orphans]
+    R -->|execution| E[循环4 执行子步<br/>claim request + spawn<br/>poll_active_runs / run_cleanup_round<br/>cleanup_finished_processes / reclamation<br/>reconcile_orphans]
     R -->|all 现状默认| A[P + E 同进程<br/>开发/单机零漂移]
 ```
 
@@ -72,14 +72,17 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant S as Execution role（循环4 执行子步）
     P->>DB: interaction_timeout_sweep / stage_candidates 等
-    S->>DB: claim_and_start（含租约签发，spawn 本机进程）
-    S->>DB: poll_active_runs（三证据 + 终止确认落库）
-    S->>DB: run_cleanup_round / cleanup_finished_processes
-    Note over DB: 调度开关 AI_PM_RUN_DISPATCH：<br/>Platform 角色设 off（不领新 Run）<br/>Execution 角色设 on<br/>回收不受开关影响（现状语义保留）
+    P->>S: Outbox → HTTPS dispatch event
+    S->>P: HTTPS claim request
+    P->>DB: 原子授权 + lease/generation + audit
+    S->>S: spawn / poll / cleanup
+    S->>P: HTTPS execution update / evidence
+    Note over P,S: Platform 是 Run/Lease/Generation 唯一权威；SEM 不访问 Platform DB
 ```
 
-- `AI_PM_RUN_DISPATCH` 门控沿用现状（只门控领取，不门控回收，`main.rs:143-145` 注释即现状语义）。
-- 无人监督领取集中在 Execution 角色；Platform 角色即使误设 `DISPATCH=On`，因不含 spawn 半边也只会空转 claim（claim 成功后无执行器 → 走 NoopExecutor 退避，现状已有该路径）——但**正确配置**是 Platform=off、Execution=on，写进部署清单。
+- `AI_PM_RUN_DISPATCH` 在 SEM 执行角色门控本地调度，不代表 SEM 可直接写 Platform DB。
+- Platform 只在 API 内完成 claim、Lease、Generation 和业务状态事务；SEM 只请求 claim 并在成功后启动进程。
+- 无人监督 Runner 的自动选择由 SEM Scheduler 按 Platform 授权策略和 Runner 能力执行；supervised 仍须用户确认。
 
 ## 5. 角色化后的重复执行风险矩阵
 
@@ -87,6 +90,6 @@ sequenceDiagram
 |---|---|
 | 两个角色同时跑 outbox | §3 单消费者约束 + SEM fail-fast |
 | 两个 execution 实例领同一 Run | 现有 `FOR UPDATE SKIP LOCKED` + 租约互斥，天然安全 |
-| Platform 与 Execution 同时跑 claim 领取 | 配置规约（Platform=DISPATCH off）+ 部署清单校验 |
+| Platform 与 SEM 对 Run 状态形成双写 | Platform API 是唯一写入口；SEM 无 Platform DB 凭据 |
 | B06-D3 被 Platform/Execution 双跑 | 定 SEM 单点；audit `run.orphan_reclaimed` 去重保留为第二道防线（现状已有 NOT EXISTS 去重） |
 | workspace reclamation 双跑 | 只装配在 Execution；三重开关不变 |
