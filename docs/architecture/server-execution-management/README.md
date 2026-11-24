@@ -169,7 +169,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 ## SEM-02D 阻断项关闭提案
 
-- 新增 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md)，对 D-01–D-12 给出可审阅的物理模型、HTTPS/WSS 契约、SEM 七表结构、Ports/Adapters、安全与阶段依赖提案。
+- 新增 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md)，对 D-01–D-13 给出可审阅的物理模型、HTTPS/WSS 契约、SEM 七表结构、Ports/Adapters、安全、资源感知调度与阶段依赖提案。
 - 该文件是 **Proposed / 待用户确认**，不是新 ADR，不改变 ADR-SEM-01–25 的已冻结状态。
 - 当前仍为 `Design In Progress`；Phase 0 未启动。只有用户确认提案并完成跨文档同步复核后，才可将相关 D 项转为 Ratified。
 
