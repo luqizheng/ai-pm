@@ -220,3 +220,8 @@ Platform `worker_command` 是业务命令权威，SEM `command_delivery` 只是�
 **本次最终审查结论：不通过 Design Complete 门槛，但没有发现需要推翻 ADR-SEM-19 至 ADR-SEM-25 总体架构方向的理由。**
 
 当前最重要的下一步是先确定 D-01 的执行安全屏障物理模型。建议将 E4/E5 执行屏障与现有 Interaction `scheduling_shield` 分开建模，并将 HIR 最小持久化提前到 Phase 0；这两项确定后，再把精确 API/WSS/SEM DDL 契约作为一个集中设计批次完成。**Phase 0 仍未启动。**
+
+
+## 9. Follow-up: closure design proposal (2026-11-25)
+
+A separate proposed design package has been added at `sem-02d-closure-design-proposal.md`, covering candidate resolutions for D-01–D-12. This is a design proposal only: it does not alter the original review findings, does not create or ratify new ADRs, and does not mark any blocker closed. The explicit decisions in §14 of that proposal require user confirmation. D-12 additionally requires a current code-level credential inventory. Until the proposal is ratified and a final cross-document review passes, the architecture remains `Design In Progress` and Phase 0 remains not started.
