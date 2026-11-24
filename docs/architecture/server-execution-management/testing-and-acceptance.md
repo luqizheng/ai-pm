@@ -100,7 +100,7 @@ For each exact Harness/version: collect native session ID; controlled supervisor
 > ADR-SEM-21–25 are approved architecture decisions. The tests in §§8–10 are implementation/acceptance gates and remain unpassed until the actual services and integrations exist and pass them.
 
 
-## 11. Resource-aware Runner admission (ADR-SEM-26)
+## 11. Resource-aware Runner admission (ADR-SEM-26 — approved)
 
 - Runner Supervisor reports CPU logical capacity and normalized utilization windows, memory total/available/pressure, and total/free bytes for the actual Workspace volume.
 - Resource reports use authenticated WSS identity, boot_id, monotonic sample_seq and observed_at; stale, duplicate, out-of-order or invalid samples cannot overwrite a newer snapshot.
