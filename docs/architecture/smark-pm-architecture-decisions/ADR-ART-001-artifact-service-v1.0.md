@@ -429,7 +429,7 @@ pm-api 和业务模块只需验证：
 | ART-02 | Artifact Service 基础 Web Server | 独立服务、PostgreSQL、S3、API、SDK、独立 CI |
 | ART-03 | Mermaid Adapter | .mmd 源文件、SVG 输出、校验、安全、Golden Tests |
 | ART-04 | SeeCode Adapter 接入 | 复用既有 vendor 与安全约束，VizSpec 编译和 SVG 输出 |
-| ART-05 | AI-PM 集成与旧数据迁移 | Viewer、业务引用、API 切换、旧 viz.* 数据迁移和回滚 |
+| ART-05 | AI-PM 集成与旧表清理 | Viewer、业务引用、API 切换、Approval/Slot Config 新模型、旧代码依赖移除与 schema 清理 |
 | ART-06 | 运营与增强 | 生命周期、清理、备份恢复、指标、更多 Generator |
 
 每个阶段都必须产出实现证据和验收结果。架构文档不代表功能已经实现。
@@ -445,7 +445,7 @@ pm-api 和业务模块只需验证：
 7. Artifact Service 应独立仓库，还是先在 Monorepo 内独立目录/流水线？比较维护成本与测试隔离效果后给出结论。
 8. 当前 SeeCode Worker 能否平滑迁移到独立服务？Node 运行时、隔离、网络策略和安全门禁由谁负责？
 9. Mermaid 渲染运行时如何在无外网环境输出稳定 SVG？PNG 是否需要浏览器运行时？
-10. 旧 Visualization Artifact 的迁移是否需要保留 ID、版本号、审批历史和下载兼容 URL？
+10. 旧 Visualization 数据迁移已由产品负责人明确取消；新实现切换后旧表如何按部署顺序安全清理，且不丢失 AI-PM 的 Approval / Slot Config 业务职责？
 
 ART-00 不得预先假定对象存储、IAM 适配、迁移设施或独立 CI 已经存在；必须提供代码、配置、部署和测试证据。
 
@@ -467,7 +467,7 @@ ART-00 不得预先假定对象存储、IAM 适配、迁移设施或独立 CI �
 | ART-012 | SeeCode Adapter 遵守 SVG-only 与现有安全签收约束 | P0 |
 | ART-013 | 对象上传、数据库登记和失败恢复具有一致性保障 | P0 |
 | ART-014 | Artifact Viewer 统一、安全地预览与下载 | P1 |
-| ART-015 | 旧 Visualization 数据迁移可审计、可验证、可回滚 | P1 |
+| ART-015 | 旧 viz.* 代码依赖移除与 schema 清理安全、可验证 | P1 |
 
 ## 16. 决策结论
 
@@ -480,6 +480,6 @@ AI-PM 采用 **Artifact Service First**：
 - Mermaid 与 SeeCode 是正式 Generator Adapter；
 - Artifact Service 独立测试、独立发布，AI-PM 通过稳定 API / SDK 使用；
 - Visualization 保留业务投影、VizSpec、Relation Registry 和 Live Graph 能力，持久化产物管理迁移到 Artifact Service；
-- 现有代码与数据必须先审计、再迁移，不允许另建重复设施后长期双轨运行。
+- 现有代码与职责必须先审计；不迁移历史数据。新实现切换后移除旧代码依赖并清理旧表，不允许长期双轨运行。
 
 本基线定义目标架构与边界；具体实施必须经过 ART-00 和 ART-01，不得将本文视为现有功能已经实现的证明。
