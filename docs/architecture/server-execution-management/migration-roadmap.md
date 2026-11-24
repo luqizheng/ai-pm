@@ -29,8 +29,8 @@ flowchart LR
 | **前置条件** | 用户 ratify `sem-02d-closure-design-proposal.md` 中 D-01/D-02，并冻结执行安全屏障、最小 HIR 和证据 API 契约后；可在当前单机先行落地 |
 | **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现）、Platform 执行安全状态/HIR 最小持久化与审计 |
 | **预计修改文件** | 上述执行代码 + 一次 Platform migration（执行安全屏障/HIR 最小记录的正式载体由 SEM-02D 冻结）；`pm-api` 仅在需要暴露安全处置入口时增加最小 API。Phase 0 先确保 E4/E5 有可操作 HIR；Runner E3 远程证据通道在 Phase 1 WSS 完成后启用，之前不得自动重派 |
-| **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；runner cancel ACK 通道改动触到 runner 主循环（需单独测试；可先落 SEM 侧证据前置，E3 通道 Phase 4 补齐——期间 runner 形态全部走 E4 挂起 + 人工） |
-| **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据挂起；②B06-D3：runner 项目排除、E4 不回收、E1/E2 正常回收；③Uncertain 保留（T1 回归）；④generation fencing 回归（旧 token 拒绝）；⑤凭据最小权限、撤销和日志脱敏；⑥q10 系列单独跑（AGENTS.md 第 6 条） |
+| **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；Phase 0 期间远程 Runner 若尚无 E3 通道则进入 E4/E5，但必须由 Phase 0 HIR Inbox 通知并可操作；Phase 1 WSS 上线后才允许使用 Runner E3 自动恢复 |
+| **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据进入可操作 HIR；②B06-D3 与 queued claim 统一检查 shield/barrier；③Lost/卷丢失→E5；④Interaction terminate/continue 在 Runner 与 CodexExecutor 两种执行位置闭环；⑤HIR 通知/收件人/处置；⑥generation fencing；⑦凭据最小权限、撤销和日志脱敏；⑧q10 系列 |
 | **验收标准** | 构造「进程活着 + 租约过期」场景：任何路径都不产生第二个进程；构造「进程死了 + 证据在」场景：下一轮回收成功；全新库迁移链可完整初始化 |
 | **回滚方式** | 还原上述文件并按 Greenfield 策略重整 Migration；Barrier/HIR/通知收件人属于正式 Schema 变更，不得回退成无屏障的旧派发行为 |
 
