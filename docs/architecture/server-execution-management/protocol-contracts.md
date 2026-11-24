@@ -62,15 +62,15 @@ User selection of a Runner is not a claim and grants no execution ownership. The
 These are three distinct signals and must never be conflated:
 
 1. **Runner Supervisor Heartbeat**: Runner sends over WSS to SEM. It proves only that the Runner supervisor loop is alive and maintains connection liveness. It does not itself prove Harness activity or human presence, and does not automatically renew a Lease.
-2. **Lease Renewal**: The exact initiating actor and transport path remain an open design item. The final design must select exactly one path, with Platform alone validating and committing renewal for the exact Runner/device owner, lease proof/token, Run and Generation.
-3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools. It records business/execution activity. Whether this signal participates in the single Lease Renewal path remains to be decided; it must not create a second renewal path.
+2. **Lease Renewal（建议方案）**: Runner Supervisor 通过专用 WSS `lease.renew` 消息发起，SEM 转发到 Platform HTTPS API。Platform 独立校验并提交续租。该方案是本轮建议基线，待用户确认后冻结。
+3. **Agent Activity**: Harness/Agent reports progress through Platform MCP business tools。它只记录业务/执行活动，不续租。
 
 Renewal constraints:
 - renew only for exact current owner, token proof and generation;
 - never clear Scheduling Shield;
 - stale heartbeat/renewal cannot resurrect an old generation;
 - WSS liveness alone never renews a Lease;
-- exactly one renewal path must be selected before implementation; no dual renewal authority may remain.
+- only the dedicated Runner Supervisor WSS renewal request forwarded by SEM may renew; WSS liveness and Agent Activity never renew.
 
 ## 6. Cancellation and E3
 
@@ -104,9 +104,21 @@ Persist protocol version in command/event payloads. Unknown mandatory versions f
 | Runner selection / supervised user confirmation | SEM scheduler + SEM user-notification flow | User intent and SEM coordination; no execution right |
 | Claim | SEM HTTPS → Platform Claim API, then WSS dispatch | Platform transaction grants Lease/Generation |
 | Runner Supervisor Heartbeat | Runner → SEM WSS | SEM connection/liveness record only |
-| Lease Renewal | Runner → SEM WSS → SEM HTTPS → Platform | Platform validates and commits renewal |
+| Lease Renewal | Runner Supervisor → SEM WSS → SEM HTTPS → Platform | Platform validates and commits renewal; this is the proposed single path pending user confirmation |
 | Command delivery / command ACK / cancel / E3 | Platform command intent → SEM WSS → Runner; ACK returns WSS → SEM → Platform API | Platform command business state; SEM transport ledger; Runner OS process observation for E3 |
 | Run/Task context, Agent Activity, Interaction, delivery/result | Harness → Platform MCP | Platform business application services |
 | Recovery / handoff coordination | SEM scheduler + Platform API Claim/recovery operations + WSS | Platform owns lease/generation; HIR and business audit remain Platform |
 
 After migration, remove Runner MCP polling/write paths for Claim, Lease Renewal, command polling/ACK and recovery. Do not retain duplicate control paths. Keep MCP tools needed by Harness for business operations.
+
+
+## 10. Service authentication, WSS ticket and SEM persistence baseline
+
+The proposed detailed baseline is maintained in `service-protocol-security-and-persistence.md`:
+
+- Platform↔SEM: independent service identities, TLS, short-lived asymmetric-signed JWT, exact audience/scope/key ID, key rotation and idempotent request IDs. Service tokens never enter human-principal resolution.
+- Runner↔SEM: Runner first obtains a short-lived, single-use SEM-audience connect ticket from Platform using its registered device credential; SEM validates signature and consumes ticket `jti`. WSS authorization is continuously refreshed by revocation Outbox events and bounded Platform API revalidation.
+- SEM persistence: `inbox_event`, `runner_connection`, `runner_ticket_use`, `dispatch_operation`, `command_delivery`, `platform_delivery`, `process_observation`. These are SEM transport/execution facts, not business state.
+- Claim crash recovery: persist dispatch intent before Claim; use stable `claim_request_id`; Platform atomically persists the idempotency outcome; SEM retries the same request and never blindly creates a second Claim.
+
+These are proposed design constraints, not current implementation facts.
