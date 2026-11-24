@@ -84,9 +84,9 @@ pub struct HarnessCapabilities {
 HIR/重派时：
   harness capabilities.supports_resume
   AND harness_session_id IS NOT NULL
-  AND workspace 可用（设备在位 / SEM 卷完好）
+  AND 原执行端可访问（Runner 设备/SEM 主机在线）\n  AND 所需原生 Session 元数据仍可取得
   AND 原执行权已安全终止（E1/E2/E3 证据）
-  → Resume：新 attempt 带 harness_session_id 启动（executor resume 通道）
+  → Resume：仅在原执行端仍可访问、Harness 原生会话元数据可用且目标版本实测通过时，恢复原 Harness Session；新 Attempt 不得仅凭复制 session id 就假设可跨设备/主机恢复
 否则 → Fresh Attempt：新 task_run 行，supersedes_run_id 链保留血缘，HIR 关联记录
 ```
 
@@ -100,7 +100,7 @@ HIR/重派时：
 
 1. 启动时 `reconcile_orphans`（现状保留）。
 2. Session Manager 投影重建：扫 `status IN ('claimed','running')` 的 task_run → 按 pid 文件（卷持久化后仍在）+ `confirm_termination` 分类：E1/E2 → 走回收（证据前置后的 `recover_lost_run`）；E4/E5 → `Detached`（挂起 + 告警 + HIR）。
-3. children map 是内存态，重启即空——**pid 文件是重启后唯一同主机进程锚点**，这就是 workspace 卷必须持久的结构性原因（SEM-01 结论 10）。
+3. children map 是内存态，重启即空——运行期持久卷中的 pid 文件是同主机重启后的辅助进程锚点；卷仅要求运行期持久化，不做备份。若卷丢失，不能把 PID 证据缺失解释为进程死亡，相关 Run 进入 E4/E5 并隔离。
 4. Runner 侧（用户设备）重启：runner 自身已有 `recover_inflight_run` + 孤儿扫描（SEM-01 ✅），平台侧无需变更。
 
 ## 7. 与 Run / Execution / Attempt 的关系（任务 §五 3）
