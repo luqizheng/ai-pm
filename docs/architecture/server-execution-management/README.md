@@ -123,9 +123,10 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 | operational-runbook.md | 启停、监控、排障和卷丢失处置 |
 | testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
 | migration-roadmap.md | Phase 0–5 实施路线图 |
-| consistency-review.md | 跨文档一致性审查、未冻结项和 SEM-02C 退出条件 |
+| consistency-review.md | 跨文档一致性审查、实施前门槛与 SEM-02D 关闭状态 |
 | code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
 | service-protocol-security-and-persistence.md | ADR-SEM-21–25 的服务协议、安全、SEM 私有持久化、幂等和故障恢复详细基线 |
+| sem-02d-final-architecture-review.md | SEM-02D 最终架构审查结论、12 项阻断项与 Design Complete 门槛 |
 
 ## ADR-SEM-20–25：Runner 控制面与 Platform–SEM 服务协议
 
@@ -148,8 +149,8 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 
 - Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
 - **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02C：ADR-SEM-21–25 已由用户确认并登记；服务协议、安全和持久化设计基线已冻结。全量一致性复审及代码映射细节仍在收口，尚未授权实施。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。`service-protocol-security-and-persistence.md` 是已批准的目标架构基线，不代表已实现。
-- 架构状态：`Design In Progress`；尚未达到 `Design Complete`。
+- **SEM-02D：已完成最终架构一致性审查。ADR-SEM-21–25 继续有效；未发现推翻总体方向的理由，但发现 12 项设计阻断项，尚未达到 Design Complete。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。`service-protocol-security-and-persistence.md` 是已批准的目标架构基线，不代表已实现。
+- 架构状态：`Design In Progress`；SEM-02D 明确不通过 Design Complete 门槛。Phase 0 未启动。
 - 本轮新增 `service-protocol-security-and-persistence.md`，并同步更新 README、决策登记、协议、安全、一致性、代码映射、故障恢复和验收文档；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
 - 未开始 Phase 0 实施。
 
@@ -165,3 +166,7 @@ SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推
 - **ADR-SEM-25**：Claim 和跨服务副作用必须幂等可恢复；Platform Claim 与幂等结果同事务；SEM 不持久化明文 Lease Token。
 
 详细协议与故障语义见 `service-protocol-security-and-persistence.md`。上述是已确认的架构决策，不代表代码已经实现。
+
+## SEM-02D 最终架构审查结论
+
+最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。本轮发现 12 项实施前设计阻断项，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
