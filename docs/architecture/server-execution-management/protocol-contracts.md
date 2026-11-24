@@ -144,3 +144,34 @@ Runner Supervisor reports resource facts over the authenticated Runner–SEM WSS
 SEM stores the latest accepted snapshot in `runner_connection`; `dispatch_operation` stores the task Resource Profile and atomic CPU/memory/Workspace-volume reservation. This does not add an eighth mandatory SEM table. Samples that are stale, duplicated, out of order, invalid, or from an old boot must not overwrite the latest snapshot. Unknown/stale resources block new dispatch only; they do not stop active Runs or release reservations.
 
 Resource reports are distinct from Runner Heartbeat, Lease Renewal and Harness Agent Activity. They never renew a Lease and never prove process start/exit or E1/E2/E3. A resource reservation is released only after definitive Platform Claim rejection (no Lease created) or after the relevant Run reaches a safe terminal/termination disposition. Unknown Claim outcomes retain the reservation and reuse the same `claim_request_id`.
+
+
+## 11. Process-exit evidence and reconnect sync (Review Pending)
+
+WSS V1 adds:
+- `runner.process.exit`: natural exit or observed termination. Required fields: `message_id`, `connection_epoch`, `run_id`, `generation`, `boot_id`, `process_identity`, `exit_outcome`, `observed_at`, `source`, `evidence_digest`; `command_id` is optional for unsolicited/natural exits.
+- `runner.process.reconciled`: after Runner restart, report each prior process as alive / absent-with-proof / unknown. Unknown is never converted to exit evidence.
+- `runner.reconnect_sync`: current boot identity, active process inventory and pending local evidence spool references.
+
+The Runner writes evidence to a local durable spool before WSS transmission and deletes/marks it delivered only after SEM has durably acknowledged it. Spool lives in Runner state storage, not a reclaimable per-Run Workspace. Lease expiry and stale Generation do not block reporting historical process facts; Platform accepts them only as evidence for the exact Run+Generation and does not allow them to mutate a newer generation.
+
+E3 requires OS-observed exit for the exact process identity. Command receipt ACK and command result are separate. Natural exit, command termination, lease-loss cleanup, startup orphan cleanup, shutdown and boot-transition reconciliation must all report. If OS boot identity or process identity cannot be verified, classify E5.
+
+## 12. Interaction command execution contract (Review Pending)
+
+Interaction terminate/continue commands must have exactly one execution adapter for the Run's execution placement:
+- Remote Runner: Platform business command → SEM durable `command_delivery` → Runner WSS → Runner Supervisor.
+- SEM-local CodexExecutor: Platform business command → SEM local Execution Control Port → CodexExecutor/Harness adapter.
+
+Both adapters implement terminate, continue-with-response, process-exit reporting and continuation-consumption reporting. A command must not be marked delivered/acked merely because no consumer exists. Continue injects checkpoint + response and by default starts a Fresh Harness Session; it is not Native Session Resume. `supports_resume=false` remains the default until tested.
+
+Platform `worker_command` remains business command state; SEM `command_delivery` is remote transport state. For local execution, the same command result/evidence semantics apply without pretending a WSS delivery occurred. Command receipt, command result, E3 and continuation consumption are independent acknowledgements.
+
+## 13. Notification and dispatchability requirements (Review Pending)
+
+- `interaction.created` and HIR creation append notification Outbox events in the same transaction as their business records.
+- Notification recipient resolution and per-recipient delivery status are explicit; project-level unassigned inbox is the fail-visible fallback.
+- 120-second Interaction deadline is not notification delay.
+- All Platform Claim/recovery/requeue paths use the same dispatchability predicate and check both Interaction shield and Execution Barrier, including queued Runs and B06-D3.
+
+See [corrective design](./sem-02d-review-findings-corrective-design.md).
