@@ -9,7 +9,7 @@
 |---|---|---|---|
 | SEM（worker spawn） | Session Manager + CodexExecutor（同主机） | SEM 宿主机进程 | pid 文件 / children map / 三证据 poll |
 | Client Runner（有人监督） | 用户（人) | 用户设备进程 | 租约/心跳/命令通道/自报 |
-| Client Runner（无人监督） | 平台（弱监督：只有心跳） | 用户设备进程 | 同上，且失联时只能走 HIR |
+| Client Runner（无人监督） | SEM + Runner Supervisor | 用户设备进程 | WSS heartbeat + generation-bound process-exit evidence；失联且无证据走 E4/E5 + HIR |
 
 **默认监督模式**：Runner 注册缺省为 `unattended`；只有明确配置 `supervised` 才走领取前用户确认。监督模式与在线/忙碌状态正交。
 
@@ -107,8 +107,8 @@ sequenceDiagram
 
 1. 心跳死亡进入 E4 → Run 挂起（`execution-safety.md` R-SAFE-2）→ HIR Created。
 2. 优先恢复判定（`session-manager-design.md` §4.3）：原 Runner 重连且 harness 可 resume → 恢复原 Session。
-3. 不可恢复 → 用户（或值班流程）通过 HIR 决定：终止（Run 终态化）或授权重派（新 Attempt）。
-4. 全程不自动重派——这是与 B06-D3 现状行为的关键差异（现状 >1h 自动回 queued，正是 Phase 0 要修复的点）。
+3. 不可恢复 → 用户（或值班流程）通过 HIR 选择 hold、基于 E1/E2/E3 安全重派，或显式 E6 风险接受（只授权一个 successor，旧 Barrier 仍未证实终止）。
+4. E4/E5 全程不自动重派；只有 E1/E2/E3 可自动安全重派。E6 是独立人工风险授权，不等于进程终止证据。
 
 
 ## 7. Runner 控制面唯一入口（ADR-SEM-20）
