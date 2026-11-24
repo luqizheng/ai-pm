@@ -22,9 +22,9 @@ flowchart LR
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | 无（本 Phase 独立于部署变更，可在当前单机上先行落地） |
-| **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现） |
-| **预计修改文件** | `crates/pm-application/src/run_dispatch/claim.rs`（④ 段证据前置）、`crates/pm-application/src/run_dispatch/lease.rs`（`recover_lost_run` 增加 `TerminationEvidence` 参数）、`crates/pm-application/src/run_executor.rs`（poll 集合纳入「租约过期未确认」；B06-D3 加 runner 排除与证据前置）、`crates/pm-application/src/run_dispatch/port.rs`（RunExecutor 增 `confirm_termination`）、`crates/pm-infrastructure/src/codex_executor.rs`（三证据确认实现）、runner cancel ACK 通道（`apps/ai-pm-runner/src/*` 轻量） |
+| **前置条件** | SEM-02D 关闭执行安全状态载体、HIR 最小实体及证据 API 契约后；可在当前单机先行落地 |
+| **涉及模块** | `pm-application::run_dispatch`（claim 回收分支）、`pm-application::run_executor`（poll 集合扩展、B06-D3、reconcile_orphans）、`pm-infrastructure::codex_executor`（`confirm_termination` 实现）、Platform 执行安全状态/HIR 最小持久化与审计 |
+| **预计修改文件** | 上述执行代码 + 一次 Platform migration（执行安全屏障/HIR 最小记录的正式载体由 SEM-02D 冻结）；`pm-api` 仅在需要暴露安全处置入口时增加最小 API。E3 远程通道尚未验收前，Runner 形态全部走 E4 挂起，不得自动重派 |
 | **风险** | 回收延迟一个 poll 周期（安全换延迟，接受）；runner cancel ACK 通道改动触到 runner 主循环（需单独测试；可先落 SEM 侧证据前置，E3 通道 Phase 4 补齐——期间 runner 形态全部走 E4 挂起 + 人工） |
 | **测试** | ①claim 回收：有 E1/E2 证据才 `recover_lost_run`；无证据挂起；②B06-D3：runner 项目排除、E4 不回收、E1/E2 正常回收；③Uncertain 保留（T1 回归）；④generation fencing 回归（旧 token 拒绝）；⑤凭据最小权限、撤销和日志脱敏；⑥q10 系列单独跑（AGENTS.md 第 6 条） |
 | **验收标准** | 构造「进程活着 + 租约过期」场景：任何路径都不产生第二个进程；构造「进程死了 + 证据在」场景：下一轮回收成功；全新库迁移链可完整初始化 |
@@ -34,13 +34,13 @@ flowchart LR
 
 | 项 | 内容 |
 |---|---|
-| **前置条件** | Phase 0 合并 |
+| **前置条件** | Phase 0 合并；Platform–SEM/Runner HTTPS 与 WSS wire contract、认证及 SEM schema 已冻结 |
 | **涉及模块** | `apps/ai-pm-worker` 装配层、Platform/SEM 服务 API、服务身份与各自数据库 |
 | **预计修改文件** | `apps/ai-pm-worker/src/main.rs`（角色解析 + 循环 4 拆分；SEM 执行角色通过 Platform HTTPS API 请求 claim 和状态迁移，不再使用 Platform DB 连接）；`apps/pm-api` 内部服务 API；Platform Transactional Outbox 投递；SEM 幂等 Inbox 与独立数据库迁移/配置 |
 | **风险** | API 契约遗漏、重复投递、跨服务部分成功；通过幂等键、Inbox、超时重试和对账处理；SEM 误持 Platform DB 凭据必须在部署验收中禁止 |
 | **测试** | 三角色启动冒烟；Outbox 重复/延迟/失败投递；SEM 重启后 Inbox 去重与 API 对账；Platform API 不可达；SEM 不含 Platform DB 凭据；claim 并发与 generation fencing；`all` 开发态回归 |
 | **验收标准** | `role=platform` 保持业务权威；`role=execution` 不装配 Platform outbox handler、不连接 Platform DB，所有 Run/Lease/Generation 写入均经 Platform API；Outbox/API 故障可恢复且无重复执行 |
-| **回滚方式** | 还原 main.rs（单文件） |
+| **回滚方式** | 按角色装配、API adapter、应用层 ports 分别回滚；不得回滚到 SEM 访问 Platform DB 的形态。
 
 ## Phase 2：独立 Docker 部署（运行期持久卷，不做 Workspace 备份）
 
