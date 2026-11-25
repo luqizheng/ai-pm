@@ -88,3 +88,15 @@ Still not closed:
 - Final full 23-document scan for stale prose, diagrams, section numbers and Phase references.
 
 Status remains **Changes Required**. No ADR freeze or Phase 0 authorization.
+
+
+## 7. SEM-02H/02I follow-up and branch-wide terminology check
+
+- SEM-02H added source-level transaction evidence. The current code has a confirmed lock-order inversion candidate: Interaction report is Run→Interaction, while retry/cancel are Interaction→Run. This must be reproduced with two concurrent transactions and fixed before Task Barrier implementation.
+- Current `reconcile_orphans` is not atomic with Task state and does not create Barrier/HIR/notification in one transaction; Phase 0 must use a new Platform DB transactional scanner.
+- SEM-02I consolidates the corrected schema/API candidate. It remains non-normative until the lock graph, complete DDL, notification/governance reader-writer audit and OpenAPI security contract are closed.
+- The review branch has been synchronized with current master; merge base is now `d0e72fa6805aebeadf1b282e430deba493072fd6`. No code or migration changes were introduced.
+- A branch-wide scan of the 30 changed architecture documents found no duplicate numbered section headings after fixing the protocol-contract numbering. Legacy strings such as `process.terminated`, `Done{Lost}` and `human_intervention_request` remain only in explicit superseded/historical or prohibition contexts, not as normative contracts.
+- This was a terminology/heading scan, not a claim that every business reader/writer or transaction path has completed a semantic audit.
+
+Overall status remains **Changes Required / Review Pending**. PR #9 must remain Draft and must not be merged until the remaining P0/P1 items are resolved.
