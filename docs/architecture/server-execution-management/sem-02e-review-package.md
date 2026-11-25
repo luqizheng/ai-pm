@@ -121,3 +121,10 @@ SEM-02F turns the prior open design gaps into concrete candidate contracts:
 - Dispatchability: a single transaction-scoped predicate covers Run creation, claim, recovery and requeue.
 
 These are candidate contracts, not Ratified ADRs or implementation authorization. Remaining blockers: exact DDL and lock-order review; exhaustive direct Run INSERT/notification route audit; API/OpenAPI schemas; and full cross-document conflict elimination.
+
+
+## 9. SEM-02H DDL integrity review
+
+SEM-02H has identified P0 relational defects in SEM-02G: HIR Run-to-Task FK mismatch, missing unique target for the E6 HIR composite FK, a PostgreSQL CHECK NULL loophole allowing Barrier release without an evidence class, and no mandatory formal E6 consultation reference on a risk-accepted Barrier. It also specifies an append-only process evidence ledger, notification Inbox normalization, event-id persistence, continuation race serialization and a required global lock graph.
+
+The review baseline is current master `d0e72fa6805aebeadf1b282e430deba493072fd6`; SEM-02G's original `4bc78620` declaration was stale. **Changes Required** remains the overall status. No migration or Phase 0 authorization.
