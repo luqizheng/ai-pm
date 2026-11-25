@@ -1,5 +1,8 @@
 # Runner Supervision, HIR and Handoff — SEM-02E
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** HIR, E6, Task Barrier and all business intervention/approval semantics belong to AI-PM, not SEM. Any SEM-local state here is infrastructure supervision only. Reconcile this historical proposal against [authority-boundary-decision.md](./authority-boundary-decision.md) before implementation.
 
 
