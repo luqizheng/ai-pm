@@ -646,3 +646,51 @@ The cycle is not hypothetical: two concurrent transactions can hold opposite end
 - J11–J18 remain required and must be supplemented with cross-identity negative tests and a same-Run continuation-generation concurrency test.
 
 Status remains **Changes Required / Audit In Progress**. No production code or migrations changed; this pass only strengthens source evidence and test requirements. PostgreSQL replay/catalog capture and global lock-order closure remain open. No PR merge or Phase 0 authorization.
+
+
+## 16. Ninth audit pass — Product association writer introduces an implicit Task↔Product lock inversion
+
+A source trace found an additional lock-order cycle outside the earlier Run/Interaction/Command cluster.
+
+### 16.1 Claim-side lock order
+
+`run_dispatch/claim.rs` documents and implements the claim order:
+
+1. `core.project FOR UPDATE`
+2. candidate `delivery.task_run FOR UPDATE SKIP LOCKED`
+3. `delivery.task FOR UPDATE`
+4. Product gate locks each associated `core.product` row with `FOR UPDATE OF p`
+
+The Product gate query is in `task_products.rs:262–271`; its caller is the normal claim transaction after Project→Run→Task locks. The claim path therefore holds Task before requesting Product.
+
+### 16.2 Association-write-side lock order
+
+`task_products::add_task_product` currently:
+
+1. Begins a transaction.
+2. Reads Task `project_id` by `task_id + tenant_id` without `FOR UPDATE` (`task_products.rs:127–134`).
+3. Calls `product::assert_product_active`, which locks `core.product` using `FOR UPDATE` (`product.rs:928–940`).
+4. Inserts `delivery.task_product` (`task_products.rs:139–151`).
+
+The INSERT's FK check on `delivery.task_product.task_id → delivery.task(id)` acquires a key-share lock on the referenced Task row. PostgreSQL's key-share lock conflicts with the claim path's Task `FOR UPDATE`.
+
+### 16.3 Concrete deadlock schedule
+
+| Transaction A — Run claim | Transaction B — add Task Product |
+|---|---|
+| Locks Project, Run, then Task FOR UPDATE | |
+| | Locks Product FOR UPDATE in assert_product_active |
+| Reaches Product gate and waits for Product | |
+| | Inserts TaskProduct; FK check waits for Task key-share |
+| **A waits for B's Product lock** | **B waits for A's Task lock** |
+
+This is a concrete lock cycle: Task→Product versus Product→Task (the latter edge is implicit in the FK check, not visible as an explicit SELECT FOR UPDATE). PostgreSQL will abort one transaction as a deadlock victim. This is a new P0 item for the global lock-order audit.
+
+### 16.4 Required closure
+
+- Make Task Product association writers participate in the canonical order by locking and validating the Task row before locking Product; do not rely on a plain Task SELECT followed by Product FOR UPDATE.
+- Audit the withdraw path and every future association mutation for the same Task→Product order and for claim snapshot linearization.
+- Add a deterministic two-connection test that forces the interleaving above and asserts no deadlock after the correction.
+- Include FK key-share edges in the lock graph; an application-only list of explicit FOR UPDATE statements is incomplete.
+
+This pass identifies a source-level deadlock schedule; it does not modify the production code or claim a fix. The Run↔Interaction inversion and all earlier P0s remain open. Status remains **Changes Required / Audit In Progress**; no PostgreSQL replay/catalog capture, global lock-order closure, PR merge or Phase 0 authorization.
