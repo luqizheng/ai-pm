@@ -80,6 +80,7 @@ ART-00 已完成仓库静态代码与文档审计：现有 RustFS/file-service�
 - [ADR-ART-001](ADR-ART-001-artifact-service-v1.0.md)：独立 Artifact Service 架构决策。
 - [ART-00](ART-00-artifact-service-current-state-audit-v1.0.md)：现有代码、存储、IAM 与 Visualization 资产静态审计。
 - [ART-01](ART-01-artifact-service-api-and-data-model-v1.0.md)：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
+- [ART-01 V1 API Errata 001](ART-01-V1-API-ERRATA-001.md)：已确认的 GenerationJob 响应字段、409/413 错误及取消语义增量；与 ART-01 V1.0 一并构成当前有效契约。
 
 ART-01 是目标实施契约，不代表独立服务、SDK、数据库或迁移已经实现。真实 token-service claims、file-service 能力、RustFS 运维状态和 viz.* 数据量必须在 ART-02 取得证据后才能进入实施。
 
