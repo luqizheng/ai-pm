@@ -45,7 +45,7 @@ Phase 0 在 Platform 侧实现 DB-only 周期扫描，不依赖 Worker 重启、
 2. 重验状态、generation、lease、shield、Barrier 和已有证据；
 3. 创建/复用 Task Barrier；
 4. 创建/关联 HIR；
-5. 写审计与 notification Outbox；
+5. 写审计、`integration.notification` Feed 行与 `integration.notification_recipient` 收件人 Inbox 行；
 6. 不把 Run 回 queued，不创建可执行 successor。
 
 扫描必须周期执行、幂等、并发安全、可观测。启动时 reconcile 只能是额外触发器。B06-D3 合并到此机制，不再保留独立回队旁路。
