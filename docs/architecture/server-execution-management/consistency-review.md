@@ -234,3 +234,8 @@ Required ownership model:
 - Task lifecycle and SEM Execution lifecycle remain separate. Process exit and successful cleanup are not business completion evidence.
 
 The old SEM-owned Claim/Lease Renewal/business ACK/Task-HIR-Barrier semantics must be mapped and removed from normative contracts. Historical source-level transaction findings in SEM-02J remain valid evidence about the current ai-pm code; they do not establish that SEM should own those business semantics. No code, migration, API implementation or Phase 0 work is authorized by this revision.
+
+
+### Runner vs SEM local-process ownership clarification
+
+Runner Supervisor owns the local OS process boundary: Harness availability check, launch/attach, prompt injection, process identity, graceful/forced stop and exact process-exit observation. SEM does not remotely own or directly manipulate the Runner's OS process. SEM transports delivery/release instructions, tracks infrastructure delivery state, records Runner-reported observations, manages its own resource reservation and reports infrastructure outcomes to AI-PM. This clarification is part of the authority-boundary decision and replacement protocol draft; it does not change AI-PM's business authority.
