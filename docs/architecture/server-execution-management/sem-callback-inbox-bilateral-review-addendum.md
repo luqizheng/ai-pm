@@ -128,7 +128,7 @@ Confirmed findings:
 5. `delivery.task_run` has `UNIQUE(tenant_id,id)`, `UNIQUE(project_id,id)`, and `run_kind` distinguishes delivery/review.
 6. `delivery.task_run_event` is append-only but its current event-type CHECK does not include `sem_infrastructure_observed`; its current unique index is not a direct execution-sequence uniqueness constraint.
 
-The detailed candidate DDL, JCS payload hash rule, transaction/lock order, and 24-case two-connection PostgreSQL acceptance matrix are recorded in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
+The detailed candidate DDL, JCS payload hash rule, transaction/lock order, and 31-case two-connection PostgreSQL acceptance matrix are recorded in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
 
 Important correction: global event-ID uniqueness is already provided by the Inbox primary key. The missing database invariant is sequence uniqueness per execution, plus the cursor and observation-ledger constraints. The proposed DDL still requires live PostgreSQL catalog capture, empty-database migration replay, and bilateral review before ratification.
 
@@ -143,3 +143,13 @@ Adding `task_run_event_sem_sequence_check` does not extend that allow-list. Post
 Acceptance must prove all original eight event types remain accepted, the new SEM event type is accepted, and an unknown type remains rejected. This is a source-verified migration correctness blocker, not optional hardening.
 
 No migration or runtime source was changed. The DDL remains Draft; live PostgreSQL replay and two-connection tests are still required.
+
+## 8. Replay identity must cover the complete event envelope (2026-11-25)
+
+A follow-up review found that the earlier duplicate rule compared `execution_id`, `execution_event_sequence` and the JCS hash of `payload` only. That is insufficient: an event replay could retain the same payload while changing `event_type`, `schema_version` or `occurred_at`, and be incorrectly acknowledged as a duplicate.
+
+The candidate DDL now preserves the existing payload-level `payload_hash` and adds a SEM-only `event_envelope_hash`. The latter is SHA-256 over RFC 8785 JCS UTF-8 bytes of the complete authenticated event envelope: `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. It excludes HTTP signature headers and transport metadata. Duplicate detection compares the envelope hash plus the stored event type and execution/sequence tuple.
+
+The SEM-specific CHECK requires a lowercase 64-character hex hash for `source='sem'` and NULL for non-SEM events. INBOX-29..31 cover changed event_type, changed schema_version/occurred_at, and equivalent JCS envelopes with different whitespace/member ordering.
+
+This closes the identified design-level equality ambiguity only. It does not prove the Rust JCS implementation, cross-language hash interoperability, database migration correctness or PostgreSQL concurrency behavior. DDL remains Draft / Changes Required; no migration or runtime code was changed.
