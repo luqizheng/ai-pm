@@ -1,5 +1,8 @@
 # Runner Supervision, HIR and Handoff — SEM-02E
 
+> **Authority-boundary revision (2026-11-25):** HIR, E6, Task Barrier and all business intervention/approval semantics belong to AI-PM, not SEM. Any SEM-local state here is infrastructure supervision only. Reconcile this historical proposal against [authority-boundary-decision.md](./authority-boundary-decision.md) before implementation.
+
+
 - Status: Review Pending.
 - Normative baseline: [SEM-02E](./sem-02e-architecture-convergence.md).
 
