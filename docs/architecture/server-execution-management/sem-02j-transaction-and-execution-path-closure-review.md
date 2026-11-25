@@ -761,3 +761,13 @@ This is a new P0 deadlock candidate backed by the exact FK and writer SQL. It mu
 - Include audit-log FK KEY SHARE in the global lock graph and in the catalog replay/capture checklist.
 
 The earlier Task↔Product inversion (§16) and Run↔Interaction inversion (§15) remain open. This pass does not change production code and does not claim a runtime deadlock reproduction. Status remains **Changes Required / Audit In Progress**; no global lock order, PR merge or Phase 0 authorization.
+
+
+### 18.4 Lock-mode alternatives to evaluate (not yet decided)
+
+Two plausible corrections preserve Project lifecycle serialization; neither is selected without PostgreSQL concurrency tests:
+
+1. **Weaken the claim-side Project lock from FOR UPDATE to FOR NO KEY UPDATE.** The claim path only reads Project status; Project identity/key columns are not changed. PostgreSQL's FOR NO KEY UPDATE conflicts with the Project status UPDATE / archive's explicit FOR UPDATE, but is compatible with the KEY SHARE lock taken by the audit-log FK. This may remove the Task→Project audit-FK edge without forcing every Task writer to serialize on an exclusive Project lock. Verify every Project lifecycle writer and all other claim-side assumptions before adopting.
+2. **Acquire Project KEY SHARE before Task locks in affected writers.** This makes the Project edge explicit and early, so a claim holding Project FOR UPDATE waits before the writer acquires Task. It is more invasive across the many Task/Run/Interaction/Command writers and may add contention if the claim retains FOR UPDATE.
+
+Do not combine a local SQL edit with an assumed global fix. The final lock policy must account for all row-lock modes (FOR UPDATE / NO KEY UPDATE / SHARE / KEY SHARE), unique-index waits, FK checks, trigger writes and advisory locks.
