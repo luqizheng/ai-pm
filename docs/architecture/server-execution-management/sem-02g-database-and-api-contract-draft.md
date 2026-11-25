@@ -1,10 +1,11 @@
 # SEM-02G — Database DDL and Service API Contract Draft
 
 - Status: **Draft / Review Pending / Not an approved ADR**.
-- Code/schema baseline: GitHub `master@4bc78620f54440a21a113cf7cdb14964d1a14dcb` (migration baseline); latest branch/master synchronization must be rechecked before implementation.
+- Code/schema baseline used for the original draft: GitHub `master@4bc78620f54440a21a113cf7cdb14964d1a14dcb` (stale). Current review baseline: `master@d0e72fa6805aebeadf1b282e430deba493072fd6`; current schema blobs are recorded in [SEM-02H](./sem-02h-ddl-integrity-and-transaction-review.md).
 - Parent specification: [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md).
 - Purpose: turn SEM-02F candidate entities into concrete PostgreSQL and Platform–SEM/Runner message contracts.
 - This document contains SQL-shaped draft material for review only. It is not a migration file and must not be applied.
+- **SEM-02H found concrete DDL defects and integrity gaps. Read SEM-02H before relying on any SQL below. The affected fragments are not approved or executable.**
 
 ## 1. Verified existing relational keys used by this draft
 
@@ -668,5 +669,6 @@ SEM must persist each incoming process evidence event before acknowledging it. R
 7. Confirm Task status projection when Barrier is created (Blocked vs keeping the last Task status) without using `task_waiting` as a substitute for HIR.
 8. Complete full repository search for every notification reader/writer, every human_intervention writer/reader and every direct Run INSERT.
 9. Re-run all schema/code checks against the latest master immediately before executable Migration authoring.
+10. Close all P0/P1 findings in [SEM-02H](./sem-02h-ddl-integrity-and-transaction-review.md), including the missing HIR composite FK target, Task/Run mismatch, nullable release-evidence CHECK, E6-to-Barrier authorization link and append-only process evidence ledger.
 
 No SQL in this document is executable as-is. No Migration/API/WSS implementation or Phase 0 work is authorized.
