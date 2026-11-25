@@ -5,7 +5,7 @@
 
 ## Platform role
 
-Platform owns all business DB state and DB-only loops: Run/Task transitions, Claim transactions, Lease/Generation, Interaction, HIR, Human Consultation, notification Outbox, worker_command, audit, and **periodic orphan scanner**. The scanner is DB-only and runs periodically on Platform; it must not depend on SEM, Session Manager, Runner availability or process polling.
+Platform owns all business DB state and DB-only loops: Run/Task transitions, Claim transactions, Lease/Generation, Interaction, HIR, Human Consultation, project notification Feed + recipient Inbox rows, worker_command, audit, and **periodic orphan scanner**. The scanner is DB-only and runs periodically on Platform; it must not depend on SEM, Session Manager, Runner availability or process polling.
 
 ## SEM role
 
