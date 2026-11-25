@@ -128,3 +128,12 @@ The new Runner topology must explicitly choose and test the remote verification 
 12. Remote Git verification is tested with a Runner workspace unavailable to the Platform host.
 
 No implementation or migration is authorized by this review.
+
+
+## 6.1 P1 — Remote Git evidence is weaker than local workspace verification
+
+The current D4 remote verifier is selected by lease_owner starting with client:. It checks that the submitted SHA is a remote branch head and that the locked baseline is an ancestor (using a temporary bare clone). Because the Platform host cannot inspect the Runner-local worktree, this path cannot prove the Runner-local working tree HEAD. It also currently echoes the submitted changed_files count rather than calculating the diff from the remote clone.
+
+The new architecture removes the old Runner Claim/lease_owner identity as the natural selector for this path. It must define an explicit execution workspace evidence mode; do not infer it from a credential string prefix. For a remote Runner, the contract should require a unique execution branch/ref to be pushed before submission, bind the submitted SHA to that ref, verify the ref and ancestry on the remote, and calculate changed-file facts from the remote object graph rather than trusting the Harness declaration. If a commit is not pushed or cannot be fetched, submission must be rejected or remain explicitly pending; do not silently fall back to an unverified local claim.
+
+If the product requires proof of the exact local worktree HEAD rather than remote branch state, define a separate Runner-signed attestation and trust model. A plain Harness JSON claim is not independent evidence. Tests must run with AI-PM on a host that cannot access the Runner workspace.
