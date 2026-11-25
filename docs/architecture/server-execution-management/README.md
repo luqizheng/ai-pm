@@ -87,3 +87,8 @@ The fourth pass traced Interaction report/retry/response/consume, Continue and T
 ### SEM-02J fifth audit pass
 
 The fifth pass identified the current migration head as 0059 and inspected late execution-related DDL 0046 and 0053–0059. `human_consultation` lacks composite tenant/project/task scope integrity and cannot by itself encode E6; 0053 enforces one active Run per `lease_client_id`, not per SEM Runner process/connection; 0054 cleanup fencing and 0055–0057 workspace reclamation remain derived-resource ledgers, not process-exit evidence. The 2026-11-15 schema inventory predates these migrations and cannot certify current DDL. Full 0001–0059 replay and catalog capture remain open. See [SEM-02J §12](./sem-02j-transaction-and-execution-path-closure-review.md#12-fifth-audit-pass--current-migration-head-and-late-execution-related-ddl).
+
+
+## Transaction and migration audit
+
+- [SEM-02J Platform Transaction and Execution-Path Closure Audit](./sem-02j-transaction-and-execution-path-closure-review.md) — lock-order, Run creation/dispatch/recovery paths, current migration baseline provenance and late DDL. Status remains **Changes Required / Audit In Progress**; full PostgreSQL replay/catalog capture and global lock-order closure are still open.
