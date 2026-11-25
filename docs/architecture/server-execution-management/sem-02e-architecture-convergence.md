@@ -252,11 +252,11 @@ A read-only fetch of the current migration baseline and application source found
 
 - `governance.human_intervention` currently stores executed intervention actions (veto/rollback/freeze/unfreeze/mode_switch/policy_change/rollback_failed), not open HIR work items. Reuse remains the approved direction, but must preserve the distinction between HIR lifecycle and action history through a deliberate discriminator/refactor.
 - `governance.human_consultation` has four existing states and completeness CHECKs; E6 needs typed decision scope, HIR/Barrier/successor anchors and stronger non-null/unique integrity without weakening ordinary consultation behavior.
-- `integration.notification` is currently a project feed with `read_at`, no explicit recipient or delivery retry ledger. A complete recipient/delivery model remains open.
+- `integration.notification` remains the project Feed with existing `read_at`; SEM-02F proposes `integration.notification_recipient` for per-principal Inbox membership and explicit unassigned queue. Existing Feed readers/writers remain compatible.
 - `delivery.task_run_cleanup` is keyed only by Run and models cleanup lifecycle; it cannot be reused as the multi-process identity/exit-evidence ledger.
-- Platform must persist/fence the active process sequence because Platform owns Lease Renewal and cannot query SEM DB. The authenticated sequence-registration and continuation-consumed API plus idempotent transaction contract is a P0 blocker.
+- Platform must persist/fence the active process sequence because Platform owns Lease Renewal and cannot query SEM DB. SEM-02F now specifies the candidate `delivery.task_run_process` registry, `task_run.active_process_sequence` fence and authenticated registration/continuation/renewal contract; executable SQL/API remains a review blocker.
 
-These findings supersede any wording elsewhere that suggests the existing tables are already a drop-in HIR/E6/notification implementation. The design direction is selected; the exact schema is not frozen.
+These findings supersede any wording elsewhere that suggests the existing tables are already a drop-in HIR/E6/notification implementation. SEM-02F now specifies candidate physical contracts; they remain unratified until the full review and exact SQL/API specification are approved.
 
 
 ## 18. SEM-02F executable contract baseline
