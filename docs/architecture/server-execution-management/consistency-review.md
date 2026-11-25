@@ -190,3 +190,8 @@ SEM-02J §15 traces the production writers for Interaction, Response, ResponseDe
 ## 7. SEM-02J implicit FK lock-order finding
 
 SEM-02J §16 adds a source-confirmed Task→Product versus Product→Task deadlock schedule. Run claim locks Project→Run→Task and then Product; add_task_product locks Product in assert_product_active before inserting TaskProduct, whose FK check needs Task key-share. This is a new P0 lock-order blocker. Corrective code and deterministic two-connection tests have not been applied. The global lock order remains unfrozen; Phase 0 remains Not Started.
+
+
+## 8. SEM-02J remaining gate-writer pass
+
+SEM-02J §17 confirms the Task Revision helper relies on callers holding Task FOR UPDATE (or creating the Task and Revision in one transaction); current Task PATCH, TaskReady, Review retry and lease-recovery paths meet that precondition. Task-bound Human Consultation writes TaskWaiting in the same transaction, whose composite FKs enforce the Task's project/tenant identity and whose FK key-share edge serializes against claim's Task FOR UPDATE. Dependency-edge writers acquire the project graph advisory lock then the downstream Task; Run claim serializes on the same Task. The dependency snapshot reader does not lock predecessor Tasks, so its concurrent revision semantics need a two-connection test. The §16 Task↔Product P0 remains open; Phase 0 remains Not Started.
