@@ -50,6 +50,16 @@ A suitable application-level caller model must support HumanCaller and Delegated
 
 Credential delivery remains an open security design item. Prefer a one-time, Runner-bound bootstrap exchange with AI-PM over placing a reusable MCP bearer token in a prompt body. If any bootstrap ticket traverses SEM, it must be cryptographically bound to the intended Runner and unusable by SEM or another Runner; define expiry, one-time redemption, revocation and secret redaction. A Runner-local credential broker/proxy may inject the short-lived MCP token into Harness requests without exposing a reusable human key.
 
+
+
+### 1.1 Existing MCP permission and resource-scope gap
+
+The current pm-api MCP permission gate requires PM_MCP_READ for every MCP request and adds a small per-tool permission map. In apps/pm-api/src/auth.rs, PM_MCP_TASK_UPDATE is explicitly described as unassigned until a task-update tool exists. The current map does not list pm_report_progress or pm_submit_result, even though these tools mutate Run/Task business state; therefore they pass the generic PM_MCP_READ gate rather than a dedicated task-update permission. The new delegated grant must enforce operation-level capabilities in the AI-PM application service, not merely rely on a broad transport permission.
+
+The current pm_get_task_context implementation calls ensure_member(project_id) and then reads the supplied task_ref. This is project-member scope, not a per-execution Task grant. The new Harness context read must validate the exact task_id/run_id/execution_id/authorization_generation tuple on every call and must not allow a project member or Harness to select an unrelated Task by changing task_ref.
+
+The formal review endpoint pm_reviews explicitly calls require_human_principal; this human-only gate must remain in force. A delegated Harness grant must never be accepted as a human review/approval identity.
+
 ## 2. P0 — Two independent fencing domains are required
 
 The replacement protocol currently defines a SEM execution_epoch for Runner binding/release fencing. That epoch is an infrastructure fact and cannot replace AI-PM business authorization fencing.
