@@ -224,7 +224,7 @@ SEM's test suite now has independent Python and Node JCS canonicalizers for the 
 This closes the independent Python/Node test-helper gap for the committed corpus, not the production consumer requirement. AI-PM must still pin a Rust JCS implementation and pass the same vectors plus the shared callback envelope hashes before enabling the callback path.
 
 
-Pre-authentication or malformed callback requests must not cause AI-PM to echo an unverified attacker-supplied `event_id` as an authenticated `X-SEM-Event-Id` correlation value. The generic error response/signature policy for requests without a trustworthy canonical event context remains an explicit bilateral open decision.
+Pre-authentication or malformed callback requests must not cause AI-PM to echo an unverified attacker-supplied `event_id` as an authenticated `X-SEM-Event-Id` correlation value. The bilateral Draft now defines the generic error response/signature boundary in §17 below; it remains subject to deterministic vectors and live middleware verification.
 
 
 ## 16. Rust JCS dependency candidate and MSRV gate
@@ -232,3 +232,19 @@ Pre-authentication or malformed callback requests must not cause AI-PM to echo a
 The dependency evaluation document now compares strict raw-byte JCS candidates. `canonprims-json 0.1.4` is the leading technical candidate because it rejects duplicate members, invalid UTF-8, lone surrogates, non-finite numbers and inexact integer tokens before canonical output, and carries explicit limits plus a shared cross-language conformance corpus. It requires Rust 1.88.0 and is still a very new 0.x project with limited external adoption; it is therefore a spike candidate, not an approved dependency.
 
 AI-PM's Dockerfile currently uses floating `rust:1-slim` and its workspace has no declared MSRV. If the isolated spike passes, AI-PM must pin its builder/toolchain to at least 1.88.0 and declare that floor. SEM's separate candidate workspace currently declares Rust 1.85; it need not change if the canonicalizer remains an AI-PM-only callback Inbox dependency. No Cargo manifest, lockfile, Dockerfile or runtime code was changed. The Rust 1.88 AI-PM build floor is an explicit decision gate.
+
+
+## 17. Authenticated callback errors versus pre-authentication failures
+
+AI-PM's callback ingress must follow the shared D-04 response-class policy:
+
+1. Enforce HTTP framing and the maximum body-byte limit. If the body is rejected before the full raw bytes can be digested and the request signature verified, return only a generic unsigned pre-authentication error. It must contain no Content-Digest/Signature-Input/Signature response headers, no X-SEM-Event-Id, and no message_id/in_reply_to/request_id/event_id in its body.
+2. For an in-limit request, compute Content-Digest over the exact raw bytes and verify the RFC 9421 request signature, key state, timestamp/expiry and nonce freshness/replay before JSON parsing.
+3. After successful authentication, parse strict JSON, reject duplicate decoded member names, validate the callback schema and require the authenticated Idempotency-Key to equal envelope event_id before database processing.
+4. Every response generated after successful authentication—including 200, 400, 404, 409, 422, 429 and 500—must be signed, bind the exact originating request method/authority/path/request Content-Digest, and include exactly one X-SEM-Event-Id equal to the authenticated Idempotency-Key header.
+5. If the body event_id is missing or differs from the signed Idempotency-Key, return signed 400 correlated only to the signed header value. Do not echo the body value and do not open the Inbox transaction.
+6. Application-level 429 is post-authentication, signed and includes mandatory Retry-After. Edge/WAF rate limiting before authentication is outside the API contract and must not reflect protocol IDs.
+7. Unknown/wrong tenant/project/execution and review Run IDs are authenticated non-enumerating 404 responses, signed with the same callback response profile. Same event_id conflicts, sequence conflicts and gaps are signed 409 responses.
+8. If the server cannot sign an authenticated error, it must terminate the response/connection; it must not downgrade to an unsigned response with an authenticated correlation value.
+
+This corrects the prior open-policy note. It is a Draft contract alignment only. AI-PM still needs exact OpenAPI/schema agreement, Rust response verification vectors, and live middleware tests before the callback endpoint is implementation-ready.
