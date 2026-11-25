@@ -212,3 +212,6 @@ This makes INBOX-36..38 executable acceptance requirements. The candidate expres
 ## 14. Signed callback ACK correlation identity
 
 The callback ACK response must carry exactly one signed `X-SEM-Event-Id` header equal to the authenticated callback `event_id`. This is distinct from the Platform→SEM response direction, where `X-SEM-Request-Id` echoes `request_id` (the operation/idempotency identity), not `message_id`. The SEM deterministic response fixture `tests/protocol/fixtures/crypto-vectors-v1.json` at `smark-sem@3df2d35cd6e8066e2aff831506ab1e0b1ddc6395` includes both `http_callback_ack` and `http_error_409`; it binds the exact shared callback envelope bytes to a signed 200 ACK, includes a signed Platform→SEM 409 structured conflict, and Python/Node reject mismatched event/request correlation. AI-PM's callback response contract has been aligned.
+
+
+The signed ACK verifier must also bind the response to the exact originating request context (method, authority, path and request Content-Digest), not merely validate the response signature and event correlation header. SEM's Python/Node fixtures mutate each request-derived component and prove signature verification fails; AI-PM's future Rust/client verifier must preserve the same request context through response verification.
