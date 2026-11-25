@@ -74,7 +74,10 @@ ALTER TABLE delivery.task_run_event
     ADD CONSTRAINT task_run_event_sem_sequence_check
     CHECK (
         event_type <> 'sem_infrastructure_observed'
-        OR length(dedupe_tag) BETWEEN 1 AND 200
+        OR (
+            dedupe_tag IS NOT NULL
+            AND length(dedupe_tag) BETWEEN 1 AND 200
+        )
     );
 
 CREATE UNIQUE INDEX uq_task_run_event_sem_sequence
@@ -107,16 +110,30 @@ Never hash raw HTTP bytes on one side and canonical JSON on the other. HTTP sign
 
 Authenticate the SEM service principal and verify signature/freshness before opening the database transaction. Then:
 
+The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED isolation. If the surrounding transaction is configured at REPEATABLE READ or SERIALIZABLE, a serialization/snapshot conflict requires retrying the entire transaction with the exact same event_id and body; never continue querying inside an aborted transaction.
+
 1. Resolve the candidate Run by tenant_id + project_id + execution_id. Unknown, wrong-tenant, wrong-project, and review-run IDs return non-enumerating 404.
 2. Lock the exact Run row with SELECT FOR UPDATE. Validate delivery run kind and the current infrastructure binding tuple: runner_id, runner_key_version, boot_id, supervisor_instance_id, binding_epoch, plus event-specific process/evidence identity.
-3. Check event_id globally. Same ID + same execution + same sequence + same JCS hash is a duplicate; any changed identity/sequence/hash is 409 IDEMPOTENCY_CONFLICT.
-4. Require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without a matching committed event is conflict; never lower the cursor.
-5. Insert integration.inbound_event with explicit id=event_id, source='sem', service-principal actor, exact tenant/project, execution ID, sequence, JSONB payload, JCS hash, and received status. Do not create an integration.job.
-6. Insert exactly one task_run_event row: event_type='sem_infrastructure_observed', run_id=execution_id, dedupe_tag=decimal(sequence), and detail containing event ID, sequence, type, binding identity, and evidence references.
-7. Advance task_run.execution_event_sequence to the incoming value, guarded by the old cursor.
+3. Check event_id globally. If found, compare execution_id, execution_event_sequence and JCS hash. Exact match is duplicate; any changed tuple is 409 IDEMPOTENCY_CONFLICT.
+4. Check the (execution_id, execution_event_sequence) row. If another event_id already owns the sequence, return 409 EVENT_SEQUENCE_CONFLICT. Then require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without the matching committed event is conflict; never lower the cursor.
+5. Insert the Inbox row using an all-constraint conflict-safe statement, not a plain INSERT:
+
+   INSERT INTO integration.inbound_event (...)
+   VALUES (...)
+   ON CONFLICT DO NOTHING
+   RETURNING id;
+
+   This catches the global event_id primary key and the SEM partial unique execution-sequence index without aborting the transaction. If no row is returned, issue a new SELECT statement (READ COMMITTED obtains a fresh statement snapshot) by global event_id and by (execution_id, execution_event_sequence):
+   - same event_id + same execution + same sequence + same JCS hash → duplicate;
+   - same event_id with any changed tuple/hash → 409 IDEMPOTENCY_CONFLICT;
+   - same execution/sequence with a different event_id → 409 EVENT_SEQUENCE_CONFLICT;
+   - no matching winner on either key → treat as an unexpected integrity invariant violation; rollback and return a generic server error, never ACK.
+   This post-conflict read is a new SQL statement after ON CONFLICT DO NOTHING; it does not rely on querying inside a transaction-aborted state.
+6. For a successful Inbox insert, insert exactly one task_run_event row: event_type='sem_infrastructure_observed', run_id=execution_id, dedupe_tag=decimal(sequence), and detail containing event ID, sequence, type, binding identity, and evidence references. The explicit NOT NULL + length CHECK rejects a missing/NULL dedupe tag.
+7. Advance task_run.execution_event_sequence to the incoming value, guarded by the old cursor. Because all events for one execution lock the same Run row first, same-execution sequence writes serialize; the unique index remains a database backstop.
 8. Commit. Only after commit return the success ACK.
 
-All callback writers use one lock order: Run row → Inbox event → Run observation. No callback path may lock Inbox first and then Run. A unique-index conflict is not automatically success: read the winning row and compare the full identity/hash tuple. Same sequence/different event ID is EVENT_SEQUENCE_CONFLICT; same event ID/different body is IDEMPOTENCY_CONFLICT.
+All callback writers use one lock order: Run row → Inbox event → Run observation. No callback path may lock Inbox first and then Run. A cross-Run global event_id collision is resolved by the conflict-safe insert and the follow-up lookup; it must not attempt to lock the foreign Run or disclose its project/tenant. Same sequence/different event ID is EVENT_SEQUENCE_CONFLICT; same event ID/different body is IDEMPOTENCY_CONFLICT.
 
 ## 6. PostgreSQL two-connection acceptance matrix
 
