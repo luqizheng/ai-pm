@@ -166,7 +166,7 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 35 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 38 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
@@ -179,3 +179,12 @@ SEM now provides a shared callback fixture at `tests/protocol/fixtures/platform-
 The SEM Python and Node validators independently verify exact bytes and hashes. Added INBOX-35: AI-PM's eventual Rust implementation must pass the exact same pinned vector, not a locally recreated approximation. This vector uses ASCII strings and integer values by design; the wider RFC 8785 Unicode/numeric boundary requirements in INBOX-33 remain separate.
 
 The shared vector closes one deterministic cross-language fixture gap, but not the production Rust implementation, dependency selection, raw HTTP duplicate-member rejection, PostgreSQL DDL/concurrency tests or bilateral live callback integration. No runtime code or migration was changed.
+
+
+## 11. PostgreSQL CHECK NULL semantics and SQL grouping correction
+
+The latest review identified two defects in the illustrative SEM Inbox CHECK: regex predicates without explicit `IS NOT NULL` guards can evaluate to UNKNOWN (which PostgreSQL CHECK accepts), and the SEM/non-SEM branches were not correctly grouped in the draft expression.
+
+The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
+
+The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 38 cases.
