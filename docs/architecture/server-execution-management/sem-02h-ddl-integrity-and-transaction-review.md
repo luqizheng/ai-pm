@@ -1,5 +1,7 @@
 # SEM-02H — DDL Integrity and Transaction Review
 
+> **Authority-boundary revision (2026-11-25):** This document evaluates or proposes database/API contracts based on the former SEM-owned Claim/Lease/business-command control model. That model is superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Preserve useful AI-PM source/DDL findings, but do not implement SEM-side business state, Task/HIR/Barrier ownership, or the old API contracts without a new reviewed mapping.
+
 - Status: **Changes Required / Review Pending**.
 - Reviewed draft: [SEM-02G](./sem-02g-database-and-api-contract-draft.md).
 - Current code baseline: GitHub `master@d0e72fa6805aebeadf1b282e430deba493072fd6`.
