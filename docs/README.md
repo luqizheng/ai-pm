@@ -21,6 +21,7 @@
 | 查找 AI-PM 通用 Artifact Service 架构基线 | [ADR-ART-001](architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md) |
 | 查找 Artifact Service 现状审计与仓库拆分建议 | [ART-00 审计报告](architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md) |
 | 查找 Artifact Service API、数据模型和授权契约 | [ART-01 设计基线](architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md) |
+| 查找 ART-01 V1 API 增量契约 | [ART-01 V1 API Errata 001](architecture/smark-pm-architecture-decisions/ART-01-V1-API-ERRATA-001.md) |
 | 查找 Artifact Service 实施前置核验与阻断项（含 lmms v1.8.1 上游源码核验 ART-02A） | [ART-02 核验报告](architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md) |
 | 查找 S01–S05 产品场景与 UI 规格 | [scenarios/](scenarios/) |
 | 查找验收记录 | [acceptance/](acceptance/) |
@@ -75,6 +76,7 @@
 - `architecture/smark-pm-architecture-decisions/ADR-ART-001-artifact-service-v1.0.md`：通用 Artifact Service 的独立部署、数据存储、版本和 Generator 架构基线。
 - `architecture/smark-pm-architecture-decisions/ART-00-artifact-service-current-state-audit-v1.0.md`：现有代码、IAM、存储和 Visualization 资产的静态审计。
 - `architecture/smark-pm-architecture-decisions/ART-01-artifact-service-api-and-data-model-v1.0.md`：V1 API、数据模型、授权委托、file-service Adapter、Generator 和迁移契约。
+- `architecture/smark-pm-architecture-decisions/ART-01-V1-API-ERRATA-001.md`：已确认的 GenerationJob 响应字段、409/413 错误和取消语义增量。
 - `architecture/smark-pm-architecture-decisions/ART-02-artifact-service-pre-implementation-verification-v1.0.md`：实施前置核验报告，含 ART-02A 对 lmms v1.8.1 token-service/file-service 源码、SDK 与 OpenAPI 的核验结果，列出已验证能力、P0 阻断项和环境核验任务。
 - `visualization/ai-pm-viz-27-artifact-service-integration-v1.md`：现有 Visualization 与 Artifact Service 的职责拆分和迁移边界。
 
