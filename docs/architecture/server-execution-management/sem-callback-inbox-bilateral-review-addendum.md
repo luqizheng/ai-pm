@@ -133,3 +133,13 @@ The detailed candidate DDL, JCS payload hash rule, transaction/lock order, and 2
 Important correction: global event-ID uniqueness is already provided by the Inbox primary key. The missing database invariant is sequence uniqueness per execution, plus the cursor and observation-ledger constraints. The proposed DDL still requires live PostgreSQL catalog capture, empty-database migration replay, and bilateral review before ratification.
 
 No implementation or migration is authorized. OI-01..OI-06 remain open.
+
+## 7. DDL re-review — existing Run-event CHECK must be replaced (2026-11-25)
+
+Rechecking the exact current `migrations/0013_task_run_event.sql` reveals a required DDL operation missing from the candidate block: the existing named constraint `task_run_event_type_check` allows exactly eight event types and excludes `sem_infrastructure_observed`.
+
+Adding `task_run_event_sem_sequence_check` does not extend that allow-list. PostgreSQL will still reject the new observation event under the original CHECK. The migration must explicitly drop and recreate `task_run_event_type_check` with the original eight values plus `sem_infrastructure_observed`; the exact forward-only SQL is now included in the DDL design document.
+
+Acceptance must prove all original eight event types remain accepted, the new SEM event type is accepted, and an unknown type remains rejected. This is a source-verified migration correctness blocker, not optional hardening.
+
+No migration or runtime source was changed. The DDL remains Draft; live PostgreSQL replay and two-connection tests are still required.
