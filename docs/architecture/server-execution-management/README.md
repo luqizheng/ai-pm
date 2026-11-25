@@ -82,3 +82,8 @@ The third pass traced normal lease/business writes, existing Runner/Worker contr
 ### SEM-02J fourth audit pass
 
 The fourth pass traced Interaction report/retry/response/consume, Continue and Terminate Command ACK, Continuation lifecycle hooks, lease renewal/progress and cleanup. It confirms the lock graph is connected across Project, Run, Task, Interaction, Command and Continuation; Task cancellation holds Task before Interaction/Run, while several execution/ACK paths hold Run or Command before Task. It adds J11–J18 deterministic concurrency cases. No global lock order is selected. See [SEM-02J §11](./sem-02j-transaction-and-execution-path-closure-review.md#11-fourth-audit-pass--interactioncontinuationcommand-transaction-paths).
+
+
+### SEM-02J fifth audit pass
+
+The fifth pass identified the current migration head as 0059 and inspected late execution-related DDL 0046 and 0053–0059. `human_consultation` lacks composite tenant/project/task scope integrity and cannot by itself encode E6; 0053 enforces one active Run per `lease_client_id`, not per SEM Runner process/connection; 0054 cleanup fencing and 0055–0057 workspace reclamation remain derived-resource ledgers, not process-exit evidence. The 2026-11-15 schema inventory predates these migrations and cannot certify current DDL. Full 0001–0059 replay and catalog capture remain open. See [SEM-02J §12](./sem-02j-transaction-and-execution-path-closure-review.md#12-fifth-audit-pass--current-migration-head-and-late-execution-related-ddl).
