@@ -120,3 +120,8 @@ SEM-02J §18 records a second implicit-FK deadlock candidate: Run claim locks Pr
 
 
 SEM-02J §18.4 records two unselected ways to close the Project→Task / Task→Project audit-FK cycle: evaluate a weaker claim-side Project FOR NO KEY UPDATE lock (still conflicting with Project lifecycle updates but compatible with FK KEY SHARE), or acquire Project KEY SHARE before Task locks in affected writers. Neither is approved pending PostgreSQL lock-mode/concurrency tests.
+
+
+### SEM-02J twelfth audit pass — Project/Product lock-mode cross-check
+
+SEM-02J §19 confirms the current Project lock inventory and narrows the §18 cycle to Task-first audited writers, especially Task PATCH. Project-first archive, formal knowledge/review/Run-start, member and import paths were inspected. The claim-side `FOR NO KEY UPDATE` option remains a candidate—not an approved fix—because it should retain exclusion against explicit Project `FOR UPDATE` lifecycle guards while allowing audit-FK KEY SHARE. Product lifecycle's Product-row lock has no observed reverse Task edge; `add_task_product` remains the Product→Task FK inversion. TaskProduct withdrawal needs a claim-order semantic test. All conclusions are source-derived; PostgreSQL concurrency tests were not run, and P0 findings / Changes Required / Audit In Progress remain open.
