@@ -181,8 +181,8 @@ Consequences:
 For a new business Visualization record:
 
 1. AI-PM validates VizSpec, business references, project authorization, source hashes, nature and slot policy.
-2. AI-PM creates the `viz.artifact` business record (or uses an existing record created by the approved product flow).
-3. AI-PM creates and commits `viz.artifact_service_operation` with a new caller_request_id, Idempotency-Key, request hash and immutable input reference **before** calling Artifact Service.
+2. **In one AI-PM database transaction**, AI-PM creates the `viz.artifact` business draft record and its `viz.artifact_service_operation` row, including a newly generated caller_request_id, Idempotency-Key, canonical request hash and immutable input reference. Both rows commit or roll back together. If the product flow already created the business record, the operation row must still be committed in a local transaction that verifies the business record and enforces the applicable active-operation uniqueness policy.
+3. Only after that transaction commits may AI-PM make the first Artifact Service call. No network call is made while holding the AI-PM database transaction open.
 4. Resolve the slot binding. If absent, create/find the generic Artifact by stable artifact_key and persist the returned ID. If the response is uncertain, use artifact_key lookup; never mint a second logical Artifact.
 5. Do not create a per-business-record ArtifactReference in V1. If a project-level Reference is explicitly required, treat it as optional metadata and do not block generation on it; its replay semantics must be resolved before use.
 6. Submit GenerationJob using the operation's caller_request_id and Idempotency-Key. If response is uncertain, use ART-04A lookup by caller_request_id; never create a replacement operation.
