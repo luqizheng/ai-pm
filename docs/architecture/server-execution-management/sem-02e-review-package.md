@@ -97,3 +97,12 @@ Barrier 作用域 Task；唯一 active 约束；所有新 Run 行创建、claim�
 - 全新空库初始化、并发、重复事件、迟到证据、Worker/SEM/Runner 重启、RabbitMQ 停机均有验收用例。
 
 本轮仍为 Changes Required。Phase 0 未启动。
+
+
+## 7. Additional schema/protocol blockers found after the first rewrite
+
+The current migration baseline proves that the selected reuse direction is not a drop-in mapping. `human_intervention` currently stores intervention actions, `human_consultation` needs E6-specific relational anchors, and `integration.notification` is only a project feed with row-level `read_at`. The detailed evidence and required schema contract are in [sem-02e-schema-and-protocol-gap-register.md](./sem-02e-schema-and-protocol-gap-register.md).
+
+A further P0 is Platform-side active process-sequence fencing: SEM can observe OS process identities, but Platform owns Lease Renewal and cannot query SEM DB. The Platform registration/continuation/renewal sequence contract and persistence shape must be closed before implementation.
+
+The PR remains **Changes Required**. No Phase 0 authorization.
