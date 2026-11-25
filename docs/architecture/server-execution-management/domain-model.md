@@ -10,9 +10,9 @@
 |---|---|---|
 | Task / Run / Lease / Generation | Existing Platform delivery model | Platform is the sole business execution-right authority |
 | Interaction | `delivery.task_interaction` | Agent input/decision/permission lifecycle; not HIR and not process-termination evidence |
-| HIR | Extend `governance.human_intervention` | Execution exception and human-work item; schema extension is proposed and requires complete DDL/consumer audit |
+| HIR | Extend `governance.human_intervention` with `record_kind=action|hir` | Preserve existing intervention action rows; add the seven-state HIR work-item lifecycle with HIR-only fields and one HIR per Barrier |
 | Human Consultation | `governance.human_consultation` | Formal human decision with existing four-state CHECK, decision-completeness CHECK and append-only supersede relation |
-| Notification | Extend `integration.notification` | Project feed and recipient delivery visibility; preserve existing read semantics; recipient/delivery contract remains to be designed |
+| Notification | `integration.notification` + new `integration.notification_recipient` | Preserve project Feed/read_at; child rows provide per-principal Inbox, per-recipient read state and explicit unassigned queue |
 | Execution Barrier | New Platform-owned entity/table or equivalent normalized structure | Task-scoped execution uncertainty; blocks all new Run/Generation dispatch for the Task until safely released or explicitly risk-accepted |
 
 Repository evidence describes the existing `governance.human_intervention` as an execution-intervention/action record (for example veto/rollback/freeze), while `governance.human_consultation` is a separate formal-decision record. Reusing the former as the HIR work-item carrier therefore requires a deliberate schema/domain refactor; it must not silently conflate an action log with an open work queue. Preserve the distinction between HIR lifecycle and individual intervention actions, either through clearly separated fields/child records or a justified redesign documented before migration.
@@ -48,3 +48,8 @@ E6 is a formal risk-acceptance decision recorded through `governance.human_consu
 ## 6. RabbitMQ
 
 RabbitMQ is an existing independent single-instance service without clustering. It is not a business entity or authority. Broker messages never grant execution rights, commit business state, release a Barrier or prove process termination.
+
+
+## 7. Platform process identity persistence
+
+Platform owns the active process sequence used by Lease Renewal. Candidate physical model: `delivery.task_run_process` plus `delivery.task_run.active_process_sequence`. SEM's `process_observation` remains an execution-side observation ledger, not a substitute for Platform's accepted identity fence. See [SEM-02F §6](./sem-02f-executable-physical-and-protocol-contracts.md#6-platform-process-identity-sequence-and-lease-renewal-fence).
