@@ -112,3 +112,8 @@ SEM-02J §16 identifies a new P0 Task↔Product deadlock schedule: Run claim loc
 ## Remaining gate-writer audit
 
 SEM-02J §17 traces Task Revision, TaskReady/Run creation, Human Consultation/TaskWaiting and dependency-gate writers. Normal callers preserve Task ownership through row locks or same-transaction creation; task-bound Consultation also writes TaskWaiting with composite scope FKs. The Task↔Product implicit-FK deadlock in §16 remains open, and predecessor-revision snapshot semantics still need a two-connection test.
+
+
+## Project–Task implicit audit-FK lock cycle
+
+SEM-02J §18 records a second implicit-FK deadlock candidate: Run claim locks Project→Run→Task, while Task PATCH locks Task then inserts governance.audit_log, whose composite FK takes Project key-share. The resulting Project→Task / Task→Project wait cycle requires two-connection PostgreSQL reproduction and a canonical lock-order correction. No production fix has been applied.
