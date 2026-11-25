@@ -771,3 +771,53 @@ Two plausible corrections preserve Project lifecycle serialization; neither is s
 2. **Acquire Project KEY SHARE before Task locks in affected writers.** This makes the Project edge explicit and early, so a claim holding Project FOR UPDATE waits before the writer acquires Task. It is more invasive across the many Task/Run/Interaction/Command writers and may add contention if the claim retains FOR UPDATE.
 
 Do not combine a local SQL edit with an assumed global fix. The final lock policy must account for all row-lock modes (FOR UPDATE / NO KEY UPDATE / SHARE / KEY SHARE), unique-index waits, FK checks, trigger writes and advisory locks.
+
+
+## 19. Twelfth audit pass — Project and Product lock-mode cross-check
+
+This pass expands the Project lock inventory and checks whether the two §18.4 mitigation candidates conflict with existing Project lifecycle writers. It also distinguishes the Task↔Product inversion from Product lifecycle serialization.
+
+### 19.1 Project row-lock inventory
+
+| Writer / path | Project lock behavior | Later relevant lock/write | Audit result |
+|---|---|---|---|
+| Run claim `claim_core_in_project` | Explicit `FOR UPDATE` before Run and Task | Run `FOR UPDATE OF r SKIP LOCKED`, then Task `FOR UPDATE`, Product gate later | Source-confirmed head of Project→Run→Task→Product |
+| Project archive `archive::close_project` | Explicit `FOR UPDATE` | Status close, queued Run cancellation, import finalization, audit | Shares the Project serialization point with claim |
+| Formal knowledge writes / review enqueue / Run start confirmation | `lock_project_activity_tx` uses `FOR UPDATE` | Domain writes / Run transition | Same Project-first order |
+| Project member changes | Explicit `FOR UPDATE` after Team→Tenant | Project-member row changes, then audit | Project is acquired before Project audit FK |
+| Project import lifecycle creation | Explicit `FOR UPDATE` | Import initialization writes | Project-first; no Task-first edge found in the inspected path |
+| Project info update | Direct `UPDATE core.project` (non-key columns) | Inserts Project audit row | UPDATE's row lock is not an explicit `FOR UPDATE`; audit FK KEY SHARE is compatible with the non-key-update lock mode |
+| Task PATCH | No Project lock before Task | Task `FOR UPDATE`, then `governance.audit_log` insert | Remains the concrete reverse Task→Project edge in §18 |
+
+The current source therefore supports a narrow Project→Task cycle through Task PATCH, not a claim that every Project audit writer is inverted. Project member and import writers acquire Project before their downstream writes. Project info update does not first hold a Task/Run/Interaction lock.
+
+### 19.2 Evaluation of the §18.4 Project lock-mode candidate
+
+The candidate claim-side `FOR NO KEY UPDATE` remains structurally plausible for the specific audit-FK cycle:
+
+- It conflicts with the explicit Project `FOR UPDATE` used by archive and `lock_project_activity_tx`, preserving mutual exclusion with those paths.
+- It is compatible with the Project KEY SHARE lock required by the `governance.audit_log` composite FK, so a Task PATCH holding Task would not wait on the claim's Project guard merely to append its audit row.
+- Project info's non-key UPDATE does not add a new reverse Task edge.
+- This is not yet an approved change. The claim lock's exact assumptions, all Project lifecycle transitions, and PostgreSQL row-lock compatibility must be verified in the actual server version with deterministic two-connection tests. Do not weaken the lock based on source reasoning alone.
+
+The alternative—acquiring Project KEY SHARE before Task in every Task-first audited writer—would preserve the current claim `FOR UPDATE`, but requires a complete inventory of all Task/Run/Interaction/Command writers and consistent ordering before their first aggregate lock. It is more invasive and must include direct audit SQL writers, not only the shared helper.
+
+### 19.3 Product lifecycle and TaskProduct mutation cross-check
+
+- `product::set_product_lifecycle` explicitly locks the Product row `FOR UPDATE`, updates its status, and writes `governance.tenant_audit_log`. It does not subsequently lock Task, Run, or Project rows in the inspected transaction.
+- Run claim locks Task before calling `product_gate_denied`, which locks associated Product rows `FOR UPDATE`. Product lifecycle therefore serializes on Product without creating a Product→Task reverse edge.
+- `add_task_product` is different: it locks Product through `assert_product_active`, then inserts `delivery.task_product`; the Task FK check needs Task KEY SHARE while claim holds Task `FOR UPDATE`. This remains the concrete Product→Task half of the §16 P0 cycle.
+- `withdraw_task_product` reads Task without locking it, updates only the association's withdrawal columns, then writes Project audit/activity rows. The inspected UPDATE does not modify FK columns and does not itself add a Task/Product parent-row lock. It therefore does not independently establish the reverse Product→Task edge, but its race with claim's active-association/product snapshot must be tested for intended semantics.
+- The Product lifecycle path and the association mutation path must not be conflated: changing Product status is serialized by the Product row; adding a Task association has the additional Task FK lock edge.
+
+### 19.4 Required test additions
+
+Add the following to the two-connection PostgreSQL matrix:
+
+1. Project claim `FOR NO KEY UPDATE` versus archive `FOR UPDATE`: prove they block and preserve archive/claim linearization.
+2. Project claim `FOR NO KEY UPDATE` versus Task PATCH audit FK KEY SHARE: prove the FK insert no longer waits on the claim's Project guard, while Task lock ordering remains correct.
+3. Existing Task↔Product schedule: claim holds Task then pauses before Product; association add must acquire Task first after correction, and both transactions complete without a deadlock.
+4. Product lifecycle suspend versus Run claim Product gate: preserve the existing intended serialization and verify the claim cannot pass on a stale Product state.
+5. TaskProduct withdraw versus claim: define whether claim observes the association as active based on transaction order; verify snapshot and gate decision agree.
+
+This pass is source-level only. No PostgreSQL server is available in the current audit environment; none of these concurrency schedules has been runtime-executed. The three P0 deadlock candidates in §§15, 16 and 18 remain open; no fix, global lock order, PR merge or Phase 0 authorization is implied. Status remains **Changes Required / Audit In Progress**.
