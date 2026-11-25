@@ -27,6 +27,7 @@
 | 3 | `GET /.well-known/jwks.json` | 仅公钥；内网；kid 轮换双活窗口 ≥ 10 分钟 |
 | 4 | **撤销能力（Q1 已裁决，P0 必做）** | 新迁移：`pm_delegation` + `pm_delegation_revocation` 表（jti 主键、状态、reason、7 天保留）；内部查询端点 `GET /internal/delegation-revocations/{jti}`（service 身份认证，AS 写路径每请求直查，**AI-PM 停机 = AS 写平面 fail-closed 503**——已知情接受）；移出项目/用户禁用/取消 Job 的事务内**批量撤销** active jti；管理员紧急撤销按用户/项目批量 |
 | 5 | artifact-service 客户端 | base URL/超时/Idempotency/`caller_request_id` 注入；凭证=单次 delegation token；错误码 401/403/409/503 透传（503 含 `REVOCATION_UNAVAILABLE`） |
+| — | **AS 侧对端组件状态（2026-11-25，待评审）** | AS 仓库 PR #12 已按契约 v0.2 实现 AI-PM 对端的验证器（V1–V9 + 绑定 claim 解析）、JWKS 缓存策略（§4.2/Q5）、issuer 配置（Q6 恰一项、https 强制）、`DelegationRevocationChecker` 端口（fail-closed 默认）与 23 用例安全测试矩阵——**同样待第二轮评审**；AS 生产默认仍为全拒（空 issuer 清单），AI-PM 侧上线不依赖本轮评审结论 |
 
 ## 3. 与 AS / LMMS 的边界对齐点（红线，R1 更新）
 
