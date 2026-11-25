@@ -63,3 +63,7 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 ## SEM-02H DDL / transaction review
 
 [SEM-02H — DDL Integrity and Transaction Review](./sem-02h-ddl-integrity-and-transaction-review.md) found concrete issues in the SEM-02G SQL-shaped draft. SEM-02G is not executable; do not translate it into migrations before the SEM-02H findings are closed. No implementation is authorized.
+
+## SEM-02I — Corrected Platform Schema and Process API Candidate
+
+[Open SEM-02I](./sem-02i-corrected-platform-schema-and-process-api-candidate.md). This is a candidate design, not an executable migration contract. The lock graph and API scopes remain under review.
