@@ -104,3 +104,17 @@ Still OPEN:
 - full code consumer/route audit.
 
 No migration, API, WSS implementation or Phase 0 work is authorized by this document.
+
+
+## 6. SEM-02F proposed closure of schema decisions
+
+The following proposals now have concrete candidate contracts in [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md):
+
+- HIR: `governance.human_intervention.record_kind=action|hir`; preserve current action rows and add HIR-only fields/state machine. This is preferred over a parallel HIR master table.
+- E6: extend `governance.human_consultation` with typed E6 anchors, residual risk, mitigations and explicit second confirmation; enforce one E6 per Barrier and one successor per E6.
+- Notification: keep `integration.notification` as project Feed and add `integration.notification_recipient` for per-principal Inbox/unassigned queue. V1 in-app notification is inserted in the same Platform transaction; do not require RabbitMQ or a separate delivery worker.
+- Barrier: `delivery.task_execution_barrier`, one unreleased per Task, exact-successor exception only for E6.
+- Process fence: `delivery.task_run_process` plus `task_run.active_process_sequence`; SEM-local process observations are not Platform Lease Renewal authority.
+- Orphan scan: Platform Worker periodic DB-only scanner; the existing code's startup-only call is not sufficient. B06-D3 direct requeue is removed.
+
+These are detailed proposals, not executable SQL. Full route/consumer and direct Run INSERT audit remains a mandatory pre-migration task.
