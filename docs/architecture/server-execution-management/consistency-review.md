@@ -239,3 +239,10 @@ The old SEM-owned Claim/Lease Renewal/business ACK/Task-HIR-Barrier semantics mu
 ### Runner vs SEM local-process ownership clarification
 
 Runner Supervisor owns the local OS process boundary: Harness availability check, launch/attach, prompt injection, process identity, graceful/forced stop and exact process-exit observation. SEM does not remotely own or directly manipulate the Runner's OS process. SEM transports delivery/release instructions, tracks infrastructure delivery state, records Runner-reported observations, manages its own resource reservation and reports infrastructure outcomes to AI-PM. This clarification is part of the authority-boundary decision and replacement protocol draft; it does not change AI-PM's business authority.
+
+
+## 12. Verified Harness MCP context/state-transition gap
+
+The read-only mapping found that current MCP Task state transitions are specialized and coupled to the old Claim/Lease path: pm_report_progress renews the Run lease and first stage=started advances Task to running; pm_submit_result advances Task to submitted; pm_get_run_context exposes the fuller execution contract but requires pm_claim_task's lease token; pm_get_task_context currently exposes only Task fields, latest linked requirement revision and milestone. No generic Task status setter was found in the reviewed MCP tool declarations.
+
+The new architecture must preserve guarded Task transitions through AI-PM MCP while removing the Runner Claim/Lease prerequisite. It needs a complete, project-scoped Harness context read; business progress must be split from infrastructure heartbeat; pm_submit_result authorization must be reworked around the AI-PM execution mapping. Do not add an unrestricted arbitrary Task status setter. See [execution-path-ownership-mapping.md](./execution-path-ownership-mapping.md) §3.1. Source inspection only; no code or runtime behavior changed.
