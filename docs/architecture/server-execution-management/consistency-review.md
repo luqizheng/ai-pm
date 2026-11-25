@@ -62,15 +62,29 @@
 - **ADR-SEM-16 conflict:** old E4 scheduling-shield wording conflicts with the new Task Barrier model. Interaction shield and execution Barrier are distinct and both must be checked by one Platform transaction predicate.
 - **Platform process-sequence fence:** SEM owns OS observations, while Platform owns Lease Renewal. The active process sequence must be registered/advanced through an authenticated Platform API and persisted/fenced by Platform; SEM DB-only sequence state is insufficient.
 - **HIR carrier semantic fit:** repository evidence says current governance.human_intervention records intervention actions (veto/rollback/freeze), not an open work-item lifecycle. Reuse remains the chosen direction, but implementation must explicitly remodel/extend the table without conflating HIR lifecycle and action history.
-- **Notification recipient/delivery:** the existing integration.notification project feed has no established recipient/delivery contract in the reviewed evidence. Recipient, unassigned queue, outbox, retry and read semantics remain OPEN pending full migration + consumer audit.
+- **Notification recipient/delivery:** SEM-02F now specifies preserving `integration.notification` as project Feed and adding `integration.notification_recipient` for per-principal Inbox/unassigned queue. Existing read_at semantics remain unchanged. Exact migration and consumer update remain open.
 
 The review status remains **Changes Required**. These findings are not approved ADRs and do not authorize Phase 0.
 
 
 ## 6. Evidence baseline and unresolved implementation contracts
 
-The schema audit is recorded in [sem-02e-schema-and-protocol-gap-register.md](./sem-02e-schema-and-protocol-gap-register.md). In particular, existing table names do not prove semantic fit: `human_intervention` is action history; `human_consultation` requires E6 typed anchors; `notification` is a project feed without recipient/delivery lifecycle. The exact refactor/extension contract remains OPEN.
+The schema audit is recorded in [sem-02e-schema-and-protocol-gap-register.md](./sem-02e-schema-and-protocol-gap-register.md), with concrete candidate physical contracts in [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md): `human_intervention` discriminator, E6 typed anchors, `notification_recipient`, Task Barrier and Platform process registry. These proposals are not yet approved for migration.
 
-The Platform active process-sequence fence is also OPEN and P0: Platform must persist and validate the active process identity for Lease Renewal and continuation, without reading SEM DB.
+The Platform active process-sequence fence is specified as a candidate in SEM-02F; it remains a P0 approval item until exact DDL, API schemas and lock ordering are reviewed.
 
 Status remains **Changes Required**. The 23-file body audit is not considered complete merely because all files were modified.
+
+
+## 7. SEM-02F cross-document audit status
+
+The following concepts now have a single candidate physical definition in SEM-02F and are referenced by the domain/state/protocol/roadmap/test documents: Task Barrier, HIR discriminator, E6 consultation anchors, Notification Recipient, Platform process identity sequence, periodic Platform DB-only orphan scan, and RabbitMQ non-authoritative boundary.
+
+Still not closed:
+- Full read/write/route audit for every `human_intervention`, `human_consultation` and notification consumer.
+- Exhaustive direct Run INSERT inventory and lock-order review.
+- Executable SQL migration and API/OpenAPI schemas.
+- Historical SEM-02D documents contain intentionally obsolete proposals; each must be clearly marked historical/superseded.
+- Final full 23-document scan for stale prose, diagrams, section numbers and Phase references.
+
+Status remains **Changes Required**. No ADR freeze or Phase 0 authorization.
