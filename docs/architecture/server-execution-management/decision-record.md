@@ -1,5 +1,8 @@
 # 架构决策记录、已关闭问题与验证门槛（decision-record）
 
+> **Authority-boundary revision (2026-11-25):** **Decision register revision (2026-11-25):** ADR-SEM-20/21/24/25 and any other entries that route Platform business Claim/Lease/command/Task authority through SEM are superseded pending re-decision under [authority-boundary-decision.md](./authority-boundary-decision.md). Runner connectivity/authentication, independent service identity, resource telemetry, no shared database, unattended default, workspace non-backup and single-origin decisions remain independently reviewable and are not automatically revoked. Do not implement superseded control contracts.
+
+
 - 性质：Server Execution Management Architecture V1 的正式决策登记。
 - 规则：每条决策 = 结论 + 依据 + 何时可重启/推翻。
 
