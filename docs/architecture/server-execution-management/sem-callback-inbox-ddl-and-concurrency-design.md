@@ -244,6 +244,7 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-36 | SEM Inbox row has `payload_hash = NULL` | CHECK rejects the row; SQL NULL/UNKNOWN must not satisfy SEM hash integrity |
 | INBOX-37 | SEM Inbox row has `event_envelope_hash = NULL` | CHECK rejects the row; SQL NULL/UNKNOWN must not satisfy SEM hash integrity |
 | INBOX-38 | Execute the complete SEM source CHECK against SEM/non-SEM NULL and malformed-hash truth-table cases | DDL parses; only the explicitly permitted SEM/non-SEM row shapes pass; no UNKNOWN result is accepted for SEM rows |
+| INBOX-39 | Optional `correlation_id` is present in one envelope and omitted in another with all other fields equal | Payload hash remains equal; full-envelope hash differs because only schema-defined fields actually present are canonicalized |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
@@ -2517,3 +2518,6 @@ The candidate SQL is corrected to:
 - Preserve the explicit `source IS NOT NULL` guard.
 
 Added INBOX-36..38 for each NULL hash and a complete three-valued-logic/DDL-parse truth table. This correction is documentation-only. The SQL still requires actual PostgreSQL parse/replay and catalog verification; it is not a migration.
+
+
+The shared vector also exercises optional-field identity: its `correlation_id` is present. Independent validators prove that changing its value or omitting it changes the full-envelope hash while leaving the payload hash unchanged. This ensures optional schema fields are included when present and absent fields are not synthesized.
