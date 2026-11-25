@@ -85,7 +85,7 @@ The generic table's current uniqueness is `(project_id, source, idempotency_key)
 The callback must maintain a contiguous `execution_event_sequence` per `execution_id`, independent of Runner journal sequence and WSS transport `message_sequence`.
 
 Candidate minimal storage:
-- Add `sem_last_event_sequence BIGINT NOT NULL DEFAULT 0 CHECK (sem_last_event_sequence >= 0)` to the AI-PM attempt row (`delivery.task_run`).
+- Add `execution_event_sequence BIGINT NOT NULL DEFAULT 0 CHECK (execution_event_sequence >= 0)` to the AI-PM attempt row (`delivery.task_run`).
 - Serialize updates by locking the exact `task_run` row `FOR UPDATE`.
 - Record the SEM event in `integration.inbound_event` and append one `delivery.task_run_event(event_type='sem_infrastructure_observed')` observation in the same transaction. Extend the existing event-type CHECK by a new migration; keep the event table append-only.
 - Set `task_run_event.dedupe_tag = event_id`; store `event_type`, `execution_event_sequence`, `binding_epoch`, payload hash and evidence references in `detail`. Preserve the existing AI-PM `lease_generation` field unchanged; do not overload it with SEM `binding_epoch` because they are different fencing domains.
@@ -98,7 +98,7 @@ Transaction algorithm:
 4. Look up the existing Inbox row by source + event ID:
    - same canonical hash and same sequence → return duplicate ACK with current contiguous cursor;
    - same event ID but different body/sequence → `409 IDEMPOTENCY_CONFLICT`.
-5. Let `expected = task_run.sem_last_event_sequence + 1`:
+5. Let `expected = task_run.execution_event_sequence + 1`:
    - received sequence greater than expected → `409 EVENT_SEQUENCE_GAP`, include `expected_sequence`; do not advance or ACK success;
    - received sequence lower than expected but no matching prior event ID → `409 EVENT_SEQUENCE_CONFLICT`; do not mutate;
    - exact expected sequence → insert Inbox record, append Run observation, update cursor.
@@ -171,8 +171,8 @@ SEM retains the durable event until it receives a valid success ACK. A callback 
 ## 9. Open decisions (must be ratified bilaterally)
 
 - OI-01: Confirm `execution_id == delivery.task_run.id` for one Attempt.
-- OI-02: Ratify reuse of generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), with `task_run.sem_last_event_sequence` and append-only `sem_infrastructure_observed` Run events. Recommendation: reuse the existing shared Inbox and add no parallel table. Source audit confirms `integration.inbound_event.id` is already a global primary key; the missing invariant is uniqueness of `(execution_id, execution_event_sequence)`, not global event-ID uniqueness. See [Exact DDL and Concurrency Design](sem-callback-inbox-ddl-and-concurrency-design.md).
-- OI-03: Ratify the exact `task_run.sem_last_event_sequence` migration, `sem_infrastructure_observed` event CHECK extension, and the `dedupe_tag=event_id` / `detail` payload mapping.
+- OI-02: Ratify reuse of generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), with `task_run.execution_event_sequence` and append-only `sem_infrastructure_observed` Run events. Recommendation: reuse the existing shared Inbox and add no parallel table. Source audit confirms `integration.inbound_event.id` is already a global primary key; the missing invariant is uniqueness of `(execution_id, execution_event_sequence)`, not global event-ID uniqueness. See [Exact DDL and Concurrency Design](sem-callback-inbox-ddl-and-concurrency-design.md).
+- OI-03: Ratify the exact `task_run.execution_event_sequence` migration, `sem_infrastructure_observed` event CHECK extension, and the `dedupe_tag=event_id` / `detail` payload mapping.
 - OI-04: Service principal/key registry and RFC 9421 verification middleware.
 - OI-05: Event retention, cursor compaction and operator replay policy.
 - OI-06: Final callback response schema and retry classification must match SEM D-04 OpenAPI/JSON Schema exactly.
