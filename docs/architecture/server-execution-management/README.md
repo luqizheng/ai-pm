@@ -67,3 +67,8 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 ## SEM-02J — Platform Transaction and Execution-Path Closure Audit
 
 [Open SEM-02J](./sem-02j-transaction-and-execution-path-closure-review.md). The source audit confirms multiple cross-aggregate lock-order inversions and identifies Task Barrier bypasses in review, retry, reacquire and existing dispatch paths. SEM-02J remains **Changes Required / Audit In Progress**; it does not authorize code changes or Phase 0.
+
+
+### SEM-02J second audit pass
+
+The second source pass expanded the Run INSERT/UPDATE inventory and inspected Task/Project/Run foreign keys, partial unique indexes and the checked-in trigger inventory. It confirms a direct Review retry bypass (no Project activity gate, Task row lock or Task Barrier), and confirms Delivery retry-after-failure also lacks Project activity and Barrier checks. FK validation and unique-index conflicts contribute implicit lock edges; unique indexes do not authorize dispatch through a Task Barrier. The failure-judge path is explicitly not classified as a proven simultaneous Run→Task inversion because its standalone Run update releases before the later Task transaction. See [SEM-02J §9](./sem-02j-transaction-and-execution-path-closure-review.md#9-second-audit-pass--run-writes-fkindextrigger-side-effects). Status remains Changes Required / Audit In Progress.
