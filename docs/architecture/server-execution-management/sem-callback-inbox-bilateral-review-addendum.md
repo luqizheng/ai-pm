@@ -89,3 +89,27 @@ In addition to the 14 cases in the main draft, add explicit tests for:
 - OI-06 exact callback response/error contract: **open**.
 
 No AI-PM source code, route, migration, database schema, runtime configuration or deployment was changed by this addendum.
+
+
+## 5. SEM-side contract update — proposed bilateral alignment
+
+The current SEM contract draft has been updated to use `execution_event_sequence` in the callback success acknowledgement, matching the incoming event envelope and the AI-PM per-attempt cursor. The legacy ambiguous ACK field `event_sequence` is rejected by the SEM positive/negative fixture validator.
+
+The expected ACK shape is:
+
+```json
+{
+  "event_id": "uuid",
+  "execution_id": "uuid",
+  "execution_event_sequence": 12,
+  "contiguous_through_sequence": 12,
+  "disposition": "accepted",
+  "acknowledged_at": "RFC3339 UTC"
+}
+```
+
+AI-PM's response contract should echo the accepted event's exact `execution_event_sequence`; this field is not the Runner journal sequence or WSS connection-scoped message sequence. A duplicate ACK echoes the same sequence and uses `disposition=duplicate`. The response remains forbidden until the Inbox + Run observation + cursor transaction commits.
+
+SEM has also strengthened the event JSON Schema to require runner key version, boot ID and Supervisor instance identity on delivery/process/release/uncertainty observations. The AI-PM receiver must still compare these against the currently bound attempt; JSON Schema validity does not replace semantic binding validation. A release observation of `process_exited` requires a process-exit evidence reference, and an exited process observation requires exact process identity and exactly one exit status discriminator (`exit_code` or `exit_signal`).
+
+These are changes to the SEM Draft contract, not ratified bilateral decisions. AI-PM PR #9 must independently adopt the same field names and semantics before interoperability can be claimed.
