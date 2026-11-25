@@ -220,3 +220,17 @@ SEM-02J §20 finds that the Project↔Task audit-FK cycle is not the only Projec
 ## 12. SEM-02J expanded Project↔Run writer inventory
 
 SEM-02J §21 confirms that the Project→Run / Run→Project inversion extends beyond `report_interaction`: `recovery::reacquire_lease` locks Run then appends Project-scoped audit; continue `worker_command::ack_command` holds Command, updates Run, then appends audit; `record_response_persisted_tx` updates Interaction then Run then appends audit. These are source-confirmed writer orders reaching the Project KEY SHARE edge. The exact claim-side `FOR NO KEY UPDATE` mitigation remains unapproved pending deterministic PostgreSQL tests for each schedule and Project archive linearization. No runtime concurrency tests were executed; Phase 0 remains Not Started.
+
+
+## 10. User-confirmed AI-PM ↔ SEM authority-boundary revision (2026-11-25)
+
+The new [authority-boundary decision](./authority-boundary-decision.md) supersedes earlier SEM-02E–02J assumptions wherever SEM is assigned business workflow/control authority. The previous Platform–SEM–Runner Protocol V1 is no longer normative pending replacement wire schemas.
+
+Required ownership model:
+- AI-PM owns Task/Run business state, approvals, HIR, Barrier, business commands, results and completion decisions.
+- SEM transports opaque prompts/messages, routes to infrastructure-eligible Runners, manages Harness process/runtime/resources, and reports infrastructure facts.
+- Harness obtains Task context and performs business operations only through independently authenticated AI-PM MCP.
+- AI-PM explicitly instructs SEM to release the associated execution resources after AI-PM has made its business completion/cancellation decision.
+- Task lifecycle and SEM Execution lifecycle remain separate. Process exit and successful cleanup are not business completion evidence.
+
+The old SEM-owned Claim/Lease Renewal/business ACK/Task-HIR-Barrier semantics must be mapped and removed from normative contracts. Historical source-level transaction findings in SEM-02J remain valid evidence about the current ai-pm code; they do not establish that SEM should own those business semantics. No code, migration, API implementation or Phase 0 work is authorized by this revision.
