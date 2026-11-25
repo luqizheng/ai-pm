@@ -157,3 +157,14 @@ The global lock order remains unfrozen. Remaining work includes migration-chain 
 - Added deterministic concurrency cases J11–J18. No global lock order selected.
 
 The full lock graph, migration-chain reconciliation, API/background route inventory and pair tests remain open. No implementation or Phase 0 is authorized.
+
+
+## 12. SEM-02J fifth migration audit pass
+
+- Current master migration head is 0059. The checked-in 2026-11-15 schema inventory predates late PA-08 migrations and cannot certify current schema constraints/triggers.
+- 0046 Consultation has generic state and a single Task FK with `ON DELETE SET NULL`; it lacks composite tenant/project/task identity and typed E6 anchors.
+- 0053 adds one active Run per `lease_client_id` for claimed/running. It does not model Runner process/connection epoch or resource reservation.
+- 0054 cleanup claim fencing and 0055–0057 workspace reclamation remain derived-resource ledgers, not process-exit authority.
+- 0058/0059 do not directly alter Run ownership in the inspected DDL.
+
+Full migration-chain replay, catalog capture, baseline trigger/constraint audit and comparison against the exact 0059 head remain open. No implementation or Phase 0 is authorized.
