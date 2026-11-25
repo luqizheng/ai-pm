@@ -171,10 +171,17 @@ SEM retains the durable event until it receives a valid success ACK. A callback 
 ## 9. Open decisions (must be ratified bilaterally)
 
 - OI-01: Confirm `execution_id == delivery.task_run.id` for one Attempt.
-- OI-02: Ratify reuse of generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), with `task_run.sem_last_event_sequence` and append-only `sem_infrastructure_observed` Run events. Recommendation: reuse the existing shared Inbox and add no parallel table; fall back to `integration.sem_event_inbox` only if a concrete schema/retention blocker is found.
+- OI-02: Ratify reuse of generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), with `task_run.sem_last_event_sequence` and append-only `sem_infrastructure_observed` Run events. Recommendation: reuse the existing shared Inbox and add no parallel table. Source audit confirms `integration.inbound_event.id` is already a global primary key; the missing invariant is uniqueness of `(execution_id, execution_event_sequence)`, not global event-ID uniqueness. See [Exact DDL and Concurrency Design](sem-callback-inbox-ddl-and-concurrency-design.md).
 - OI-03: Ratify the exact `task_run.sem_last_event_sequence` migration, `sem_infrastructure_observed` event CHECK extension, and the `dedupe_tag=event_id` / `detail` payload mapping.
 - OI-04: Service principal/key registry and RFC 9421 verification middleware.
 - OI-05: Event retention, cursor compaction and operator replay policy.
 - OI-06: Final callback response schema and retry classification must match SEM D-04 OpenAPI/JSON Schema exactly.
 
 **Disposition: DRAFT / CHANGES REQUIRED.** This document is a bilateral design proposal only. No route, application code, migration, runtime configuration or database change is authorized by it.
+
+
+## 10. DDL and concurrency design follow-up (2026-11-25)
+
+The exact DDL candidate, source-level findings, RFC 8785 JCS hash rule, callback transaction/lock order, and 24-case two-connection PostgreSQL acceptance matrix are now documented in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
+
+This is a design proposal only. OI-01..OI-06 remain open; no migration, route, application code, or runtime change is authorized.
