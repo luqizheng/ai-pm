@@ -12,7 +12,7 @@
 1. AI-PM remains the business authority. SEM callback events are infrastructure observations only; they cannot set TaskStatus, approve, accept a delivery, or complete a Task.
 2. The callback is a dedicated service-to-service endpoint, not an alias of `POST /api/v1/events`.
 3. The existing generic `integration.inbound_event` is **not reusable through the current `submit_event()` operation unchanged**: that operation always creates an `integration.job(job_type='ai_analysis')` for a new event. SEM heartbeat/process/release telemetry must not accidentally launch ordinary AI analysis.
-4. Prefer a dedicated application operation `receive_sem_event()` that reuses the shared `integration.inbound_event` idempotency ledger with `source='sem'`, but does **not** enqueue `ai_analysis`. If the shared Inbox cannot represent the SEM cursor/retention contract cleanly, create a dedicated `integration.sem_event_inbox` instead. This is an explicit design gate, not an assumed table decision.
+4. **Recommended V1 storage choice:** reuse the shared `integration.inbound_event` ledger through a dedicated application operation `receive_sem_event()` with `source='sem'`, but do **not** enqueue `ai_analysis`. Add a contiguous cursor to the existing `delivery.task_run` attempt row and append one `sem_infrastructure_observed` entry to `delivery.task_run_event`. This avoids a parallel Inbox table while preserving a distinct SEM receive/application path. Only create `integration.sem_event_inbox` if migration/source review proves the shared ledger cannot meet global event-ID uniqueness, retention or cursor semantics.
 5. The protocol `execution_id` maps to one AI-PM execution attempt row: **proposed mapping: `delivery.task_run.id == execution_id`**. In the current AI-PM model, one `task_run` row is one attempt; `attempt_no` and `supersedes_run_id` express the attempt chain. This avoids a second execution-ID mapping table. SEM's own Execution lifecycle remains a separate infrastructure state machine even when the correlation UUID equals the AI-PM attempt row ID.
 6. Event ACK is returned only after the Inbox/idempotency record, run-event evidence and contiguous cursor update commit atomically.
 
@@ -78,17 +78,17 @@ Preferred first candidate is to add a dedicated application port `receive_sem_ev
 
 Unlike generic `submit_event()`, this operation MUST NOT create `integration.job(job_type='ai_analysis')`. It records infrastructure evidence and invokes only the SEM Run-observation path.
 
-The generic table's current uniqueness is `(project_id, source, idempotency_key)`; a dedicated partial/global uniqueness rule for SEM event IDs should be considered so an event ID cannot be replayed under a different project mapping. The final uniqueness strategy must be tested under concurrent duplicate delivery.
+The generic table's current uniqueness is `(project_id, source, idempotency_key)`. For SEM, the route resolves the project from `execution_id` before insertion and uses `source='sem'`, `idempotency_key=event_id`; the event ID/body hash check is performed inside the same transaction. A partial unique index on `(source,idempotency_key) WHERE source='sem'` is recommended as defense in depth so a single event ID cannot be replayed under a different project mapping. This must be tested under concurrent duplicate delivery.
 
 ### 5.2 Per-execution contiguous cursor
 
 The callback must maintain a contiguous `execution_event_sequence` per `execution_id`, independent of Runner journal sequence and WSS transport `message_sequence`.
 
 Candidate minimal storage:
-- Add `last_sem_event_sequence BIGINT NOT NULL DEFAULT 0` to the AI-PM attempt row (`delivery.task_run`), or provide an equivalent cursor owned by the Inbox application service.
+- Add `sem_last_event_sequence BIGINT NOT NULL DEFAULT 0 CHECK (sem_last_event_sequence >= 0)` to the AI-PM attempt row (`delivery.task_run`).
 - Serialize updates by locking the exact `task_run` row `FOR UPDATE`.
-- Record the SEM event in the Inbox and append a corresponding `delivery.task_run_event` observation in the same transaction.
-- If extending `task_run_event`, add explicit SEM event type(s) and external event identity/sequence fields or a formally specified `dedupe_tag` mapping. Do not overload `lease_generation` with SEM `binding_epoch`; they are different fencing domains.
+- Record the SEM event in `integration.inbound_event` and append one `delivery.task_run_event(event_type='sem_infrastructure_observed')` observation in the same transaction. Extend the existing event-type CHECK by a new migration; keep the event table append-only.
+- Set `task_run_event.dedupe_tag = event_id`; store `event_type`, `execution_event_sequence`, `binding_epoch`, payload hash and evidence references in `detail`. Preserve the existing AI-PM `lease_generation` field unchanged; do not overload it with SEM `binding_epoch` because they are different fencing domains.
 
 Transaction algorithm:
 
@@ -98,7 +98,7 @@ Transaction algorithm:
 4. Look up the existing Inbox row by source + event ID:
    - same canonical hash and same sequence → return duplicate ACK with current contiguous cursor;
    - same event ID but different body/sequence → `409 IDEMPOTENCY_CONFLICT`.
-5. Let `expected = last_sem_event_sequence + 1`:
+5. Let `expected = task_run.sem_last_event_sequence + 1`:
    - received sequence greater than expected → `409 EVENT_SEQUENCE_GAP`, include `expected_sequence`; do not advance or ACK success;
    - received sequence lower than expected but no matching prior event ID → `409 EVENT_SEQUENCE_CONFLICT`; do not mutate;
    - exact expected sequence → insert Inbox record, append Run observation, update cursor.
@@ -107,9 +107,9 @@ Transaction algorithm:
 
 The current generic `submit_event()` transaction is not sufficient because it creates an AI analysis job and does not enforce this cursor algorithm.
 
-### 5.3 Alternative if shared Inbox reuse is rejected
+### 5.3 Alternative only if shared Inbox reuse fails review
 
-Create `integration.sem_event_inbox` with:
+Create `integration.sem_event_inbox` only if the shared Inbox cannot meet the SEM-specific uniqueness/retention contract. It would contain:
 - primary key `event_id`;
 - `tenant_id`, `project_id`, `task_run_id/execution_id`;
 - `execution_event_sequence`, `event_type`, `schema_version`;
@@ -171,8 +171,8 @@ SEM retains the durable event until it receives a valid success ACK. A callback 
 ## 9. Open decisions (must be ratified bilaterally)
 
 - OI-01: Confirm `execution_id == delivery.task_run.id` for one Attempt.
-- OI-02: Reuse generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), or add `integration.sem_event_inbox`. Recommendation: first prove the shared table can satisfy uniqueness/retention/cursor semantics without leaking into analysis processing; otherwise choose the dedicated table.
-- OI-03: Exact Run-observation fields and `task_run_event` extension, including explicit source event ID/sequence and binding_epoch storage.
+- OI-02: Ratify reuse of generic `integration.inbound_event` through a SEM-specific application port (without `ai_analysis` job), with `task_run.sem_last_event_sequence` and append-only `sem_infrastructure_observed` Run events. Recommendation: reuse the existing shared Inbox and add no parallel table; fall back to `integration.sem_event_inbox` only if a concrete schema/retention blocker is found.
+- OI-03: Ratify the exact `task_run.sem_last_event_sequence` migration, `sem_infrastructure_observed` event CHECK extension, and the `dedupe_tag=event_id` / `detail` payload mapping.
 - OI-04: Service principal/key registry and RFC 9421 verification middleware.
 - OI-05: Event retention, cursor compaction and operator replay policy.
 - OI-06: Final callback response schema and retry classification must match SEM D-04 OpenAPI/JSON Schema exactly.
