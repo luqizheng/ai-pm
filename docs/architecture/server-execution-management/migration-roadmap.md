@@ -6,12 +6,14 @@
 
 ## Phase 0 — Safety + Minimum Human Intervention
 
+物理模型和协议候选详见 [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md)。孤儿扫描属于 Platform DB 责任，不属于 SEM 服务，也不得依赖 RabbitMQ。
+
 **目标：** 在独立 SEM 服务上线前，先保证 Platform 侧任何执行路径都不会因 Lease 过期、Worker 重启或新 Run 行而产生双重执行，并具备最小人工处置闭环。
 
 交付：
 1. Task 级 Execution Barrier Migration；唯一 active Barrier 约束。
 2. 复用并扩展 `governance.human_intervention`、`governance.human_consultation`、`integration.notification`；实施前完成完整 schema/consumer/routes 对账。
-3. Platform DB-only 周期 orphan scanner：claimed/running + expired lease + grace + shield none + 无 E1–E3；锁内同事务创建 Barrier、HIR、audit、notification Outbox；B06-D3 合并。
+3. Platform Worker 内周期 DB-only orphan scanner（启动时立即执行仅作优化）：claimed/running + expired lease + grace + shield none + 无 E1–E3；按 Project→Run→Task 锁顺序重验，并在同一事务创建 Task Barrier、HIR、Feed notification + recipient Inbox rows、audit；B06-D3 直接回队删除并并入 scanner。
 4. 唯一事务内 dispatchability predicate 覆盖所有 Run 创建、claim、recovery、retry、requeue、handoff 和 E6 successor。
 5. 修复 Done{Lost} 卷丢失误判；已 started 且证据丢失进入 E5。
 6. Interaction terminate/continue 双 adapter：Runner 与 SEM-local CodexExecutor；命令 receipt、result、E3、continuation consumed 分离。
