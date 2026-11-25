@@ -191,6 +191,7 @@ Constraints:
 
 Constraints and behavior:
 - `UNIQUE(tenant_id,event_id)`;
+- add a nullable `process_identity_id` FK for quarantined/unknown observations; for accepted observations require it non-null and enforce the exact composite identity `(process_identity_id, run_id, lease_generation, process_sequence)` against a unique key on the process registry;
 - same event ID + same digest returns the stored result; same event ID + different digest is an idempotency conflict;
 - evidence is append-only; never overwrite a prior observation to upgrade E1/E2 to E3;
 - natural exit has no command_id; command-triggered exit must correlate to the command;
@@ -367,3 +368,13 @@ SEM-02I is not ready for migration until:
 8. current master is merged/rebased into the review branch and the entire document set is re-audited.
 
 No migration, API implementation, WSS implementation or Phase 0 work is authorized by this candidate.
+
+
+### 6.1 Confirmed source-level lock inversion and scanner race
+
+- `interaction.rs:129,197` report path locks Run then Interaction.
+- `interaction.rs:783,816` retry path locks Interaction then Run.
+- `interaction.rs:697-740` cancel path updates Interaction then Run then locks Task.
+- `run_executor.rs:480-570` orphan reconciliation has no single transactional lock/Barrier path; it updates Run and then Task in separate logical steps.
+
+These are blockers for the Task Barrier implementation. The code lock inversion must be reproduced and corrected, and the orphan scanner must atomically write Barrier + HIR + notification + audit before any requeue.
