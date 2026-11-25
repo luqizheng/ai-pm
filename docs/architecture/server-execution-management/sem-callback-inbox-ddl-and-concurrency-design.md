@@ -454,3 +454,73 @@ The projection update, Inbox insert, append-only Run observation and task_run.ex
 - BIND-12 callback event from stale runner_key_version/boot_id/supervisor_instance_id rejects.
 
 The callback transaction must not rely on task_run_event replay as an unspecified current-state query. Append-only observations remain audit history; this projection is the explicit current consumer reference.
+
+
+## 12. Proposed unbound-release transaction and execution projection (P0-07)
+
+The AI-PM consumer must persist both (a) the last accepted binding tuple and (b) whether SEM has permanently fenced dispatch for this execution. A binding-only table cannot represent an execution released before first bind. Therefore, before implementation, rename/refine the §11 candidate as one per-attempt execution projection, e.g. delivery.task_run_sem_execution, with nullable binding columns and an explicit dispatch state. Do not create a fake binding row with epoch 0.
+
+Required projection shape (illustrative; final DDL must reconcile with §11 and migration conventions):
+
+~~~sql
+CREATE TABLE delivery.task_run_sem_execution (
+    task_run_id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    dispatch_state text NOT NULL CHECK (dispatch_state IN (
+        'eligible', 'bound', 'release_pending', 'released_unbound',
+        'released', 'uncertain', 'host_isolated'
+    )),
+    binding_epoch bigint,
+    runner_id uuid,
+    runner_key_version bigint,
+    boot_id text,
+    supervisor_instance_id uuid,
+    delivery_id uuid,
+    launch_id uuid,
+    containment_id text,
+    process_start_identity text,
+    systemd_invocation_id text,
+    stop_fence_id uuid,
+    process_exit_evidence_id uuid,
+    dispatch_fence_id uuid,
+    last_event_id uuid,
+    last_event_sequence bigint NOT NULL DEFAULT 0 CHECK (last_event_sequence >= 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id, project_id, task_run_id)
+      REFERENCES delivery.task_run (tenant_id, project_id, id),
+    CHECK (
+      (dispatch_state = 'eligible' AND binding_epoch IS NULL AND runner_id IS NULL)
+      OR
+      (dispatch_state <> 'eligible' AND dispatch_state <> 'released_unbound'
+        AND binding_epoch IS NOT NULL AND runner_id IS NOT NULL)
+      OR
+      (dispatch_state = 'released_unbound' AND binding_epoch IS NULL
+        AND runner_id IS NULL AND dispatch_fence_id IS NOT NULL)
+    )
+);
+~~~
+
+This is a design sketch, not executable migration SQL: the final CHECK must explicitly enumerate all states and all tuple columns, reject partial identity tuples, and define which states require release/exit evidence. released_unbound must never carry Runner, binding_epoch, stop_fence_id or process-exit evidence.
+
+### 12.1 Callback handling of released_unbound
+
+- Accept only the new SEM-authenticated execution.unbound_release_applied event.
+- Require no prior binding projection for this execution; if a binding already exists, reject as an integrity/ordering contradiction and do not ACK.
+- In one transaction insert Inbox + append-only Run observation + update execution projection to released_unbound + advance contiguous cursor.
+- Once released_unbound is recorded, reject every later execution.binding_established event for this execution, even with a higher epoch. A new AI-PM attempt has a new execution_id.
+- Exact duplicate event_id/body returns duplicate ACK and does not rewrite the projection.
+- A gap, changed release_id/fence ID, unexpected existing binding, or non-contiguous event sequence rejects without cursor movement.
+
+### 12.2 Additional acceptance cases
+
+- UNBOUND-01 event accepted only when no current binding exists.
+- UNBOUND-02 same event replay is duplicate and leaves projection unchanged.
+- UNBOUND-03 event after binding established rejects; never discard the bound release path.
+- UNBOUND-04 any later binding event after released_unbound rejects, regardless of epoch.
+- UNBOUND-05 transaction crash rolls back Inbox, Run observation, projection and cursor together.
+- UNBOUND-06 SEM release-wins tombstone prevents delayed dispatch/requeue; tested on SEM side under same sequencer.
+- UNBOUND-07 new execution_id is independent from old released_unbound projection.
+- UNBOUND-08 released_unbound never creates process-exit or Runner stop evidence.
+
+The current five-event schema cannot carry this event. AI-PM must not accept a lookalike execution.release_status payload with missing Runner identity. P0-07 remains open until SEM publishes the sixth-event schema and bilateral fixtures.
