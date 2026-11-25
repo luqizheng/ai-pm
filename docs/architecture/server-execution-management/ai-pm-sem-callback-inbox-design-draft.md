@@ -103,7 +103,7 @@ Transaction algorithm:
    - received sequence lower than expected but no matching prior event ID → `409 EVENT_SEQUENCE_CONFLICT`; do not mutate;
    - exact expected sequence → insert Inbox record, append Run observation, update cursor.
 6. Commit all three writes atomically.
-7. Only after commit return `200` with `event_id`, `execution_id`, `event_sequence`, `contiguous_through_sequence`, `disposition` and `acknowledged_at`.
+7. Only after commit return `200` with `event_id`, `execution_id`, `execution_event_sequence`, `contiguous_through_sequence`, `disposition` and `acknowledged_at`. The response field name MUST remain `execution_event_sequence`; the ambiguous alias `event_sequence` is not accepted because it could be confused with Runner journal `event_sequence` or WSS transport `message_sequence`.
 
 The current generic `submit_event()` transaction is not sufficient because it creates an AI analysis job and does not enforce this cursor algorithm.
 
