@@ -20,7 +20,8 @@
 7. SEM-local awaiting-interaction/awaiting-continue 等待期在 Worker restart 后可恢复；shielded Run 不得被 recover_lost 或终态扫描误处理。
 8. HIR 最小闭环：创建、查询、责任人、通知、证据、受控处置、审计。
 9. 凭据注入/继承/撤销/日志脱敏只读盘点与必要安全修复。
-10. 全新空库 Migration、并发锁、唯一约束、故障注入验收。
+10. Platform Process Registry、active_process_sequence 与 process-bound Lease Renewal fence（Phase 0）；当前 Runner MCP 仅作临时迁移适配，Phase 1 切换至 SEM WSS。
+11. 全新空库 Migration、并发锁、唯一约束、故障注入验收。
 
 不包含：SEM 独立主机/WSS 完整部署、Harness Native Resume、跨 Runner handoff UI。
 
@@ -30,7 +31,8 @@
 - Platform–SEM HTTPS API、service identity、Outbox/Inbox、幂等 Claim；
 - Runner–SEM WSS、一次性 Ticket、connection epoch；
 - Runner process evidence spool 与 exit/reconciled/reconnect_sync；
-- Run+Generation process identity sequence；
+- Runner process spool / E3 evidence 转发；
+- 将 Phase 0 临时 Runner MCP process-control adapter 切换至 SEM WSS + Platform HTTPS；
 - Detached → Reconciling → Active/Terminated/Quarantined；
 - 删除 Runner MCP Claim/command poll/ACK/recovery 控制旁路；
 - SEM DB 私有持久化和资源快照/预留。
@@ -57,3 +59,8 @@ SEM 作为独立服务部署在独立 Docker 主机，使用自己的数据库�
 - Workspace/Worktree/Git Mirror 不做备份；卷丢失不证明进程死亡。
 - SEM 不直连 Platform DB；Platform 与 SEM 各自独立数据库。
 - Phase 0 未经用户明确授权不得启动。架构评审通过不等于实施授权。
+
+
+## Process Sequence phase dependency
+
+Platform-side process registry, active sequence pointer and process-bound Lease Renewal must be delivered in Phase 0, alongside the Interaction dual adapters. Phase 0 may use a temporary adapter over the current Runner→Platform MCP control path solely to keep the existing Runner functional during migration. Phase 1 moves that control traffic to Runner→SEM WSS→Platform HTTPS and removes the temporary direct Runner MCP control path. The temporary route must have an explicit removal test and must never remain as a second permanent control plane.
