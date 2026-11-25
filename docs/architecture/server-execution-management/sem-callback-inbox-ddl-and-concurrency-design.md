@@ -561,3 +561,10 @@ The test must execute these rows against PostgreSQL itself and assert insert suc
 
 
 The shared vector also exercises optional-field identity: its `correlation_id` is present. Independent validators prove that changing its value or omitting it changes the full-envelope hash while leaving the payload hash unchanged. This ensures optional schema fields are included when present and absent fields are not synthesized.
+
+
+## 10. Canonicalizer dependency selection is not yet ratified
+
+The separate evaluation document `sem-jcs-canonicalizer-dependency-evaluation.md` identifies `canonprims-json 0.1.4` as the leading technical candidate for an isolated AI-PM-only spike. It accepts raw bytes, rejects duplicate members and invalid I-JSON values before producing canonical bytes, and provides explicit limits and a shared conformance corpus. It requires Rust 1.88.0; AI-PM's current Docker builder floats on `rust:1-slim` and the workspace does not declare an MSRV. SEM's candidate workspace remains at Rust 1.85 and need not change if the JCS dependency stays AI-PM-only.
+
+No dependency or toolchain change is approved. Before implementation, the spike must prove corpus parity, cross-language callback envelope hashes, refusal/no-side-effect behavior, and dependency provenance. The Rust 1.88 AI-PM build floor must be explicitly ratified before adding the crate.
