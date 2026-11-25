@@ -185,3 +185,8 @@ SEM-02J §14 now records a complete 59-file migration directory manifest and con
 ## 6. SEM-02J application-writer audit pass
 
 SEM-02J §15 traces the production writers for Interaction, Response, ResponseDelivery, Continuation and WorkerCommand. The primary API paths derive related IDs from a validated/locked Run or Interaction, narrowing the current risk of cross-aggregate mismatch despite missing composite FKs. The source confirms Run→Interaction in report_interaction and Interaction→Run in response/retry paths, preserving a P0 deadlock cycle. WorkerCommand ACK contributes Command→Run and downstream edges. Continuation max+1 allocation lacks an explicit Run lock at the allocation point and needs same-Run two-connection testing. PostgreSQL replay/catalog capture and the complete global lock order remain open; Phase 0 remains Not Started.
+
+
+## 7. SEM-02J implicit FK lock-order finding
+
+SEM-02J §16 adds a source-confirmed Task→Product versus Product→Task deadlock schedule. Run claim locks Project→Run→Task and then Product; add_task_product locks Product in assert_product_active before inserting TaskProduct, whose FK check needs Task key-share. This is a new P0 lock-order blocker. Corrective code and deterministic two-connection tests have not been applied. The global lock order remains unfrozen; Phase 0 remains Not Started.
