@@ -124,8 +124,8 @@ ALTER TABLE delivery.task_run_event
             AND detail ? 'binding_epoch'
             AND detail ? 'schema_version'
             AND detail ? 'occurred_at'
-            AND detail->>'event_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
-            AND detail->>'event_envelope_hash' ~ '^[0-9a-f]{64}
+            AND COALESCE(detail->>'event_id', '') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+            AND COALESCE(detail->>'event_envelope_hash', '') ~ '^[0-9a-f]{64}
 \`\`\`
 
 Important required event-type CHECK replacement (omitted from the initial illustrative block above):
@@ -641,7 +641,7 @@ The algorithm now has explicit precedence:
 
 Added INBOX-40..44 for cross-key conflict precedence, exact-duplicate row consistency, sequence-only conflict, non-SEM global event_id collisions and Run-derived tenant/project integrity. This is a design correction; no migration or runtime code changed.
 
-            AND (detail->>'binding_epoch') ~ '^[1-9][0-9]*
+            AND COALESCE(detail->>'binding_epoch', '') ~ '^[1-9][0-9]*
 \`\`\`
 
 Important required event-type CHECK replacement (omitted from the initial illustrative block above):
@@ -1622,8 +1622,8 @@ The SEM-only CHECK now requires an object detail with event_id, execution_event_
 
 The Draft deliberately retains transaction-local Inbox↔observation linkage rather than adding a source_event_id FK/column. On first insert, Inbox, observation and Run cursor update commit atomically. On duplicate, the receiver verifies the existing observation's event_id and event_envelope_hash before ACK. INBOX-45..48 cover missing/invalid detail, denormalized Run mapping, and broken duplicate linkage. This choice avoids additional retention coupling but requires real PostgreSQL two-connection and crash-atomicity proof.
 
-            AND detail->>'sem_event_type' <> ''
-            AND detail->>'execution_event_sequence' ~ '^[1-9][0-9]*
+            AND COALESCE(detail->>'sem_event_type', '') <> ''
+            AND COALESCE(detail->>'execution_event_sequence', '') ~ '^[1-9][0-9]*
             AND detail->>'event_envelope_hash' ~ '^[0-9a-f]{64}
 \`\`\`
 
@@ -3108,7 +3108,7 @@ The SEM-only CHECK now requires an object detail with event_id, execution_event_
 The Draft deliberately retains transaction-local Inbox↔observation linkage rather than adding a source_event_id FK/column. On first insert, Inbox, observation and Run cursor update commit atomically. On duplicate, the receiver verifies the existing observation's event_id and event_envelope_hash before ACK. INBOX-45..48 cover missing/invalid detail, denormalized Run mapping, and broken duplicate linkage. This choice avoids additional retention coupling but requires real PostgreSQL two-connection and crash-atomicity proof.
 
             AND detail->>'execution_event_sequence' = dedupe_tag
-            AND detail->>'occurred_at' <> ''
+            AND COALESCE(detail->>'occurred_at', '') <> ''
             AND detail->>'event_envelope_hash' ~ '^[0-9a-f]{64}
 \`\`\`
 
