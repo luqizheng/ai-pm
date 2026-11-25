@@ -1,5 +1,8 @@
 # SEM V1 State Machines — SEM-02E
 
+> **Authority-boundary revision (2026-11-25):** This file's Run/Lease/Barrier/Task state machines describe AI-PM-owned business state, not SEM-local state. SEM must not implement or mirror these state machines. SEM has a separate infrastructure Execution lifecycle only. See [authority-boundary-decision.md](./authority-boundary-decision.md).
+
+
 - 状态：候选规范，Review Pending。
 - 跨实体权威定义：[SEM-02E](./sem-02e-architecture-convergence.md)。
 - 本文件是状态域唯一登记处；其他文档引用，不得另造状态枚举。
