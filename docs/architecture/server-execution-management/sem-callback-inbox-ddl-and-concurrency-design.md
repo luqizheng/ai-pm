@@ -367,3 +367,90 @@ The first `execution.binding_established` event exposes the gap: no current bind
 Whichever representation is chosen must define: initial bind; exact duplicate; same epoch with changed Runner tuple; lower/stale epoch; higher epoch after a positively completed prior release; rebind after SEM's separately authorized host-isolation disposition without claiming process exit; and attempted rebind while prior process/binding remains uncertain (reject and retain quarantine/reservation). SEM remains the authority that allocates binding_epoch and chooses the Runner; AI-PM stores only the last accepted binding reference for validation and must not use it to authorize dispatch or mutate Task/Run business state.
 
 Required PostgreSQL acceptance cases: first binding inserts exactly one current-binding projection; exact duplicate does not rewrite it; same-epoch conflicting tuple is rejected; lower epoch is rejected; authorized higher-epoch rebind atomically replaces the projection while retaining append-only history; higher epoch while prior state is uncertain is rejected; transaction crash rolls back Inbox, observation, cursor and projection together. Until these are specified and tested, callback Inbox design is Changes Required and no route/migration implementation is authorized.
+
+
+## 11. Proposed current-binding projection (P0-06 resolution candidate)
+
+**Recommendation: use a minimal AI-PM-owned projection, not event-history replay.** The projection is a consumer-side validation cache with transactional authority inside AI-PM only. SEM remains the sole authority for allocating binding_epoch, selecting Runner, and asserting infrastructure facts. This table MUST NOT be read by SEM, exposed as dispatch authorization, or used to mutate Task/Run business status.
+
+Illustrative forward-only DDL (names/types must be checked against exact repository migration conventions before implementation):
+
+~~~sql
+CREATE TABLE delivery.task_run_sem_binding (
+    task_run_id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    binding_epoch bigint NOT NULL CHECK (binding_epoch >= 1),
+    runner_id uuid NOT NULL,
+    runner_key_version bigint NOT NULL CHECK (runner_key_version >= 1),
+    boot_id text NOT NULL CHECK (length(boot_id) > 0),
+    supervisor_instance_id uuid NOT NULL,
+    delivery_id uuid NOT NULL,
+    binding_state text NOT NULL CHECK (binding_state IN (
+        'active', 'release_pending', 'released', 'uncertain', 'host_isolated'
+    )),
+    launch_id uuid,
+    containment_id text,
+    process_start_identity text,
+    systemd_invocation_id text,
+    stop_fence_id uuid,
+    process_exit_evidence_id uuid,
+    binding_event_id uuid NOT NULL,
+    binding_event_sequence bigint NOT NULL CHECK (binding_event_sequence >= 1),
+    last_event_id uuid NOT NULL,
+    last_event_sequence bigint NOT NULL CHECK (last_event_sequence >= binding_event_sequence),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_task_run_sem_binding_run
+      FOREIGN KEY (tenant_id, project_id, task_run_id)
+      REFERENCES delivery.task_run (tenant_id, project_id, id),
+    CONSTRAINT ck_task_run_sem_binding_process_identity
+      CHECK (
+        (launch_id IS NULL AND containment_id IS NULL
+          AND process_start_identity IS NULL AND systemd_invocation_id IS NULL)
+        OR
+        (launch_id IS NOT NULL AND containment_id IS NOT NULL
+          AND length(containment_id) > 0)
+      ),
+    CONSTRAINT ck_task_run_sem_binding_release_evidence
+      CHECK (
+        binding_state NOT IN ('released')
+        OR process_exit_evidence_id IS NOT NULL
+        OR stop_fence_id IS NOT NULL
+      )
+);
+~~~
+
+The released-state check allows either positive process-exit evidence or the separately defined positive no-start stop-fence proof; application validation must verify which disposition applies. host_isolated is not process-exit evidence and must never populate either evidence column.
+
+### 11.1 Projection update rules
+
+The callback transaction extends §5, retaining lock order **Run row → current-binding row → Inbox event → Run observation**. The final migration must freeze one order and all writers/tests must match it.
+
+1. **First binding:** only execution.binding_established may create the projection. Require no existing projection, binding_epoch=1 for the first SEM binding of this execution, and a valid Runner tuple. Insert state active, with binding_event_id/sequence equal to this event. No Task/Run business state changes.
+2. **Exact duplicate:** resolve through Inbox event_id + envelope hash + sequence before projection mutation; return duplicate ACK without rewriting projection or updated_at.
+3. **Same epoch:** immutable identity fields (runner_id, key version, boot, supervisor instance, delivery_id) must match. A changed tuple at the same epoch is a conflict; do not overwrite.
+4. **Lower epoch:** reject as stale; never regress projection.
+5. **Higher epoch:** do not accept merely because the integer is greater. Require the previous projection state to be released with exact release/no-start proof, or host_isolated with an exact separately authorized SEM host-isolation disposition reference. The new epoch must be strictly greater, and old binding history remains in append-only Run observations.
+6. **Uncertain prior binding:** reject a higher epoch and retain the previous projection/reservation/quarantine. Heartbeat loss, WSS disconnect, host unreachable and cleanup timeout are not rebind permission.
+7. **Process identity:** harness.process_observed may fill exact launch/containment/process identity only for the current epoch and exact Runner tuple. It may not replace a previously recorded non-null identity with a different identity. Exit observations attach exact evidence references; they do not change business Run outcome.
+8. **Release:** requested/release_uncertain update state only according to authenticated SEM event and exact release_id. released requires the previously defined stop-fence/no-start proof or exact process-exit evidence. cleanup_failed/infrastructure_uncertain retain uncertain; do not free the binding for rebind.
+9. **Host isolation:** host_isolated can be set only from an explicit SEM-authenticated event/reference proving the dedicated runner.quarantine.resolve operator disposition. An execution.infrastructure_uncertain event alone cannot set it. The current D-04 five-event contract does not yet carry this disposition reference; therefore host-isolation rebind remains a P0 contract dependency until the SEM event contract adds it.
+
+### 11.2 Atomicity and required PostgreSQL cases
+
+The projection update, Inbox insert, append-only Run observation and task_run.execution_event_sequence compare-and-set MUST commit or roll back together. Add two-connection tests:
+
+- BIND-01 first epoch inserts exactly one projection and one Inbox/observation/cursor advancement.
+- BIND-02 exact duplicate returns duplicate ACK and leaves projection bytes/updated_at unchanged.
+- BIND-03 same epoch + changed Runner/key/boot/Supervisor/delivery tuple rejects.
+- BIND-04 lower epoch rejects without cursor/projection movement.
+- BIND-05 higher epoch after positive release proof atomically replaces current projection.
+- BIND-06 higher epoch after authorized host-isolation reference only; no process-exit evidence is fabricated.
+- BIND-07 higher epoch while prior binding uncertain rejects and retains quarantine/reservation.
+- BIND-08 two concurrent first-binding events serialize; one exact sequence commits, conflicting identity/sequence rejects.
+- BIND-09 crash after Inbox insert, after projection insert/update, after Run observation, or before cursor CAS rolls back all four.
+- BIND-10 process identity cannot be rewritten within one binding epoch.
+- BIND-11 exact duplicate old event after a newer binding exists returns duplicate without regressing the current projection.
+- BIND-12 callback event from stale runner_key_version/boot_id/supervisor_instance_id rejects.
+
+The callback transaction must not rely on task_run_event replay as an unspecified current-state query. Append-only observations remain audit history; this projection is the explicit current consumer reference.
