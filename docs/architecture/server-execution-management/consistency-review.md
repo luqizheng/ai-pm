@@ -54,3 +54,14 @@
 8. 用户完成整体评审并明确冻结。
 
 当前结论：**Changes Required**。Phase 0 Not Started。
+
+
+## 5. Newly found blockers in SEM-02E internal review
+
+- **ADR-SEM-14 conflict:** prior wording made every ACK depend on OS process-handle exit. Amend it to separate command receipt, command result, E3 process-exit evidence and continuation-consumed receipt. Natural exit has no command_id.
+- **ADR-SEM-16 conflict:** old E4 scheduling-shield wording conflicts with the new Task Barrier model. Interaction shield and execution Barrier are distinct and both must be checked by one Platform transaction predicate.
+- **Platform process-sequence fence:** SEM owns OS observations, while Platform owns Lease Renewal. The active process sequence must be registered/advanced through an authenticated Platform API and persisted/fenced by Platform; SEM DB-only sequence state is insufficient.
+- **HIR carrier semantic fit:** repository evidence says current governance.human_intervention records intervention actions (veto/rollback/freeze), not an open work-item lifecycle. Reuse remains the chosen direction, but implementation must explicitly remodel/extend the table without conflating HIR lifecycle and action history.
+- **Notification recipient/delivery:** the existing integration.notification project feed has no established recipient/delivery contract in the reviewed evidence. Recipient, unassigned queue, outbox, retry and read semantics remain OPEN pending full migration + consumer audit.
+
+The review status remains **Changes Required**. These findings are not approved ADRs and do not authorize Phase 0.
