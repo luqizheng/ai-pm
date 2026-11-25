@@ -1,98 +1,122 @@
-# SEM V1 State Machines
+# SEM V1 State Machines — SEM-02E
 
-Status: target behavior, not a claim that all states exist in code.
+- 状态：候选规范，Review Pending。
+- 跨实体权威定义：[SEM-02E](./sem-02e-architecture-convergence.md)。
+- 本文件是状态域唯一登记处；其他文档引用，不得另造状态枚举。
 
-## 1. Run / Attempt
+## 1. Run / Lease
 
-- queued → claimed only through successful claim.
-- claimed → running after executor/process identity is confirmed.
-- running → terminal result only through guarded transition handling.
-- claimed/running with uncertain liveness → durable Execution Barrier plus evidence/HIR; Interaction scheduling_shield remains a separate four-value state.
-- Barrier-held Run → E1/E2/E3-backed release, or E6 risk-accepted successor while the old Barrier remains unresolved.
-- Replacement Attempt is a new task_run row with lineage, never a reset of the old row.
+- queued → claimed：仅 Platform 原子 Claim 成功。
+- claimed → running：执行端启动并登记 Process Identity 成功。
+- running → terminal：仅 Platform guarded transition。
+- Lease owned → renewed：匹配当前 owner、token proof、generation 和活动 process identity sequence。
+- Lease owned → expired：时间到期；仅触发扫描，不证明进程死亡。
+- expired + E1/E2/E3：Platform 复核后可释放 Barrier 并安全回收。
+- expired + E4/E5：Task Barrier + HIR；不回队、不自动重派。
 
-Forbidden: lease expiry alone → queued; E4/E5 → automatic new Attempt; late heartbeat → shield removal; stale generation → accepted result.
+## 2. Execution Barrier（Task 作用域）
 
-## 2. Lease
+状态：
+- active：阻止该 Task 的所有新执行。
+- risk_accepted_unconfirmed：E6 已授权唯一 successor，但旧进程仍可能运行，Barrier 仍有效。
+- released：仅由 E1/E2/E3 证据经 Platform 事务释放。
 
-- Unowned → Owned(generation, client, token verifier, expiry) on claim.
-- Owned → Renewed only with matching client identity, token proof and generation.
-- Owned → Expired when time passes. Expiry is a trigger, not proof of process death.
-- Expired → Reclaimed only after E1/E2/E3 and guarded transaction.
-- Expired + uncertain process → Shielded; lease may expire naturally while shield remains.
-- New claim increments generation and rotates token verifier.
-- Never rewrite a lease owner from Runner A to Runner B.
+禁止：
+- HIR closed → released；
+- Interaction continued → released；
+- lease expired → released；
+- Runner offline / Workspace missing / RabbitMQ ACK → released。
 
-## 3. Termination evidence
+一个 Task 同时最多一个 active 或 risk_accepted_unconfirmed Barrier。新 Run 行不能绕过。
 
-| Evidence | Meaning | Permitted action |
+## 3. Evidence
+
+| 类别 | 含义 | 转移 |
 |---|---|---|
-| E1 | SEM observed process exit result from OS poll/wait | Confirm exact process dead; guarded recovery may proceed |
-| E2 | PID/process identity checked against OS and original process absent | Confirm exact process dead; guarded recovery may proceed |
-| E3 | Authenticated Runner supervisor observed target process exit and sent generation-bound confirmation | Confirm exact remote process dead; guarded recovery may proceed |
-| E4 | Runner heartbeat absent beyond configured grace | Shield + HIR only |
-| E5 | Process state unknown or contradictory | Retain Execution Barrier, alert/HIR, no automatic reclaim |
+| E1 | 本机 OS wait/exit result，绑定精确 Process Identity | 可申请 Barrier release |
+| E2 | OS 证实精确 process identity 不存在且排除 PID reuse | 可申请 Barrier release |
+| E3 | 认证 Runner 对已登记进程身份观察到 OS exit | 可申请 Barrier release |
+| E4 | 心跳/连接失联超过宽限期 | 只隔离，关联 HIR |
+| E5 | Uncertain / identity mismatch / evidence lost | 隔离、告警、HIR |
+| E6 | 人类风险接受 | 不释放 Barrier；只授权一个 successor |
 
-Evidence applies only to the exact process identity and generation it describes.
+E6 不是进程退出证据，不能进入 E1/E2/E3 的证据聚合。
 
-## 4. Runner
+## 4. Process Identity Sequence
 
-Supervision mode is unattended or supervised. Missing value at first registration defaults to unattended. supervised requires pre-claim user confirmation. Availability (online/offline/busy/unavailable) is independent.
+Run+Generation 内进程身份按 process_sequence 递增：
+- initial_start；
+- interaction_continue；
+- recovery_restart（仅在明确安全条件下）；
+- cleanup / shutdown 等派生动作。
 
-## 5. HIR
+状态：
+- registered → active → exited_observed；
+- registered/active → unknown（证据缺失或冲突）。
 
-Target lifecycle: Created → Notified → AwaitingUserAction or AwaitingRunnerSelection → Accepted → InProgress → Resolved → Closed.
+Interaction continue 的 consumed 回执必须登记新 sequence + process identity。旧 sequence 的迟到 exit 只改变旧 identity 状态，不能终结新 sequence。Run 级终止需确认所有已登记且受监督的进程均已退出。
 
-A self-resolved HIR may close only when the original condition is proven safe; record evidence. Reopen must preserve prior history. HIR status is workflow state, not Run state; HIR cannot grant a lease or clear an Execution Barrier by itself.
+## 5. Runner Detached / Reconnect
 
-## 6. Handoff
+Active → Detached → Reconciling → Active / Terminated / Quarantined。
 
-1. User authorizes/selects target Runner when policy requires.
-2. Old execution is stopped or remains safely isolated.
-3. Old lease/token becomes unusable through guarded expiry/revocation and generation change.
-4. New Runner explicitly performs normal claim.
-5. Generation increments and fresh token is issued.
-6. Target Runner creates its own workspace.
-7. New execution begins only after successful claim.
+- Active：当前连接、Lease、Generation 与 OS 监督进程一致。
+- Detached：连接中断；SEM 持久化执行侧状态。
+- Reconciling：同设备重新认证、boot identity、process sequence、spool 和 Platform Lease/Generation 对账。
+- Active：精确进程仍活且当前 Lease/Generation 有效，恢复监督。
+- Terminated：E1/E2/E3 证明所有相关进程退出。
+- Quarantined：E4/E5、身份不匹配或证据不足；Task Barrier + HIR。
 
-No direct lease-owner rewrite and no weakening of lease_client_id checks.
+Detached/Reconciling 不属于 Interaction scheduling_shield，不增加 CHECK 枚举；SEM 不直连 Platform DB。
 
+## 6. HIR（唯一状态域）
 
-## 7. Detached / Runner reconnect lifecycle（修正设计，Review Pending）
+HIR 状态：
+- open：已创建、待分派；
+- assigned：已指定责任人；
+- awaiting_user：等待明确人工动作/决定；
+- in_progress：人工处置进行中；
+- resolved：处置目标已达成，但尚待关闭核验；
+- closed：人工工作项关闭；
+- cancelled：经授权取消且原因审计。
 
-```text
-Active → Detached → Reconciling
-Reconciling → Active              # same Runner + exact process alive + current Lease/Generation valid
-Reconciling → Terminated          # E1/E2/E3 proves exact process exit
-Reconciling → Quarantined         # E4/E5, identity mismatch, missing evidence
-Quarantined → RiskAccepted        # explicit E6, one bound successor only; old barrier remains unresolved
-```
+允许转移：
+- open → assigned / awaiting_user / cancelled；
+- assigned → awaiting_user / in_progress / cancelled；
+- awaiting_user → assigned / in_progress / cancelled；
+- in_progress → awaiting_user / resolved / cancelled；
+- resolved → closed / in_progress；
+- closed →（仅显式 reopen 操作）open；
+- cancelled →（仅显式 reopen 操作）open。
 
-`Detached` 是 Execution/Session lifecycle 状态，不属于 `task_run.scheduling_shield`。当前 Interaction shield 四值保持不变。Platform 持久化的 `run_execution_barrier` 是执行不确定性的隔离载体。
+Notification delivery 状态不属于 HIR 状态。HIR 状态变化不隐式改变 Barrier。
 
-### 7.1 Detached → Active 条件
+## 7. Human Consultation / E6
 
-- 必须由同一 Runner/device 重新认证并提交 reconnect sync；
-- Run/Generation/Lease 仍由 Platform 判定有效；
-- 进程必须由 boot_id + process creation identity 精确识别，且 Runner 重新建立 OS 监督句柄；
-- 仅凭 device ID、PID 或 Harness Native Session ID 不足以恢复；
-- Lease 已过期但进程仍活着时，先安全终止并获得 E3，不能重签 Lease 后让旧进程继续；
-- 无法对账则进入 Quarantined + HIR。
+Human Consultation 复用既有实体的四态与决定四元组、supersede 语义。E6 是其一种 decision type，必须绑定：
+- HIR ID；
+- Task Barrier ID；
+- Task ID；
+- operator principal；
+- decision timestamp；
+- reason + residual risk summary + mitigations；
+- 唯一 successor_run_id。
 
-## 8. E6 Human Risk Acceptance（授权证据，不是终止证据）
+E6 授权事务必须唯一分配 successor；重复或第二个 successor 请求拒绝。授权后 Barrier → risk_accepted_unconfirmed，不能 released。
 
-| 类别 | 含义 | 允许动作 |
-|---|---|---|
-| E1/E2/E3 | 已观察到精确进程退出 | 可按安全事务释放 Barrier 并自动恢复/重派 |
-| E4/E5 | 进程可能仍运行或无法判断 | 仅隔离、通知、HIR；禁止自动重派 |
-| E6 | 有权限操作者明确接受旧进程仍可能运行的残余风险 | 可授权一个绑定的 successor Attempt；旧 Barrier 仍保持 risk_accepted_unconfirmed |
+## 8. Interaction Continuation
 
-E6 必须二次确认、风险展示、凭据撤销尝试/副作用缓解、独立 Workspace、唯一 successor 绑定和不可变审计。E6 不得标记原进程已死，不得解除旧 Barrier；后续只有 E1/E2/E3 才能释放。
+Interaction lifecycle 与 HIR 独立。continue:
+1. 保存用户回复和 checkpoint；
+2. 创建 continuation operation；
+3. 执行端注入回复；
+4. 启动 Fresh Session / 新进程；
+5. 收到 continuation.consumed，登记 process sequence；
+6. 恢复正常监督。
 
-## 9. Execution Control 与 Interaction Continuation
+Native Resume 默认 false；不得把 Fresh Session continuation 伪装成原生 Session Resume。
 
-Interaction 的 terminate/continue 命令必须有确定的执行端消费者。Runner WSS adapter 与 SEM-local CodexExecutor adapter 都实现统一 Execution Control Port。continue 表示 checkpoint + 用户回复注入；默认启动新 Harness Session。它不等于 Native Session Resume，也不证明旧进程终止。Command receipt、command result、process-exit evidence 和 continuation-consumed 分别记账。
+## 9. Notification delivery
 
-## 10. 通知与 HIR
+Notification 记录 recipient、delivery state、attempt count、next_attempt_at、read_at。通知投递状态独立于 HIR/Interaction 业务状态。无 recipient → 项目未分派队列 + 告警。通知失败不得回滚 HIR/Interaction。
 
-Interaction/HIR 创建事务都必须追加 Outbox 通知事件并解析收件人；通知有独立 delivery 状态。HIR Phase 0 即有最小可操作生命周期和 Inbox。Interaction 的响应 deadline（当前默认 120 秒）不是通知延迟，也不能自动释放 Execution Barrier。
