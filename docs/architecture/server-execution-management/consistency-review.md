@@ -65,3 +65,12 @@
 - **Notification recipient/delivery:** the existing integration.notification project feed has no established recipient/delivery contract in the reviewed evidence. Recipient, unassigned queue, outbox, retry and read semantics remain OPEN pending full migration + consumer audit.
 
 The review status remains **Changes Required**. These findings are not approved ADRs and do not authorize Phase 0.
+
+
+## 6. Evidence baseline and unresolved implementation contracts
+
+The schema audit is recorded in [sem-02e-schema-and-protocol-gap-register.md](./sem-02e-schema-and-protocol-gap-register.md). In particular, existing table names do not prove semantic fit: `human_intervention` is action history; `human_consultation` requires E6 typed anchors; `notification` is a project feed without recipient/delivery lifecycle. The exact refactor/extension contract remains OPEN.
+
+The Platform active process-sequence fence is also OPEN and P0: Platform must persist and validate the active process identity for Lease Renewal and continuation, without reading SEM DB.
+
+Status remains **Changes Required**. The 23-file body audit is not considered complete merely because all files were modified.
