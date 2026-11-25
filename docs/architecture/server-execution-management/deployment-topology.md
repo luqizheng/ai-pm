@@ -1,5 +1,8 @@
 # Deployment Topology — SEM-02E
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** This document is **under authority-boundary revision**. SEM remains independently deployed and owns Runner connectivity/runtime infrastructure, but the former SEM scheduler/control coordinator acting as a Platform Claim/Lease/business-command proxy is superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Harness business context and Task mutations are exclusively through AI-PM MCP.
 
 
