@@ -244,3 +244,16 @@ Phase 0 不依赖 RabbitMQ，不依赖 Session Manager，不依赖 SEM 独立部
 ## 16. 明确未做事项
 
 本次没有修改业务代码、Migration、API、WSS、Dockerfile、Compose、Worker/Runner 主循环或部署配置；没有创建新表；没有连接或配置 RabbitMQ；没有启动 Phase 0。本文所有模型均为候选架构设计，等待整体评审。
+
+
+## 17. SEM-02E follow-up audit — additional blockers
+
+A read-only fetch of the current migration baseline and application source found that the three-table reuse direction needs a more precise schema contract. See [SEM-02E Schema and Protocol Gap Register](./sem-02e-schema-and-protocol-gap-register.md).
+
+- `governance.human_intervention` currently stores executed intervention actions (veto/rollback/freeze/unfreeze/mode_switch/policy_change/rollback_failed), not open HIR work items. Reuse remains the approved direction, but must preserve the distinction between HIR lifecycle and action history through a deliberate discriminator/refactor.
+- `governance.human_consultation` has four existing states and completeness CHECKs; E6 needs typed decision scope, HIR/Barrier/successor anchors and stronger non-null/unique integrity without weakening ordinary consultation behavior.
+- `integration.notification` is currently a project feed with `read_at`, no explicit recipient or delivery retry ledger. A complete recipient/delivery model remains open.
+- `delivery.task_run_cleanup` is keyed only by Run and models cleanup lifecycle; it cannot be reused as the multi-process identity/exit-evidence ledger.
+- Platform must persist/fence the active process sequence because Platform owns Lease Renewal and cannot query SEM DB. The authenticated sequence-registration and continuation-consumed API plus idempotent transaction contract is a P0 blocker.
+
+These findings supersede any wording elsewhere that suggests the existing tables are already a drop-in HIR/E6/notification implementation. The design direction is selected; the exact schema is not frozen.
