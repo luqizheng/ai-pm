@@ -348,3 +348,66 @@ Keep Task waiting, Interaction scheduling shield and Execution Barrier as distin
 6. Prove that Task waiting, Interaction shield and Execution Barrier are independent gates evaluated by one Platform transaction predicate.
 
 Status remains **Changes Required / Audit In Progress**. The global lock order remains deliberately unfrozen. No code, migration, API/WSS implementation or runtime configuration was changed; Phase 0 remains Not Started.
+
+
+## 11. Fourth audit pass — Interaction/Continuation/Command transaction paths
+
+This pass traced the concrete Interaction response/consume/retry/cancel paths, Continuation lifecycle hooks, lease progress/renewal and Worker Command ACK. It remains static source review; no implementation was changed.
+
+### 11.1 Confirmed lock sequences
+
+| Transaction path | Observed order | Notes |
+|---|---|---|
+| Interaction report | Run `FOR UPDATE` → Interaction lookup/insert → Run scheduling-shield UPDATE → Task transition (`FOR UPDATE`) → TaskWaiting insert → Command insert | Run→Task is an additional normal path; interaction row is newly inserted, not an existing conflicting lock |
+| Interaction retry | Interaction `FOR UPDATE` → Run lookup/lock/update → TaskWaiting / new Interaction / command writes | Confirms the previously identified Interaction→Run edge |
+| Interaction response persisted | Interaction UPDATE (row lock) → Run scheduling-shield UPDATE | Interaction→Run |
+| Interaction consumed | ResponseDelivery update → Continuation update → Interaction UPDATE → Run shield UPDATE → TaskWaiting resolve → Task `FOR UPDATE` / transition | A multi-aggregate chain; delivery and continuation FKs add implicit parent-key checks |
+| Continue Command ACK | Command `FOR UPDATE` → Run generation read/update scheduling shield → ResponseDelivery update → Continuation started update → Interaction chain update → TaskWaiting resolve → Task `FOR UPDATE` / transition | Command→Run→Interaction/Continuation→Task; the Run generation read is not itself a row lock, but shield UPDATE is |
+| Terminate Command ACK/failure | Command `FOR UPDATE` → Run/cleanup updates → Continuation freeze → Task `FOR UPDATE` / transition | Command→Run/Continuation→Task |
+| Task cancellation linkage | Task transition obtains Task `FOR UPDATE` → Interaction chain updates/cancel → Run shield update / command writes → Continuation close | Task→Interaction→Run/Continuation |
+| Run terminalization | Run terminal UPDATE → Continuation close-by-Run → cleanup enqueue and event/audit writes | Run→Continuation |
+| Lease renewal | Run `FOR UPDATE` via `lock_lease` → Run lease UPDATE → Task plain SELECT | Task SELECT is MVCC read, not a Task row lock |
+| Progress first-start | Run `FOR UPDATE` → Run lease/progress UPDATE → Task transition (`FOR UPDATE`) | Run→Task; normal business path, not only recovery |
+
+### 11.2 Important corrections and additional conflict edges
+
+1. The earlier lock inversion is broader than report-vs-retry: response-persisted is Interaction→Run, while report/first-start is Run→Interaction/Task. ACK and cancellation introduce Command and Continuation into the same connected graph.
+2. The Task cancellation path's order is Task→Interaction→Run/Continuation. Any path holding Run or Command and then waiting for Task can conflict with cancellation if the reverse edge is held concurrently. This is a concrete candidate cycle family; deterministic pair tests must establish each reachable interleaving.
+3. `mark_consumed` updates ResponseDelivery and Continuation before Interaction and Task. It can race with continue ACK, which updates Command, Run shield, ResponseDelivery, Continuation, Interaction and Task. Both are intended to be idempotent at individual state predicates, but predicate idempotency is not proof of deadlock freedom.
+4. `open_continuation_tx` allocates `MAX(generation)+1` then inserts. Its normal caller currently holds the Run row lock through Interaction report, which serializes same-Run creation; any future caller must preserve that serialization or replace it with a DB uniqueness/sequence allocation protocol.
+5. `close_open_by_task_tx` updates all open/started/frozen Continuations for a Task. It is called from Task cancellation after Task row locking; `close_open_by_run_tx` is called after Run terminalization. Their ordering is Task→Continuation versus Run→Continuation and must be covered in the final graph.
+6. The cleanup ledger is deliberately separate from Run authority. `claim_batch` locks only cleanup rows with SKIP LOCKED; `mark_completed/failed` update cleanup rows only. Cleanup completion must never be interpreted as authoritative E3 process-exit evidence unless the new process-evidence contract explicitly binds the verified process identity and generation.
+
+### 11.3 Lock graph is connected; no global order can yet be selected
+
+The current evidence establishes at least these directed edges:
+
+- Project → Run → Task (archive/Worker start confirmation/Run claim paths)
+- Run → Interaction (report/progress-related paths and shield updates)
+- Interaction → Run (retry/response/cancel paths)
+- Task → Interaction → Run (Task cancellation linkage)
+- Command → Run → Interaction/Continuation → Task (ACK paths)
+- Run → Continuation (Run terminalization)
+- Task → Continuation (Task cancellation)
+- Task graph advisory lock → Task row (terminal Task transitions and dependency graph mutation)
+
+The Project graph advisory lock has a strict pre-row-lock requirement. Existing Review completion can still reach Task transition after locking Review Run, so the advisory-lock contract violation remains open. The graph must additionally include parent-key locks from FK validation and unique-index conflict waits.
+
+Do not “solve” this by documenting a preferred order without changing call boundaries. A viable redesign likely needs a shared transaction entry protocol that resolves immutable scope IDs without row locks, acquires advisory locks in a deterministic aggregate order, then row-locks Project/Task/Run/Interaction/Command/Continuation in one canonical order. The exact order must be derived from all paths and tested; this paragraph is a design direction, not a selected lock order.
+
+### 11.4 New deterministic concurrency cases
+
+Add these to the existing J01–J10 matrix:
+
+- J11 report_interaction vs retry_interaction and response_persisted.
+- J12 continue ACK vs mark_consumed (both race for response delivery/continuation/interaction/task effects).
+- J13 terminate ACK failure/freeze vs Task cancellation.
+- J14 Run terminalization/continuation close vs Task cancellation/close-by-task.
+- J15 lease progress first-start vs Task cancellation.
+- J16 Worker spawn confirmation vs Task cancellation and Project archive.
+- J17 same-Run concurrent open_continuation attempts; assert one generation allocation and one continuation row per intended event.
+- J18 cleanup claim/complete vs Run terminalization and new process-evidence ingestion; assert cleanup state never upgrades to authoritative exit evidence.
+
+Every case uses two independent PostgreSQL connections, explicit barriers, bounded lock/statement timeouts, and verifies final aggregate states plus audit/command/delivery/continuation/event effects.
+
+Status remains **Changes Required / Audit In Progress**. This pass expands the connected lock graph but does not select a global lock order. No code, migration, API/WSS implementation or runtime configuration changed; Phase 0 remains Not Started.
