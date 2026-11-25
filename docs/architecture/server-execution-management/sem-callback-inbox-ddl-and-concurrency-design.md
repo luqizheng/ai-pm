@@ -479,7 +479,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
@@ -875,7 +875,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
@@ -889,7 +889,7 @@ The SEM protocol repository now carries a deterministic cross-language callback 
 - File: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`
 - Pinned fixture commit: `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`
 - Event type: `execution.infrastructure_uncertain`
-- The fixture includes the complete authenticated envelope, payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256.
+- The fixture includes the complete authenticated envelope (including the optional `correlation_id`), payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256. The hash includes every schema-defined envelope field that is present; an absent optional field is omitted from the JCS object, while a present `correlation_id` is covered.
 
 SEM's Python and Node validators independently canonicalize the same fixture and compare exact UTF-8 bytes and both hashes. AI-PM's Rust implementation must consume this exact fixture (pinned to the commit above until a ratified SEM protocol tag exists) and match all expected bytes/hashes. The vector is intentionally ASCII-only with integer values; it proves cross-language agreement for the complete-envelope shape, not the full Unicode/numeric edge matrix. INBOX-33 continues to require the broader RFC 8785 cases.
 
@@ -1284,7 +1284,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
@@ -1680,7 +1680,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
@@ -2089,7 +2089,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
@@ -2485,7 +2485,7 @@ A further review found an idempotency gap in the original candidate rule: compar
 The candidate now keeps two hashes with distinct meanings:
 
 - `payload_hash`: JCS SHA-256 of the payload object, preserving the existing Inbox field's payload-level meaning.
-- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. HTTP signature headers and transport metadata are excluded.
+- `event_envelope_hash`: new SEM-only column, JCS SHA-256 of the complete authenticated envelope fields `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. HTTP signature headers and transport metadata are excluded.
 
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
