@@ -1,0 +1,265 @@
+# ART-04B — Visualization ↔ Generic Artifact Mapping and Cutover Design
+
+> **Status:** Architecture proposal / Draft; no implementation approval.
+> **Date:** 2026-11-25
+> **Repository baseline:** `master` at `d0e72fa6805aebeadf1b282e430deba493072fd6`
+> **Related:** ART-01 §9, ART-04 / ART-04A in `smark-artifact-service`, `docs/visualization/ai-pm-viz-27-artifact-service-integration-v1.md`
+> **Scope:** AI-PM-side identity mapping, durable orchestration, and migration/cutover boundaries. This document does not change schema or code.
+
+## 1. Executive decision
+
+The existing `viz.artifact` is a **Visualization business-version record**, not the generic logical Artifact resource.
+
+The target mapping is:
+
+- One AI-PM Visualization slot (`tenant_id + project_id + slot_key`) maps to one generic Artifact Service `artifact_id`.
+- Each existing AI-PM `viz.artifact.id` maps to exactly one generic Artifact Service `version_id` under that logical Artifact.
+- AI-PM retains the Visualization business record, VizSpec, source/provenance semantics, approval state machine, slot policy, and Live Graph.
+- Artifact Service owns the generic Artifact, immutable Version, Output metadata, GenerationJob, and technical READY state.
+- AI-PM persists the exact cross-service identity mapping. An ArtifactReference is only an Artifact-level relationship and is not a substitute for the version mapping.
+
+This is consistent with ART-01 §9, but adds the missing AI-PM-side persistence and recovery detail.
+
+## 2. Repository facts (Observed)
+
+Static inspection of AI-PM `master` confirms:
+
+### 2.1 Existing schema
+
+Migration `migrations/0020_visualization_artifact.sql` creates four tables:
+
+| Table | Current meaning |
+|---|---|
+| `viz.artifact` | One Visualization business record per slot version; stores tenant/project, slot_key, version_no, business state, nature, full VizSpec JSONB, spec_hash, source_hash, provenance, renderer metadata |
+| `viz.approval` | Separate business approval state machine; FK to `viz.artifact.id`; anchors target_hash + expected_version_no |
+| `viz.render_output` | Output rows keyed by business artifact and format; stores HTML/SVG text or PNG bytes and content hash |
+| `viz.slot_config` | Visualization-specific slot policy; require_approval, auto_stale, allowed_nature, max_versions, retention_days |
+
+Important constraints:
+- `UNIQUE(project_id, slot_key, version_no)` makes `viz.artifact` a per-slot version record.
+- `viz.approval.artifact_id` and `viz.render_output.artifact_id` reference the business record, not a generic Artifact Service resource.
+- At most one pending approval per project/slot is enforced by a partial unique index.
+- Published VizSpec is immutable; published may become stale; stale is terminal.
+- `viz.render_output` has `UNIQUE(artifact_id, format)`; the current renderer uses `ON CONFLICT DO UPDATE` for the same business record/format.
+
+The 2026-11-24 ART-02E schema audit reports zero rows in all four tables at that audit time. This is historical evidence only; row counts must be rechecked before any migration or cutover.
+
+### 2.2 Existing code paths
+
+Observed in the current repository:
+- `crates/pm-application/src/visualization/artifact_service.rs` creates business draft records and allocates `version_no` per project/slot.
+- `apps/pm-api/src/viz_handlers.rs` exposes create/list/detail/approval/refresh APIs over the legacy business record.
+- `crates/pm-application/src/visualization/render_job.rs` calls a RenderAdapter, performs SVG safety inspection, and writes `viz.render_output`; it updates the same artifact+format row on conflict.
+- `crates/pm-infrastructure/src/viz_seecode_adapter.rs` contains the existing AI-PM-side SeeCode adapter and sandbox integration.
+- `viz.slot_config`, VizSpec, Relation Registry, source_hash, and Live Graph remain Visualization business concerns.
+
+These paths are the legacy implementation to be replaced at the controlled cutover; they must not run in parallel as an indefinite second generation authority.
+
+## 3. Identity model and mapping
+
+### 3.1 Identities must remain distinct
+
+| Identity | Owner | Meaning |
+|---|---|---|
+| `viz.artifact.id` | AI-PM | Business Visualization version record; approval and Viewer identity |
+| `artifact_id` | Artifact Service | Logical artifact container for one Visualization slot |
+| `version_id` | Artifact Service | Immutable technical/file version produced for one business Visualization record |
+| `generation_job_id` | Artifact Service | One technical generation request |
+| `viz.approval.id` | AI-PM | Business approval record; never becomes a GenerationJob or ArtifactReference |
+
+Do not rename, repurpose, or replace `viz.artifact.id` with `artifact_id`. Do not use Artifact.current_version_id as a substitute for a specific business-record-to-Version mapping.
+
+### 3.2 Required AI-PM persistence
+
+The following are proposed new AI-PM tables. Names are provisional; the constraints and semantics are normative.
+
+#### A. `viz.artifact_service_slot_binding`
+
+One row per Visualization slot:
+
+- `tenant_id`, `project_id`, `slot_key`;
+- `artifact_service_artifact_id`;
+- `created_at`, `updated_at`.
+
+Required constraints:
+- UNIQUE (`tenant_id`, `project_id`, `slot_key`);
+- UNIQUE (`artifact_service_artifact_id`);
+- all scope columns immutable after binding;
+- no cross-database FK to Artifact Service.
+
+This table is the durable local lookup from a Visualization slot to its generic Artifact. It prevents each new Visualization version from creating a new generic Artifact.
+
+#### B. `viz.artifact_service_version_binding`
+
+One row per AI-PM business Visualization version:
+
+- `viz_artifact_id` (PK/FK to `viz.artifact.id`);
+- `tenant_id`, `project_id`, `slot_key`, `legacy_version_no`;
+- `artifact_service_artifact_id`, `artifact_service_version_id`;
+- `generation_job_id` (nullable until a Job is known);
+- `created_at`, `bound_at`.
+
+Required constraints:
+- UNIQUE (`artifact_service_version_id`);
+- UNIQUE (`tenant_id`, `project_id`, `slot_key`, `legacy_version_no`);
+- the bound artifact_id must equal the slot binding's artifact_id (enforced by AI-PM transaction/constraint design);
+- once a non-null version_id is bound, it is immutable;
+- no cross-service FK; the SDK/API reconciliation path verifies remote existence and scope.
+
+This is the authoritative business-version ↔ generic-Version mapping. It preserves the legacy business ID for existing approval and UI references.
+
+#### C. `viz.artifact_service_operation`
+
+One row per outbound generation operation (not merely one per Task or slot):
+
+- local `operation_id` UUID;
+- `viz_artifact_id`;
+- stable `caller_request_id` (same identity sent to Artifact Service);
+- `idempotency_key`;
+- canonical request hash / immutable request reference;
+- `artifact_service_artifact_id`, `reference_id`, `generation_job_id`, `target_version_id` (nullable as steps progress);
+- operation state, last error code, retry/reconciliation timestamps;
+- created/updated timestamps.
+
+Required constraints:
+- UNIQUE (`caller_request_id`);
+- unique active operation policy per business record must be explicit; terminal failed/cancelled operations may be followed by a new operation with a new caller_request_id;
+- persist the operation before the first remote call;
+- update each remote identifier and operation state in a local transaction;
+- operation state is an AI-PM recovery record, not a mirror that can write Artifact Service Job state.
+
+This table is the AI-PM saga ledger required by ART-04 §4/AR04-05. It allows restart recovery without distributed transactions.
+
+#### D. Output mapping (conditional)
+
+If legacy `viz.render_output` contains rows at migration time, add `viz.artifact_service_output_binding` mapping each legacy output ID to the new ArtifactOutput ID and file-service object ID, with the original format/hash/size. If the table is empty at cutover, no historical output mapping rows are needed; future output identity is read from the Artifact Service Version manifest/Output API.
+
+Do not store file bytes in the new mapping tables.
+
+## 4. Artifact key and uncertain logical Artifact creation
+
+The logical Artifact is per slot, not per Visualization version.
+
+Preferred stable key:
+- `artifact_key = "viz-slot:" + lowercase_hex_sha256(UTF8(slot_key))`;
+- the key is scoped by tenant/project under the Artifact Service uniqueness contract;
+- a changed slot_key creates a different logical Artifact; old Artifact is archived only under an explicit retention policy.
+
+The current Artifact API supports Artifact creation with an optional artifact_key and project-scoped listing, but the inspected list endpoint does not expose a direct artifact_key lookup filter. Its Idempotency-Key retention is bounded. Before implementing the slot-binding saga, Artifact Service must provide a reliable lookup by artifact_key (a list filter or dedicated GET) so AI-PM can recover a lost create response without creating a duplicate or scanning an unbounded list.
+
+This is a separate consumer-recovery prerequisite; ART-04A's caller_request_id proposal currently covers GenerationJob creation, not generic Artifact creation.
+
+## 5. Reference semantics
+
+AI-PM may create an ArtifactReference for each legacy business record using an opaque external reference such as:
+- `owner_type = "viz_artifact"`;
+- `owner_id = <viz.artifact.id>`;
+- `relation_type = "illustrates"` (or another ART-01-approved relation chosen before implementation).
+
+The Reference means only that the logical Artifact is associated with that AI-PM business record. It does **not** mean that the ArtifactReference identifies a specific Version or approves it.
+
+The exact version-level relation is exclusively the AI-PM `viz.artifact_service_version_binding` row. Business approval remains `viz.approval` → `viz.artifact.id`.
+
+## 6. State and authority mapping
+
+| Legacy AI-PM state | Artifact Service state | Rule |
+|---|---|---|
+| `draft` | Version may be `READY` | Technical generation can be ready before business approval; no automatic publication |
+| `published` | Version remains `READY` | Human business approval remains AI-PM-only |
+| `stale` | Version remains `READY` | Stale is business freshness, not file corruption or technical failure |
+| `rejected` | Version may remain `READY` | Rejection is a business decision; do not delete/quarantine an otherwise valid file |
+| no business record / generation failed | Job terminal failure; Version may be absent or non-ready | Never fabricate a successful business version |
+
+Artifact Service `current_version_id` is a technical convenience pointer to a READY Version. It is not the published Visualization pointer and must not drive business approval or Viewer visibility. AI-PM selects the business-visible record through its existing slot/approval semantics and resolves its exact Version through the mapping table.
+
+Consequences:
+- A draft Version may be technically READY while remaining invisible to published-only business surfaces.
+- A stale business record may point to a technically READY Version.
+- A rejected business record does not change the technical Version state.
+- Artifact Service never receives `published`, `stale`, `rejected`, `nature`, or approval status as its own resource lifecycle state.
+
+## 7. Generation orchestration saga
+
+For a new business Visualization record:
+
+1. AI-PM validates VizSpec, business references, project authorization, source hashes, nature and slot policy.
+2. AI-PM creates the `viz.artifact` business record (or uses an existing record created by the approved product flow).
+3. AI-PM creates and commits `viz.artifact_service_operation` with a new caller_request_id, Idempotency-Key, request hash and immutable input reference **before** calling Artifact Service.
+4. Resolve the slot binding. If absent, create/find the generic Artifact by stable artifact_key and persist the returned ID. If the response is uncertain, use artifact_key lookup; never mint a second logical Artifact.
+5. Create the ArtifactReference for the business record; repeat is safe under the API's uniqueness/idempotent semantics.
+6. Submit GenerationJob using the operation's caller_request_id and Idempotency-Key. If response is uncertain, use ART-04A lookup by caller_request_id; never create a replacement operation.
+7. Persist `generation_job_id`; poll asynchronously and reconcile after AI-PM process restart.
+8. On Job success, require non-null exact `target_version_id`, fetch that Version, verify same artifact/scope and READY, then persist the version binding.
+9. AI-PM continues its own business workflow: create/request/decide `viz.approval` as required; Artifact Service success never auto-publishes the Visualization.
+10. If AI-PM crashes between any two calls, resume from the operation row and repeat only the idempotent/reconcilable step.
+
+Failure handling:
+- Artifact created, Reference failed: retain Artifact; retry Reference. Do not delete a potentially shared slot Artifact as compensation.
+- Reference created, Job create uncertain: lookup by caller_request_id; do not create a new caller_request_id.
+- Job failed/timed_out/cancelled: close the operation according to AI-PM policy; a deliberate new generation is a new operation with a new caller_request_id.
+- Cancel requested while running: AI-PM remains waiting until Artifact Service reports terminal state; `cancel_requested` is not `cancelled`.
+- Job succeeded but business record was later rejected/cancelled: retain the immutable Version and record the business decision in AI-PM; never rewrite Job history.
+
+No distributed transaction, cross-database write, shared SQL lock, RabbitMQ dependency, or indefinite dual-write is introduced.
+
+## 8. Legacy output and generation path cutover
+
+Before cutover:
+- The current AI-PM SeeCode Adapter, sandbox, SVG inspection and `render_job::render_artifact` still own the legacy render path.
+- The current renderer upserts `viz.render_output` by (business artifact, format); that behavior is incompatible with immutable ArtifactVersion Output once an external Version has been committed.
+- The new Artifact Service Worker becomes the only generation executor after cutover. AI-PM must not locally render and externally generate the same business operation.
+
+Cutover prerequisites:
+1. Artifact Service API/SDK contract and ART-04A are approved and implemented.
+2. File Service upload/finalize, LMMS delegation, SeeCode Adapter and Worker/runtime gates are closed.
+3. AI-PM mapping tables, operation ledger, client adapter and consumer contract tests are implemented.
+4. Viewer reads use AI-PM business state + exact version binding; output bytes/URLs are resolved through Artifact Service/file-service.
+5. New generation requests are frozen during the authority switch; no concurrent old/new writers.
+
+After cutover:
+- AI-PM remains the sole writer of `viz.artifact`, `viz.approval`, and `viz.slot_config` business semantics until a separate retirement decision.
+- Artifact Service is the sole writer of generic Artifact/Version/Output/GenerationJob.
+- `viz.render_output` writes and local render execution are disabled; old rows remain read-only during the rollback/retention window.
+- Live Graph and business source projection remain unchanged.
+
+## 9. Historical backfill and rollback
+
+ART-01 §9 is authoritative: Inventory → Compatibility → Backfill rehearsal → Cutover → Read verification → Rollback window → Retirement. ART-04B adds the following checks:
+
+- Re-read live row counts and schema immediately before rehearsal; the 2026-11-24 zero-row audit is not a current production guarantee.
+- Create one generic Artifact per distinct tenant/project/slot.
+- Create one Artifact Service Version per legacy `viz.artifact` row, preserving the relationship by mapping, not by assuming equal numeric version numbers.
+- Copy each legacy output to file-service and verify byte size + SHA-256 before committing its ArtifactOutput/manifest; retain old output ID → new output ID/object ID mapping.
+- Preserve `viz.artifact.id`, `viz.approval.id`, and all approval anchors in AI-PM. Do not migrate business approval into Artifact Service.
+- Compare per-slot version counts, business state counts, approval references, output formats, hashes, and Viewer resolution before cutover.
+- If any row/output cannot be migrated safely, stop cutover for that slot; do not silently drop or partially publish it.
+
+Rollback is not a second writer mode:
+- Freeze new external generation and wait/reconcile all in-flight Jobs.
+- Keep successful Artifact Service Versions and mapping rows; do not delete them to imitate a rollback.
+- Restore the old AI-PM read path only for records whose legacy data remains complete and authoritative.
+- Do not resume local rendering for records already switched to Artifact Service as their generation authority.
+- Reconcile any completed external Job whose AI-PM business operation was not finalized before reopening writes.
+
+## 10. Open decisions / implementation gates
+
+1. **Artifact lookup by artifact_key** — add an API lookup/filter before the AI-PM slot-binding saga is implementable.
+2. **Reference relation value** — select an ART-01-approved relation_type for a Visualization business record; do not invent a new enum-like value in the consumer.
+3. **Output compatibility** — define how legacy HTML/PNG rows, if any, are copied and surfaced when the new SeeCode path is SVG-only.
+4. **Business version numbering** — preserve legacy `version_no` in AI-PM; do not assume Artifact Service `version_number` will equal it.
+5. **Mapping retention** — keep legacy ID mappings for at least the lifetime of AI-PM approvals, audit history, and external references.
+6. **Generic Artifact create recovery** — ART-04A caller_request_id is for GenerationJob; artifact_key lookup is needed to reconcile uncertain Artifact creation.
+7. **Current pointer semantics** — generic current_version_id is not the business-published Visualization pointer.
+
+## 11. Non-goals
+
+This document does not:
+- alter existing `viz.*` tables or create migrations;
+- implement Artifact Service SDK/consumer adapter;
+- migrate existing rows or copy files;
+- change Viewer/UI contracts;
+- move VizSpec, Relation Registry, Live Graph, business authorization, approval, or slot policy into Artifact Service;
+- authorize SeeCode production generation;
+- close Artifact Service LMMS delegation, File Service finalize, or ART-03B-02/03 runtime blockers.
+
+**Status remains Draft.** The mapping is a design proposal to be reviewed against ART-01 and ART-04 before any implementation.
