@@ -166,7 +166,7 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 42 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 44 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
@@ -187,7 +187,7 @@ The latest review identified two defects in the illustrative SEM Inbox CHECK: re
 
 The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
 
-The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 42 cases.
+The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 44 cases.
 
 
 ## 12. Optional correlation_id is part of authenticated envelope identity
@@ -199,7 +199,7 @@ The contract is corrected: JCS covers every schema-defined envelope field that i
 The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
 
 
-INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 42 cases.
+INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 44 cases.
 
 
 ## 13. Explicit PostgreSQL CHECK truth table
@@ -255,9 +255,10 @@ This corrects the prior open-policy note. It is a Draft contract alignment only.
 A re-review found an ambiguity in the post-`ON CONFLICT DO NOTHING` recovery algorithm. An event_id collision across executions can legitimately produce an event_id lookup hit but no matching sequence lookup. That must be classified as IDEMPOTENCY_CONFLICT, not as an integrity failure.
 
 The DDL design now freezes this precedence:
-1. Existing global event_id with any changed event_type/execution_id/sequence/payload_hash/event_envelope_hash → 409 IDEMPOTENCY_CONFLICT, regardless of whether the incoming execution/sequence is also owned by another row. Never disclose the existing row's tenant/project.
-2. Existing event_id with exact tuple/hash → the sequence lookup must identify the same Inbox row; otherwise generic integrity failure and no ACK.
-3. No event_id row but sequence key owned by another event → 409 EVENT_SEQUENCE_CONFLICT.
-4. ON CONFLICT returns no row and neither key can be found → rollback and generic integrity failure.
+1. Existing global event_id under a non-SEM source, with a different idempotency_key, or with any changed event_type/execution_id/sequence/payload_hash/event_envelope_hash → 409 IDEMPOTENCY_CONFLICT, regardless of whether the incoming execution/sequence is also owned by another row. Never disclose the existing row's tenant/project.
+2. A stored tenant_id/project_id that disagrees with the locked Run-derived scope is a generic integrity failure; rollback and never ACK.
+3. Existing event_id with exact tuple/hash and matching Run scope → the sequence lookup must identify the same SEM Inbox row; otherwise generic integrity failure and no ACK.
+4. No event_id row but SEM sequence key owned by another event → 409 EVENT_SEQUENCE_CONFLICT.
+5. ON CONFLICT returns no row and neither key can be found → rollback and generic integrity failure.
 
-Added INBOX-40..42 for simultaneous cross-key conflict precedence, inconsistent exact-duplicate row identity, and sequence-only ownership. The PostgreSQL acceptance matrix now has 42 cases. This is a design correction only; no migration or runtime code changed.
+Added INBOX-40..44 for simultaneous cross-key conflict precedence, inconsistent exact-duplicate row identity, sequence-only ownership, non-SEM global event_id collisions and Run-derived tenant/project integrity. The PostgreSQL acceptance matrix now has 44 cases. This is a design correction only; no migration or runtime code changed.
