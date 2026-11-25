@@ -1,5 +1,8 @@
 # SEM-02E — 全量架构收敛评审包
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 - 状态：**Review Pending — Changes Required**
 - 主基线：[sem-02e-architecture-convergence.md](./sem-02e-architecture-convergence.md)
 - 分支：`docs/sem-02e-architecture-convergence`
