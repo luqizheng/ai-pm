@@ -203,9 +203,9 @@ No distributed transaction, cross-database write, shared SQL lock, RabbitMQ depe
 ## 8. Legacy output and generation path cutover
 
 Before cutover:
-- The current AI-PM SeeCode Adapter, sandbox, SVG inspection and `render_job::render_artifact` still own the legacy render path.
-- The current renderer upserts `viz.render_output` by (business artifact, format); that behavior is incompatible with immutable ArtifactVersion Output once an external Version has been committed.
-- The new Artifact Service Worker becomes the only generation executor after cutover. AI-PM must not locally render and externally generate the same business operation.
+- AI-PM still contains the legacy SeeCode Adapter, sandbox, SVG inspection and `render_job::render_artifact` code path. Static repository review has not established a production caller for `render_artifact`; do not describe this path as an actively used production executor without fresh call-site/runtime evidence.
+- The legacy renderer upserts `viz.render_output` by (business artifact, format); that behavior is incompatible with immutable ArtifactVersion Output once an external Version has been committed.
+- At the approved authority switch, the Artifact Service Worker becomes the sole generation executor. AI-PM must not locally render and externally generate the same business operation.
 
 Cutover prerequisites:
 1. Artifact Service API/SDK contract and ART-04A are approved and implemented.
@@ -220,24 +220,23 @@ After cutover:
 - `viz.render_output` writes and local render execution are disabled; old rows remain read-only during the rollback/retention window.
 - Live Graph and business source projection remain unchanged.
 
-## 9. Historical backfill and rollback
+## 9. No historical data backfill and controlled cutover
 
-ART-01 §9 is authoritative: Inventory → Compatibility → Backfill rehearsal → Cutover → Read verification → Rollback window → Retirement. ART-04B adds the following checks:
+The product-owner decision recorded in ART-02F is authoritative: AI-PM has no real users and no real business data; historical `viz.*` data migration/backfill, old-ID mapping, compatibility mode and dual-write are not part of this product cutover. The earlier zero-row audit is supporting historical evidence, not a substitute for a fresh pre-cutover check.
 
-- Re-read live row counts and schema immediately before rehearsal; the 2026-11-24 zero-row audit is not a current production guarantee.
-- Create one generic Artifact per distinct tenant/project/slot.
-- Create one Artifact Service Version per legacy `viz.artifact` row, preserving the relationship by mapping, not by assuming equal numeric version numbers.
-- Copy each legacy output to file-service and verify byte size + SHA-256 before committing its ArtifactOutput/manifest; retain old output ID → new output ID/object ID mapping.
-- Preserve `viz.artifact.id`, `viz.approval.id`, and all approval anchors in AI-PM. Do not migrate business approval into Artifact Service.
-- Compare per-slot version counts, business state counts, approval references, output formats, hashes, and Viewer resolution before cutover.
-- If any row/output cannot be migrated safely, stop cutover for that slot; do not silently drop or partially publish it.
+Before cutover:
+- Re-check the target database schema and row counts for all legacy `viz.*` tables immediately before the authority switch.
+- Expected state is no real business rows. If unexpected non-test/business rows are found, stop the cutover and investigate their origin and ownership. Do not silently discard them, and do not automatically introduce a backfill project that contradicts ART-02F; obtain a new explicit product decision first.
+- Test/fixture data is handled by the test-environment reset/cleanup policy, not migrated into Artifact Service.
+- Verify all old handlers, queries, SQL, workers, tests and other code dependencies have been removed or deliberately retired before dropping legacy tables in a later AI-PM migration.
+- Freeze new generation requests during the authority switch; no concurrent old/new writers.
 
 Rollback is not a second writer mode:
 - Freeze new external generation and wait/reconcile all in-flight Jobs.
-- Keep successful Artifact Service Versions and mapping rows; do not delete them to imitate a rollback.
-- Restore the old AI-PM read path only for records whose legacy data remains complete and authoritative.
-- Do not resume local rendering for records already switched to Artifact Service as their generation authority.
+- Keep successful Artifact Service Versions and AI-PM mapping/operation records; do not delete them to imitate a rollback.
+- Restore an old AI-PM read path only if its underlying legacy data is still complete and authoritative; this is not permission to resume the legacy renderer for operations already owned by Artifact Service.
 - Reconcile any completed external Job whose AI-PM business operation was not finalized before reopening writes.
+- If the new path must be disabled after cutover, keep the external technical records intact and require an explicit recovery decision before any generation authority is switched again.
 
 ## 10. Open decisions / implementation gates
 
