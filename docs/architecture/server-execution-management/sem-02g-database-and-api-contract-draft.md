@@ -184,8 +184,8 @@ ALTER TABLE governance.human_intervention
 
 ALTER TABLE governance.human_intervention
     ADD CONSTRAINT fk_human_intervention_hir_barrier
-    FOREIGN KEY (barrier_id)
-    REFERENCES delivery.task_execution_barrier(id);
+    FOREIGN KEY (task_id, barrier_id)
+    REFERENCES delivery.task_execution_barrier(task_id, id);
 
 ALTER TABLE governance.human_intervention
     ADD CONSTRAINT fk_human_intervention_hir_interaction
@@ -512,7 +512,7 @@ The project Feed's existing parent `read_at` endpoint/semantics are not changed 
 
 Base path: `/internal/sem/v1`. All endpoints require the short-lived service JWT from ADR-SEM-22; each operation also validates its domain-level device/Run/Generation binding. Idempotency keys are independent from JWT `jti`.
 
-### 8.1 Register initial process
+### 9.1 Register initial process
 
 `POST /internal/sem/v1/runs/{run_id}/processes`
 
@@ -536,7 +536,7 @@ Base path: `/internal/sem/v1`. All endpoints require the short-lived service JWT
 
 Platform verifies current Run/Generation/Lease and device binding, inserts the identity idempotently, and sets `active_process_sequence`. A conflicting identity for the same sequence returns `409 process_sequence_conflict`.
 
-### 8.2 Continue consumed
+### 9.2 Continue consumed
 
 `POST /internal/sem/v1/continuations/consumed`
 
@@ -564,7 +564,7 @@ Platform verifies current Run/Generation/Lease and device binding, inserts the i
 
 Platform validates the issued continue command, Interaction response persistence, exact reserved sequence and current Run/Generation. In one transaction it inserts sequence 2, advances the active pointer, records consumption and audits. Duplicate same `event_id` returns the original result. A stale sequence or conflicting process identity returns 409 and must not renew the Lease.
 
-### 8.3 Process exit evidence
+### 9.3 Process exit evidence
 
 `POST /internal/sem/v1/runs/{run_id}/process-exits`
 
@@ -589,7 +589,7 @@ Platform validates the issued continue command, Interaction response persistence
 
 Natural exit may omit `command_id`. If the evidence claims to satisfy a terminate command, `command_id` is mandatory and must target this exact process sequence. Lease expiry or Generation change does not prevent appending valid historical evidence for a registered process identity; it prevents that evidence from mutating a newer Run/Generation. Platform accepts exact duplicates idempotently and quarantines identity conflicts.
 
-### 8.4 Process-bound Lease Renewal
+### 9.4 Process-bound Lease Renewal
 
 `POST /internal/sem/v1/leases/renew`
 
