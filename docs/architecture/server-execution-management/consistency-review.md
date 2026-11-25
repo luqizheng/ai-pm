@@ -121,3 +121,15 @@ Overall status remains **Changes Required / Review Pending**. PR #9 remains Draf
 SEM-02J follow-up detail:
 - The Task dependency graph advisory lock is part of the same lock graph. Its helper requires acquisition before any row lock, but Review finalization can lock a Review Run before invoking terminal Task transition and thereby acquiring the graph lock. This is a lock-order contract violation requiring pairing tests; a universal deadlock cycle is not asserted without the remaining pairing audit.
 - Task cancellation holds Task before Interaction/Run linkage, while Claim/recovery paths hold Run before Task. Review retry directly inserts a review Run without Project/Task locking, and Review Claim locks only the Run. These are additional Barrier and Project lifecycle closure items.
+
+
+## 9. SEM-02J second source-audit pass
+
+- Confirmed Review retry directly inserts a Review Run without Project activity locking, Task row locking or Task Barrier validation; its max-attempt allocation can race and relies on per-kind unique indexes as a final guard.
+- Delivery retry-after-failure updates/locks Task before creating a Delivery Run but does not participate in the Project activity gate or Task Barrier.
+- Review Claim and stuck-Review recovery still lack consistent Project lifecycle participation.
+- Task/Project parent FKs and Run child FKs create implicit key-share/parent-lock edges; partial unique indexes serialize/reject some duplicate inserts but do not enforce Barrier authorization.
+- The trigger inventory identifies Review report immutability on task_run and append-only event/failure guards; no cross-aggregate secondary lock acquisition was found in the inspected triggers. This must be revalidated against the current full migration chain.
+- The failure-judge standalone Run update commits/releases before its later Task transaction; it is not labeled a proven simultaneous Run→Task lock inversion.
+
+The final global lock order remains unselected. The current migration-chain reconciliation, exhaustive write-path inventory, API/background route audit and deterministic pair tests remain open. No implementation or Phase 0 is authorized.
