@@ -1,203 +1,50 @@
-# Server Execution Management Architecture V1（总览）
+# Server Execution Management Architecture V1
 
-- 日期：2026-11-24
-- 依据：SEM-01 只读审计（`docs/architecture/sem-01-deployment-audit/`，基于 master `4f047f12`）
-- 本文档基于 SEM-01 / SEM-02A 代码审计基线整理；后续架构决策与文档修订以当前 master 为准
-- 性质：**架构设计进行中（Corrective Design Review Pending）**。本阶段只读代码、只写设计文档，未修改任何业务代码 / 迁移 / Dockerfile / Compose / Worker 主循环。
-- 工程政策：Greenfield（`docs/architecture/engineering-lifecycle-policy.md`，AGENTS.md 第 7 条引用；
-  政策文件与 AGENTS.md 引用均已进入 master；以当前 master 文件内容为准）。
-  核心约束：无历史生产数据/客户/正式版本，可直接重构 Schema、Session 数据模型、Worker 角色装配与内部接口，
-  废弃表/字段可提删除方案，不留兼容层；但**不降低执行安全要求**（事务完整性、唯一执行权、
-  进程/工作区安全生命周期、凭据安全、关键状态可审计、全新库可完整初始化）。
+- 状态：**Design In Progress — SEM-02E Review Pending**
+- 架构收敛主文档：[SEM-02E 全量架构收敛基线](./sem-02e-architecture-convergence.md)
+- 评审包：[SEM-02E Review Package](./sem-02e-review-package.md)
+- 分支：`docs/sem-02e-architecture-convergence`
+- 当前工作仅限架构文档；未修改业务代码、Migration、API、WSS、Dockerfile、Compose 或 Worker/Runner 主循环；Phase 0 未启动。
 
 ## 一句话架构
 
-AI-PM 拆分为三类部署单元：**Platform**（业务状态与 DB-only 循环）、
-**Server Execution Management（SEM）**（服务端进程 spawn/poll/terminate + 工作区 + 执行证据，
-独立 Docker 主机）、**Client Runner**（用户设备上的进程载体）。
-Platform 与 SEM 是独立服务，通过版本化 HTTPS API 通信、各自管理数据库；AI-PM 是业务 Run/Lease/Generation 的权威方，SEM 管理执行侧持久状态。Runner 与 SEM 通过 WSS 通信。初期使用 HTTP API + Transactional Outbox，不引入消息中间件。Session Manager 是 SEM 执行运行时内的逻辑模块，不因本决策强制拆成微服务。
+AI-PM 由 Platform、**独立服务 SEM**、Client Runner 和 Harness 构成。Platform 与 SEM 各自独立部署、独立数据库；Platform 通过版本化 HTTPS API 保持 Run/Lease/Generation 和业务治理权威，SEM 负责 Runner 控制面、执行进程监督与执行侧持久状态；Runner 通过 WSS 连接 SEM；Harness 继续通过 Platform MCP 使用业务能力。
 
-## 部署边界总图
+## 部署与数据权威
 
-```mermaid
-flowchart LR
-    subgraph Platform["AI-PM Platform（现有主机）"]
-        API[pm-api : HTTPS]
-        PW[pm-worker]
-        W[ai-pm-worker role=platform]
-        PG[(Platform PostgreSQL<br/>业务 / Run / Lease 权威)]
-    end
-    subgraph SEM["Server Execution Management（独立 Docker 主机）"]
-        EW[ai-pm-worker role=execution<br/>Session Manager / Scheduler]
-        SDB[(SEM DB<br/>执行侧私有状态)]
-        EX[CodexExecutor<br/>spawn/poll/terminate]
-        WS[workspace 卷<br/>AI_PM_WORKSPACE_ROOT]
-    end
-    subgraph Client["用户设备"]
-        R[ai-pm-runner]
-        H[Codex / Z-Code / DSH / Claude Code]
-    end
-    API --> PG
-    PW --> PG
-    W --> PG
-    W -->|Transactional Outbox / HTTPS| EW
-    EW -->|claim / status / evidence API| API
-    EW --> SDB
-    EW --- EX --- WS
-    R <-->|WSS| EW
-    R --- H
-```
+- Platform PostgreSQL：Project/Task/Run/Lease/Generation、Interaction、HIR、Human Consultation、worker_command、业务通知和审计的权威。
+- SEM DB：Runner connection、WSS delivery ledger、dispatch operation、process observation、资源快照和 SEM-local recovery state。
+- SEM **不得**连接或共享 Platform PostgreSQL。
+- Platform Outbox → HTTPS → SEM Inbox；SEM → Platform HTTPS API；Runner ↔ SEM WSS。
+- Platform Outbox 只有 Platform 一个消费者；两侧不做分布式事务。
+- Runner 不再绕过 SEM 轮询 Platform Claim、command、ACK 或 recovery control。
 
-## 核心决策摘要（D1–D9）
+## 本轮架构裁决
 
-| # | 决策 | 要点 | 详见 |
-|---|---|---|---|
-| D1 | 循环归属 | 循环 1/2/3/5/6/7/8 + `pm-worker` 全部 + pm-api audit listener 留 Platform；循环 4 执行子步迁 SEM | `worker-role-separation.md` |
-| D2 | outbox 单消费者 | 循环 3（outbox 分发）**只允许存在于一个部署单元**（Platform）；SEM 角色不装配 outbox handler，从根上消除「两侧 handler 集合不一致 → 假死信」 | `worker-role-separation.md` §3 |
-| D3 | 角色化装配 | `AI_PM_WORKER_ROLE=platform\|execution\|all`（默认 `all` 保持开发态零行为漂移）；Phase 1 不拆新二进制 | `worker-role-separation.md` |
-| D4 | 回收安全 | **DB 租约过期 ≠ 进程死亡**。回收必须以终止证据为前提：同主机走 poll 三证据；远程 Runner 只有在 E3 终止 ACK 通道实现并验收后才可凭 E3 重派；否则按 E4 隔离不重派（HIR 兜底） | `execution-safety.md` |
-| D5 | 工作区唯一所有权 | 一个工作区同一时刻至多一个活进程；新 Attempt 不得复用未确认死亡的旧工作区（新建或等确认后按 reclamation 策略处置） | `execution-safety.md` §5 |
-| D6 | Session Manager 位置 | `crates/pm-application` 新增 `session_manager` 模块（逻辑职责）；实现落 `pm-infrastructure::codex_executor`；新增 `task_run.harness_session_id` 与 `harness_kind` 两列；HIR 使用独立表；Resume 默认关闭，实测通过后按 Harness 版本启用 | `session-manager-design.md` |
-| D7 | 跨 Runner 接管 | 接管 = 新设备**走正常 claim**（generation+1、token 重签），**不放宽 `lease_client_id` 校验**；原执行端先停/隔离，HIR 全程审计 | `runner-supervision-and-handoff.md` |
-| D8 | 人工介入 | Q1=B（无人监督失败后建 HIR 并尽量恢复原 Session）、Q2=B（有人监督先通知由用户选 Runner，选择≠接管成功）、Q3=A（高频介入只提示不改策略） | `runner-supervision-and-handoff.md` §2 |
-| D9 | Platform–SEM 服务边界 | 版本化 HTTPS API + Platform Transactional Outbox；双方数据库独立；Platform 保持 Run/Lease/Generation 权威；SEM 不直连 Platform DB；Runner–SEM 使用 WSS | `protocol-contracts.md`、`deployment-topology.md` |
-| D10 | SEM 统一派发与接管 Runner | SEM 是 Runner 控制面的唯一调度/派发/接管协调者；Runner 不再轮询 Platform MCP Claim；SEM 代表目标 Runner 请求 Platform 原子 Claim；Harness 业务 MCP 保留 | `protocol-contracts.md` §2–6、`runner-supervision-and-handoff.md` §5、`decision-record.md` ADR-SEM-20 |
-
-## 用户确认的 V1 产品决策
-
-- Workspace / Worktree / Git Mirror 不做备份；运行期间仍使用单一持久卷。卷丢失不代表进程死亡，活跃 Run 按 E4/E5 隔离。
-- Runner 默认 `unattended`；只有明确配置 `supervised` 才要求领取前用户确认。
-- 每个 Repository 只有一个权威 Git `origin`；SEM 不管理第二远端、同步或合并。
-- HIR 采用独立实体；E4 使用持久化 scheduling shield。
-- Harness Resume 默认关闭，必须按具体版本实测通过后启用。
-
-## SEM-01 结论复核结果
-
-SEM-01 十条结论**全部经代码复核成立**，两处需要精化（不推翻）：
-
-1. **精化 ①（outbox）**：SEM-01 表述为「两侧 handler 注册集合必须一致」。复核后收敛为更强、更简单的约束：
-   **outbox 循环整个留在 Platform，SEM 角色根本不注册 handler**。「集合一致」问题被「单消费者」消解。
-   代码证据：`apps/ai-pm-worker/src/main.rs:131` 与 `apps/pm-worker/src/main.rs:39` 均经
-   `pm_infrastructure::outbox_handlers::register_all_handlers` 全集装配；只要 outbox 循环不 duplicated，不存在集合分叉。
-2. **精化 ②（reconcile_orphans）**：SEM-01 说「>1h 回收不带 runner 项目排除」。复核确认且**风险比 SEM-01 表述更大**：
-   B06-D3 回收（`run_executor.rs:489-539`）对 `status='running' AND lease_expires_at < now()-1h` 的 Run
-   **直接 UPDATE 回 queued**，既不 poll 进程存活、也不查 `devenv.device_project_binding`。
-   注意 Model B claim 候选发现（`claim.rs:344-380`）**有** runner 项目排除（NOT EXISTS 绑定+is_runner），
-   所以 runner 项目的 Run 不会走 claim 路径的 B3-2——但会走 B06-D3 这条**绕过排除的旁路**。
-   这是 Phase 0 必须修复的第二个点（与 B3-2 同根：未确认进程死亡就重派）。
-
-其余结论（B3-2 回收分支不验存活、`executor_session` 不能当 Harness 原生 Session、
-执行状态一半在宿主机、镜像缺 codex CLI、未设 `AI_PM_WORKSPACE_ROOT` 等）复核均成立，证据锚点见各分册。
-
-## 关键代码锚点（本定稿全部结论的可复核依据）
-
-| 事实 | 位置 |
+| 主题 | 当前基线 |
 |---|---|
-| 循环 1–8 装配 | `apps/ai-pm-worker/src/main.rs`（:104 第二条、:122 第三条、:143 第四条、:387 第五条、:396 第六条、:414 第七条、:448 第八条） |
-| outbox 全集装配约束 | `apps/ai-pm-worker/src/main.rs:131`、`apps/pm-worker/src/main.rs:39`、`crates/pm-application/src/outbox.rs:394` |
-| claim 唯一事务模板 / B3-1 / B3-2 分叉 | `crates/pm-application/src/run_dispatch/claim.rs:109-674`（④ 回收分支 :574-674） |
-| `recover_lost_run`（隔离+新建，无存活验证） | `crates/pm-application/src/run_dispatch/lease.rs:166-202` |
-| B06-D3 孤儿回收（>1h，无 runner 排除、无 poll） | `crates/pm-application/src/run_executor.rs:480-583` |
-| runner 项目排除（claim 候选发现层） | `crates/pm-application/src/run_dispatch/claim.rs:344-380` |
-| 心跳即续租（runner 强制 `heartbeat*2 < lease_secs`） | `apps/ai-pm-runner/src/runner_loop.rs:71-75`、`crates/pm-application/src/run_dispatch/lease.rs:259-269` |
-| generation fencing / deadline 不重置 | `claim.rs:928-963`（`lease_generation = COALESCE+1`、`deadline_at COALESCE`） |
-| 循环 4 执行器选择与 reclamation 三重开关 | `apps/ai-pm-worker/src/main.rs:143-220` |
-| Uncertain 不回收（T1 三证据） | `run_executor.rs:620-625` |
+| SEM 身份 | 独立服务，不是 Platform Worker 的可选模块 |
+| Execution Barrier | Task 作用域，防止新 Run 行绕过旧执行的不确定性 |
+| HIR | 复用并扩展 `governance.human_intervention` |
+| E6 决定 | 复用并扩展 `governance.human_consultation` |
+| Notification | 复用并扩展 `integration.notification`，保留 read_at 语义 |
+| Orphan detection | Phase 0 Platform DB-only 周期扫描，不依赖 Worker 重启 |
+| Process Identity | Run + Generation 内支持有序进程身份序列，覆盖 Interaction continue |
+| E6 | 提议正式修订 ADR-SEM-04/10；风险授权不等于终止证据，不释放旧 Barrier |
+| RabbitMQ | 已存在独立单实例、无集群；不是 SEM 安全关键依赖，不替代 HTTPS Outbox/Inbox |
+| Workspace | 不备份；卷丢失不能证明进程死亡 |
+| Runner | 默认 unattended；supervised 需要用户确认 |
+| Git | 每个 Repository 一个权威 origin |
 
-## 架构文档索引
+## 23 份专题文档
 
-| 文档 | 内容 |
-|---|---|
-| README.md | 总览、部署边界和决策摘要 |
-| decision-record.md | ADR-SEM-01–18、OQ-1–8 裁决及验证门槛 |
-| deployment-topology.md | Platform / SEM / Runner 部署与运行期卷 |
-| worker-role-separation.md | Worker 循环归属和角色化装配 |
-| session-manager-design.md | Session 概念、生命周期和 Harness Resume |
-| execution-safety.md | E1–E5、Scheduling Shield、进程和凭据安全 |
-| runner-supervision-and-handoff.md | Runner 监督模式、HIR 和跨 Runner 接管 |
-| domain-model.md | Run/Attempt/Session/Runner/HIR 领域模型 |
-| protocol-contracts.md | Claim、Heartbeat、Cancel ACK、Result 协议契约 |
-| state-machines.md | Run、Lease、HIR、Handoff 状态机 |
-| failure-recovery.md | 故障矩阵与恢复顺序 |
-| security-model.md | 身份、凭据、租约、E3 和审计安全 |
-| operational-runbook.md | 启停、监控、排障和卷丢失处置 |
-| testing-and-acceptance.md | 并发、进程、Runner、Harness 和故障验收 |
-| migration-roadmap.md | Phase 0–5 实施路线图 |
-| consistency-review.md | 跨文档一致性审查、实施前门槛与 SEM-02D 关闭状态 |
-| code-contract-mapping.md | SEM-02C 当前代码事实、Platform/SEM/Runner 契约映射、差异与阻断项 |
-| service-protocol-security-and-persistence.md | ADR-SEM-21–25 的服务协议、安全、SEM 私有持久化、幂等和故障恢复详细基线 |
-| sem-02d-final-architecture-review.md | SEM-02D 最终架构审查结论、12 项阻断项与 Design Complete 门槛 |
+以 SEM-02E 为跨文档一致性的主基线。专题文档必须把规范更新写回正文并删除冲突定义，不允许只在文末追加“以新节为准”。
 
-## ADR-SEM-20–25：Runner 控制面与 Platform–SEM 服务协议
+## 阶段状态
 
-用户于 2026-11-24 确认：SEM 是 Runner 任务派发与接管的唯一协调入口。Runner 不再主动轮询 Platform MCP 领取任务。SEM 选择/确认目标 Runner 后，通过 Platform 服务 API 请求 Claim；Platform 仍在自身数据库事务中校验设备身份、项目绑定、资格、Scheduling Shield、并发互斥并签发 Lease/Generation。SEM 只有在成功 Claim 后才可通过 WSS 派发执行授权。Harness 继续通过 Platform MCP 使用业务工具。
+Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-convergence.md#14-phase-0–5-统一路线) 为准。Phase 0 未启动。当前整体状态为 **Review Pending**，不代表 ADR 已冻结或实施获批。
 
-控制通道唯一归属：Claim、Runner 监督心跳、命令投递/ACK、取消、接管协调走 Runner–SEM WSS + SEM–Platform HTTPS；Harness 的项目/任务上下文、Agent Activity、交互、结果/交付等业务操作走 Platform MCP。Runner 不得绕过 SEM 直接 Claim 或轮询命令。Lease Renewal 唯一路径已由 ADR-SEM-21 冻结：Runner Supervisor 专用 WSS 消息 → SEM → Platform HTTPS API；WSS Heartbeat 和 Harness Agent Activity 均不续租。
+## RabbitMQ 部署事实与使用边界
 
-## 原始交付索引
+环境已有独立 RabbitMQ 单实例服务，没有集群。SEM V1 不新增 RabbitMQ 必需依赖；Claim、Lease、Barrier、HIR、E3 和恢复不依赖 RabbitMQ 可用性。若未来批准，可将其用于非权威唤醒/通知加速，数据库 Outbox/Inbox 与 API 对账仍是可靠性基础。
 
-1. SEM-01 复核 → 本文件 §「SEM-01 结论复核结果」
-2. B3-2 根因与修复 → `execution-safety.md`
-3. 部署架构 → `deployment-topology.md`
-4. 职责边界 → `worker-role-separation.md`（Platform/SEM）+ `runner-supervision-and-handoff.md`（Client Runner）
-5. Session Manager → `session-manager-design.md`
-6. 接管安全模型 → `runner-supervision-and-handoff.md` §4
-7. Phase 0–5 → `migration-roadmap.md`
-8. 已关闭 OQ 与验证门槛 → `decision-record.md`
-
-## 本阶段状态
-
-- Git HEAD：以当前 master 实际 HEAD 为准；本文件不固化可能过期的短 SHA
-- **SEM-02B：文档补齐与 OQ-1 至 OQ-8 决策更新已写入 master。**
-- **SEM-02D：已完成最终架构一致性审查。ADR-SEM-21–25 继续有效；未发现推翻总体方向的理由，但发现 12 项设计阻断项，尚未达到 Design Complete。** 当前实现尚无 SEM HTTPS API、SEM DB、Runner WSS 或 service-to-service API；详见 `code-contract-mapping.md`。`service-protocol-security-and-persistence.md` 是已批准的目标架构基线，不代表已实现。
-- 架构状态：`Design In Progress`；SEM-02D 明确不通过 Design Complete 门槛。Phase 0 未启动。
-- 本轮新增 `service-protocol-security-and-persistence.md`，并同步更新 README、决策登记、协议、安全、一致性、代码映射、故障恢复和验收文档；未修改业务代码、数据库 Migration、Dockerfile、Compose、Worker 主循环、API 或 Runner 实现。
-- 未开始 Phase 0 实施。
-
-
-### ADR-SEM-21–25：服务协议、安全与持久化
-
-用户于 2026-11-24 确认并冻结：
-
-- **ADR-SEM-21**：Lease Renewal 唯一路径为 Runner Supervisor → WSS → SEM → Platform HTTPS；Heartbeat 与 Harness Agent Activity 不续租。
-- **ADR-SEM-22**：Platform↔SEM 使用独立服务身份、TLS、短时非对称签名 JWT、audience/scope 和密钥轮换；服务身份不进入 human principal。
-- **ADR-SEM-23**：Runner 使用 Platform 签发的短时一次性设备绑定 WSS Ticket；SEM 原子消费 ticket ID；Outbox 撤权事件 + 有界周期重验证，失去授权新鲜度时 fail closed。
-- **ADR-SEM-24**：SEM DB 使用 7 张最小私有表：Inbox、Runner Connection、Ticket Use、Dispatch Operation、Command Delivery、Platform Delivery、Process Observation；不复制业务权威状态。
-- **ADR-SEM-25**：Claim 和跨服务副作用必须幂等可恢复；Platform Claim 与幂等结果同事务；SEM 不持久化明文 Lease Token。
-
-详细协议与故障语义见 `service-protocol-security-and-persistence.md`。上述是已确认的架构决策，不代表代码已经实现。
-
-## SEM-02D 阻断项关闭提案
-
-- 新增 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md)，对 D-01–D-13 给出可审阅的物理模型、HTTPS/WSS 契约、SEM 七表结构、Ports/Adapters、安全、资源感知调度与阶段依赖提案。
-- D-01–D-12 仍为 **Proposed / 待用户确认**；D-13 已由用户确认并登记为 **ADR-SEM-26**，不再属于待确认事项。
-- 当前仍为 `Design In Progress`；Phase 0 未启动。只有用户确认提案并完成跨文档同步复核后，才可将相关 D 项转为 Ratified。
-
-### ADR-SEM-26：Runner 资源感知与同机并发准入
-
-统一设计规范：[`resource-aware-runner-scheduling.md`](./resource-aware-runner-scheduling.md)。
-
-Runner Supervisor 通过 WSS 上报 CPU、内存和 Workspace 所在磁盘卷容量；SEM 结合任务资源画像与原子资源预留决定同一台 PC 是否可并发承载多个任务。资源报告过期/未知时停止新派发，不终止现有任务，也不作为进程退出证据。详细规范见 `sem-02d-closure-design-proposal.md` §15 和 `protocol-contracts.md`。
-
-## SEM-02D 最终架构审查结论
-
-最终审查报告：[`sem-02d-final-architecture-review.md`](./sem-02d-final-architecture-review.md)。原始审查识别 12 项实施前设计阻断项；后续新增 D-13 资源感知调度提案，当前有 12 项待关闭设计事项（D-01–D-12）；D-13 已由 ADR-SEM-26 冻结，优先关闭执行安全屏障物理模型、Phase 0 最小 HIR 依赖、Platform–SEM API、Runner WSS、SEM 七表 DDL 和应用层 DB/API ports。**不开始 Phase 0，直到这些设计项完成冻结。**
-
-
-## SEM-02D 批量设计评审状态（2026-11-25）
-
-- 完整评审入口：[`sem-02d-review-package.md`](./sem-02d-review-package.md)。
-- D-01–D-12 的候选设计已一次性补齐，统一为 **Review Pending**，等待项目负责人集中评审；提交文档不等于批准 ADR。
-- D-13 已由用户确认并冻结为 ADR-SEM-26，不列入待批准清单。
-- 专题细节仍以 [`sem-02d-closure-design-proposal.md`](./sem-02d-closure-design-proposal.md) 及其引用的协议、安全、状态机、数据库、执行安全和验收文档为准。
-- D-12 的凭据边界设计已完成；当前 Harness 启动链路的逐项凭据注入/继承/泄漏面盘点是 Phase 0 前的强制只读门槛。
-- 当前状态：**Design In Progress / Review Pending；Phase 0 Not Started**。未修改业务代码、Migration、Dockerfile、Compose、API 或 Runner/Worker 实现。
-
-
-## SEM-02D 评审修正（2026-11-25）
-
-用户提出 10 项 P0/P1/P2 评审问题，经当前 master 代码与设计文档只读核对，整体成立。上一轮将 SEM-02D 描述为“完整设计包”的结论撤回；当前状态改为 **Design In Progress — Corrective Design Review Pending**。
-
-修正设计入口：[`sem-02d-review-findings-corrective-design.md`](./sem-02d-review-findings-corrective-design.md)。主要修正：Phase 0 提供最小可操作 HIR 和通知；Interaction terminate/continue 覆盖 Runner 与 SEM-local CodexExecutor；Runner E3 进程退出证据 spool；Detached → Active 同设备恢复；Workspace 丢失归 E5；E6 人工风险接受与 E1/E2/E3 终止证据分离；Session 连续性三分；Detached 不进入 scheduling_shield；所有 claim/recovery/requeue 路径共用 dispatchability predicate。
-
-本轮仍只修改设计文档。没有业务代码、Migration、API、WSS、Dockerfile 或 Compose 变更；Phase 0 未启动。上述修正尚待用户评审，未登记为已批准 ADR。
