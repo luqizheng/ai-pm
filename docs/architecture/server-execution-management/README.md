@@ -1,5 +1,7 @@
 # Server Execution Management Architecture V1
 
+> **Authority-boundary revision (2026-11-25):** The user-confirmed direction is now that SEM transports opaque execution messages and manages Runner/Harness runtime infrastructure only. AI-PM MCP is the sole Harness business-context and Task mutation channel. The older SEM-02E–02J control-plane assumptions and Protocol V1 Claim/Lease/business-command proxy model are under replacement; see [authority-boundary decision](./authority-boundary-decision.md). Do not implement the superseded control path.
+
 - 状态：**Design In Progress — SEM-02E Review Pending**
 - 架构收敛主文档：[SEM-02E 全量架构收敛基线](./sem-02e-architecture-convergence.md)
 - 评审包：[SEM-02E Review Package](./sem-02e-review-package.md)
