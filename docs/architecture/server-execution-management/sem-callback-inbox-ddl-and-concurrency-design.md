@@ -467,7 +467,7 @@ The SEM protocol repository now carries a deterministic cross-language callback 
 
 SEM's Python and Node validators independently canonicalize the same fixture and compare exact UTF-8 bytes and both hashes. AI-PM's Rust implementation must consume this exact fixture (pinned to the commit above until a ratified SEM protocol tag exists) and match all expected bytes/hashes. The vector is intentionally ASCII-only with integer values; it proves cross-language agreement for the complete-envelope shape, not the full Unicode/numeric edge matrix. INBOX-33 continues to require the broader RFC 8785 cases.
 
-This is test-contract evidence only. No AI-PM canonicalizer dependency or production parser has been selected or added. Acceptance matrix now has 39 cases.
+This is test-contract evidence only. No AI-PM canonicalizer dependency or production parser has been selected or added. Acceptance matrix now has 42 cases.
 )
             OR
             (source <> 'sem'
