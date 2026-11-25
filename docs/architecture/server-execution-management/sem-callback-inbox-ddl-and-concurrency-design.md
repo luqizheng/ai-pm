@@ -136,6 +136,7 @@ Freeze the same rule in both repositories:
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
+7. Pin the Rust JCS implementation and version in the consumer build. The implementation must use RFC 8785's ECMAScript-compatible IEEE-754 binary64 number serialization and UTF-16 code-unit property ordering; `serde_json::Value::to_string()` is not an acceptable substitute. Reject duplicate member names before materializing a `serde_json::Value`, including escaped-equivalent names and nested objects. Publish one shared SEM callback envelope vector and verify exact JCS bytes, `payload_hash` and `event_envelope_hash` independently in Rust and Node/Python.
 
 Never hash raw HTTP bytes on one side and canonical JSON on the other. HTTP signature canonicalization is a separate contract.
 
@@ -206,6 +207,9 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-29 | Same event_id and payload but changed event_type | 409 IDEMPOTENCY_CONFLICT; event_envelope_hash differs; no cursor movement |
 | INBOX-30 | Same event_id and payload but changed schema_version or occurred_at | 409 IDEMPOTENCY_CONFLICT; event_envelope_hash differs; no cursor movement |
 | INBOX-31 | Same semantic event envelope with different JSON whitespace/member order | Duplicate ACK; JCS payload_hash and event_envelope_hash remain identical |
+| INBOX-32 | Rust and an independent Node/Python implementation canonicalize the same callback envelope | Exact JCS UTF-8 bytes, payload_hash and event_envelope_hash match |
+| INBOX-33 | Callback payload contains RFC 8785 numeric boundary values, negative zero, and UTF-16 ordering cases | Rust and independent implementation produce identical canonical bytes and hashes; invalid non-finite/unpaired-surrogate values reject |
+| INBOX-34 | Duplicate object member names, including escaped-equivalent and nested duplicates, arrive at the callback boundary | Reject before serde_json::Value materialization, persistence or cursor movement |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
