@@ -264,3 +264,87 @@ No inspected trigger was found to acquire Project, Task, Run, Interaction or Com
 - Only after those passes, derive the canonical lock order and decide whether some writes need a shared transaction helper or a single dispatchability predicate.
 
 Status remains **Changes Required / Audit In Progress**. No migration, business code, API/WSS, Dockerfile, Compose, Worker/Runner loop or runtime configuration was changed. Phase 0 remains Not Started; PR #9 must not be merged.
+
+
+## 10. Third audit pass — lease business writes, legacy control entrypoints and governance carriers
+
+This pass traced the production application call sites for lease renewal/progress, delivery submission, Runner-facing claim/recovery/command operations, Human Intervention, Human Consultation and notification feed. It remains a static source audit against the same master baseline.
+
+### 10.1 Additional Run → Task lock edges
+
+The first lock graph omitted several ordinary business paths that also hold a Run lock before transitioning Task:
+
+| Path | Observed order | Consequence |
+|---|---|---|
+| MCP `report_progress` first-start path | `lock_lease` locks Run `FOR UPDATE` → `apply_task_transition(Running)` locks Task | Run → Task |
+| MCP `submit_result` | delivery pipeline performs `lock_lease` fencing → accepted submission transitions Task to `submitted` in the same transaction | Run → Task |
+| Platform Worker spawn confirmation | Project activity gate → Run transition lock/update → `apply_task_transition(Running)` locks Task | Project → Run → Task |
+| Review success/advance | Review Run is locked/finalized → `advance_after_review` may transition Task (including Completed) | Review Run → Task; terminal path may then acquire graph advisory lock |
+
+These are additional concrete Run→Task edges. The Task cancellation path remains Task→Interaction→Run. The report-progress and delivery-submit paths are not merely recovery edge cases; they are normal execution business writes and must be included in the canonical transaction design.
+
+The Project gate in spawn confirmation is important for Project archive serialization, but it does not by itself solve the graph-lock contract: a terminal Task transition that acquires the graph advisory lock after the Run row has already been locked still violates the graph helper's “before any row lock” precondition.
+
+### 10.2 Existing Runner/Worker control-plane entrypoints
+
+The current code still contains the pre-SEM control topology:
+
+- MCP `claim_task_run_as_client` is called from `crates/pm-mcp/src/tools.rs` and exposed by the MCP server. It lets the authenticated Client claim a Run directly from Platform.
+- MCP `reacquire_lease` is exposed by the MCP server and calls `recovery::reacquire_lease` directly.
+- MCP `poll_commands` / `ack_command` expose command delivery and ACK directly to the Runner.
+- The Platform Worker also calls `run_executor::claim_and_start` / `claim_once` and owns local executor polling/recovery paths.
+
+These are existing code paths, not the target SEM topology. Under the confirmed SEM architecture, Runner control must move behind Runner↔SEM WSS and SEM↔Platform HTTPS; SEM alone requests Claim, while Platform remains the Run/Lease/Generation authority. The migration must explicitly remove or fail-closed the old Runner-facing MCP Claim/reacquire/command poll/ACK routes and prevent the old Platform Worker executor loop from acting as a second dispatch authority. Do not remove Harness business MCP operations such as run context, progress, interaction reporting and result submission merely because they share the MCP transport.
+
+The control-plane cutover needs negative tests proving:
+- a Runner device credential cannot call legacy MCP Claim/reacquire/poll/ACK routes;
+- only the SEM service identity can invoke the dedicated Platform Claim/command/renewal APIs;
+- Harness MCP business operations remain available under their separate user/device and Run-lease scopes;
+- the Platform Worker cannot independently claim or dispatch after SEM becomes authoritative.
+
+### 10.3 Existing governance carrier audit
+
+#### `governance.human_intervention`
+
+Current application evidence shows:
+- The production writer is `supervision::feed::record_intervention`, called by supervision veto/freeze operations.
+- Its current intervention type CHECK is limited to seven action values: `veto`, `rollback`, `freeze`, `unfreeze`, `mode_switch`, `policy_change`, `rollback_failed`.
+- The current row shape is an action record (actor, reason, optional proposal/command target, executed_at); it is not an open abnormal-execution work item with lifecycle/status, Run/Task/Barrier anchors, ownership, escalation and resolution evidence.
+- The inspected production code does not expose a generic UPDATE/DELETE lifecycle for these rows; they are inserted as intervention-action history. Current readers found by the code search are primarily test/security snapshots, while the supervision feed reads `integration.notification`.
+
+Therefore the chosen “extend `human_intervention`” direction is a schema/domain remodel, not a simple additive HIR status column. A discriminator must preserve the seven action values and all existing readers/filters. HIR-specific columns, status transitions and constraints must be scoped to the HIR record type; action history must not accidentally appear as an open HIR or vice versa. Exact DDL and route/read-model changes remain open.
+
+#### `governance.human_consultation`
+
+Current production operations are in `human_consultation.rs` and the PM API:
+- create inserts a pending consultation and, when task-bound, inserts `delivery.task_waiting(reason='needs_decision')` in the same transaction;
+- start/decide/cancel/supersede lock the Consultation row; decide/cancel end the corresponding Task waiting row;
+- readers include the API list and Task traceability projection.
+
+These operations lock Consultation before changing Task waiting state; they do not acquire the Project activity gate or Task row lock. The current table is a generic formal decision work item, but it does not have the proposed unique HIR/Barrier/successor binding or E6 authorization semantics. The E6 extension must be explicit and typed; generic Consultation creation/decision must not silently release an Execution Barrier or allocate a successor Run.
+
+#### `integration.notification`
+
+Current production writers include supervision feed, AI orchestration and outbox handlers; the supervision feed reader is project-scoped and cursor-based. The current table is a project Feed, with no per-principal recipient/inbox ownership model. It must remain non-authoritative: notification insertion or read state cannot prove process exit, Barrier release or E6 approval. The proposed recipient child table and its unique delivery/idempotency keys need their own transaction and reader/writer audit.
+
+### 10.4 Task waiting is not an Execution Barrier
+
+Current dispatch policy and dependency code read active `delivery.task_waiting` rows as a Task eligibility gate. Consultation, Interaction and Review paths write/end waiting rows with their own semantics. This does not provide the required Task Execution Barrier:
+
+- waiting rows do not bind a specific old Run + Generation + Process Sequence;
+- they do not encode E1–E6 evidence class or HIR lifecycle;
+- their current readers do not enforce all new Run creation, Review Claim, same-Run reacquire and successor-allocation paths;
+- generic consultation or interaction resolution is not equivalent to verified process exit.
+
+Keep Task waiting, Interaction scheduling shield and Execution Barrier as distinct mechanisms. The final Platform dispatchability predicate must evaluate all applicable gates in one transaction rather than treating any one of them as a replacement.
+
+### 10.5 New P0 closure items
+
+1. Add normal Run→Task business writes (report_progress, submit_result, Worker start confirmation and Review completion) to the global lock graph and J01/J02/J04-style deterministic tests.
+2. Make SEM the only control-plane entrypoint at cutover; explicitly disable the old Runner MCP Claim/reacquire/command poll/ACK paths and the old Worker dispatch authority, while retaining Harness business MCP.
+3. Remodel `human_intervention` with a discriminator and preserve its existing seven intervention-action values and readers; do not conflate action history with HIR lifecycle.
+4. Extend `human_consultation` only with typed E6 semantics and unique anchors; generic consultation status must not release Barrier or authorize a successor.
+5. Add the Notification Recipient/Inbox lifecycle without changing the existing project Feed semantics or treating notification as safety evidence.
+6. Prove that Task waiting, Interaction shield and Execution Barrier are independent gates evaluated by one Platform transaction predicate.
+
+Status remains **Changes Required / Audit In Progress**. The global lock order remains deliberately unfrozen. No code, migration, API/WSS implementation or runtime configuration was changed; Phase 0 remains Not Started.
