@@ -247,7 +247,7 @@ AI-PM's callback ingress must follow the shared D-04 response-class policy:
 7. Unknown/wrong tenant/project/execution and review Run IDs are authenticated non-enumerating 404 responses, signed with the same callback response profile. Same event_id conflicts, sequence conflicts and gaps are signed 409 responses.
 8. If the server cannot sign an authenticated error, it must terminate the response/connection; it must not downgrade to an unsigned response with an authenticated correlation value.
 
-This corrects the prior open-policy note. It is a Draft contract alignment only. AI-PM still needs exact OpenAPI/schema agreement, Rust response verification vectors, and live middleware tests before the callback endpoint is implementation-ready.
+This corrects the prior open-policy note. It is a Draft contract alignment only. SEM now provides deterministic signed 404 vectors for both Platform GET and SEM callback directions, plus unsigned pre-auth 401/early-413 shape fixtures; Python and Node verify them. AI-PM still needs to consume the exact callback 404 and pre-auth fixtures in its Rust response-verification tests and prove the live middleware ordering before the callback endpoint is implementation-ready.
 
 
 ## 18. Inbox conflict classification precedence
