@@ -165,6 +165,10 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-22 | Retry after transient DB failure | Exact same event ID/body replayed; no sequence skip |
 | INBOX-23 | Generic non-SEM ingestion after migration | Existing semantics unchanged |
 | INBOX-24 | Duplicate JSON member or invalid JCS value | Rejected before persistence/cursor movement |
+| INBOX-25 | Two different Run rows concurrently submit the same global event_id and identical tuple/body | One insert wins; loser uses ON CONFLICT DO NOTHING then a fresh READ COMMITTED SELECT and returns duplicate only after exact tuple/hash comparison |
+| INBOX-26 | Two different Run rows concurrently submit the same global event_id with different execution_id/body | One insert wins; loser returns generic 409 IDEMPOTENCY_CONFLICT without revealing the winner's tenant/project |
+| INBOX-27 | Same Run and sequence concurrently submitted with different event_ids | Run-row lock serializes writers; one commits and the other returns 409 EVENT_SEQUENCE_CONFLICT without transaction-abort recovery |
+| INBOX-28 | ON CONFLICT DO NOTHING returns no row but neither event_id nor execution/sequence winner can be found | Roll back and return generic integrity failure; never ACK or create a partial observation |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
