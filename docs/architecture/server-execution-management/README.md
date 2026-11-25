@@ -102,3 +102,8 @@ SEM-02J §14 records the 59-file migration manifest (0001 baseline + 0002–0059
 ## Application-writer and lock-order evidence
 
 SEM-02J §15 traces production writers for Interaction, Response, ResponseDelivery, Continuation and WorkerCommand. The normal write path derives a coherent Task/Run/Project tuple from a locked Run or Interaction, but the schema does not independently enforce all composite identities. The Run↔Interaction lock inversion is confirmed by exact source statements; the global lock order remains open.
+
+
+## Implicit FK lock-order finding
+
+SEM-02J §16 identifies a new P0 Task↔Product deadlock schedule: Run claim locks Task then Product, while add_task_product locks Product before its Task FK check acquires key-share on Task. This is an implicit FK edge and requires the association writer to adopt the canonical Task→Product order plus a deterministic two-connection regression test. No production fix has been applied.
