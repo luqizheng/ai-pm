@@ -200,3 +200,9 @@ The Runner maintains an outbound authenticated long-lived WSS session to SEM. SE
 
 AI-PM must treat the resulting Runner identity/binding event as infrastructure evidence only. AI-PM still creates and fences its own delegated execution grant; SEM's WSS session, registration token and Runner identity do not authorize MCP operations. WSS disconnect or heartbeat timeout is not process-exit evidence and must not trigger blind reassignment of the same attempt.
 
+## 12. Runner–SEM WSS protocol review reference
+
+The canonical SEM-side WSS candidate is [RUNNER-SEM-WSS-PROTOCOL-DRAFT.md](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/protocol/RUNNER-SEM-WSS-PROTOCOL-DRAFT.md). It defines Runner-initiated outbound WSS, challenge-response proof of possession, connection-generation fencing, application heartbeat, health probes, same-boot resource telemetry, durable delivery receipt, process observations, reconnect/replay and dispatch eligibility.
+
+AI-PM integration must consume SEM's durable infrastructure events through the HTTPS Outbox/Inbox contract. It must not connect to Runner WSS, use Runner heartbeat as business progress, infer process exit from disconnect, or treat SEM's Runner identity as a delegated MCP grant. AI-PM authorization_generation remains independent from SEM binding_epoch. The WSS document is Draft / Review and does not authorize implementation.
+
