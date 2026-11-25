@@ -29,8 +29,8 @@
 ## Cross-repository constraints
 
 - AI-PM and SEM have independent databases. SEM has no AI-PM database credentials and no direct DB access.
-- AI-PM → SEM uses versioned HTTPS with transactional Outbox / durable Inbox and idempotent reconciliation.
-- Runner ↔ SEM uses authenticated WSS.
+- AI-PM → SEM uses a versioned HTTP or HTTPS contract over the company private network, with transactional Outbox / durable Inbox and idempotent reconciliation. HTTPS is optional and supports enterprise CA or explicitly trusted self-signed certificates; certificate validation cannot be disabled. HTTP is restricted to the internal network and does not provide wire confidentiality.
+- Runner ↔ SEM uses authenticated WSS with enterprise CA or explicitly pinned self-signed server certificates; certificate validation remains mandatory.
 - SEM reports infrastructure facts only; it does not call Task/Run business Claim, Lease, HIR, Barrier, review or completion APIs.
 - Runner supervision defaults to unattended; supervised mode is explicit.
 - Resource telemetry from Runner informs SEM admission/concurrency.
