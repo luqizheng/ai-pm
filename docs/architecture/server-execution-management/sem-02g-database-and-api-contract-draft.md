@@ -1,5 +1,7 @@
 # SEM-02G — Database DDL and Service API Contract Draft
 
+> **Authority-boundary revision (2026-11-25):** This document evaluates or proposes database/API contracts based on the former SEM-owned Claim/Lease/business-command control model. That model is superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Preserve useful AI-PM source/DDL findings, but do not implement SEM-side business state, Task/HIR/Barrier ownership, or the old API contracts without a new reviewed mapping.
+
 - Status: **Draft / Review Pending / Not an approved ADR**.
 - Code/schema baseline used for the original draft: GitHub `master@4bc78620f54440a21a113cf7cdb14964d1a14dcb` (stale). Current review baseline: `master@d0e72fa6805aebeadf1b282e430deba493072fd6`; current schema blobs are recorded in [SEM-02H](./sem-02h-ddl-integrity-and-transaction-review.md).
 - Parent specification: [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md).
