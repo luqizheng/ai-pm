@@ -102,6 +102,7 @@ One row per AI-PM business Visualization version:
 Required constraints:
 - UNIQUE (`artifact_service_version_id`);
 - UNIQUE (`tenant_id`, `project_id`, `slot_key`, `legacy_version_no`);
+- UNIQUE (`generation_job_id`) WHERE `generation_job_id` IS NOT NULL, because one GenerationJob result may bind to only one AI-PM business-version record;
 - the bound artifact_id must equal the slot binding's artifact_id (enforced by AI-PM transaction/constraint design);
 - once a non-null version_id is bound, it is immutable;
 - no cross-service FK; the SDK/API reconciliation path verifies remote existence and scope.
@@ -145,20 +146,17 @@ Preferred stable key:
 - the key is scoped by tenant/project under the Artifact Service uniqueness contract;
 - a changed slot_key creates a different logical Artifact; old Artifact is archived only under an explicit retention policy.
 
-The current Artifact API supports Artifact creation with an optional artifact_key and project-scoped listing, but the inspected list endpoint does not expose a direct artifact_key lookup filter. Its Idempotency-Key retention is bounded. Before implementing the slot-binding saga, Artifact Service must provide a reliable lookup by artifact_key (a list filter or dedicated GET) so AI-PM can recover a lost create response without creating a duplicate or scanning an unbounded list.
-
-This is a separate consumer-recovery prerequisite; ART-04A's caller_request_id proposal currently covers GenerationJob creation, not generic Artifact creation.
+ART-04A now proposes an exact-match artifact_key filter and same-key create convergence; this remains unimplemented and requires independent approval. The recovery contract must also handle the current create implementation's reserve → insert → complete sequence: a crash after Idempotency-Key reservation but before Artifact insertion can leave a stale in-progress reservation while lookup returns no Artifact. ART-04A now requires stable artifact_key recovery to bypass that stale response-cache reservation. The stable artifact_key is the logical-slot correctness boundary; GenerationJob caller_request_id remains the per-generation-operation identity.
 
 ## 5. Reference semantics
 
-AI-PM may create an ArtifactReference for each legacy business record using an opaque external reference such as:
-- `owner_type = "viz_artifact"`;
-- `owner_id = <viz.artifact.id>`;
-- `relation_type = "illustrates"` (or another ART-01-approved relation chosen before implementation).
-
-The Reference means only that the logical Artifact is associated with that AI-PM business record. It does **not** mean that the ArtifactReference identifies a specific Version or approves it.
+ART-04B does **not** create a per-`viz.artifact` ArtifactReference in V1. The proposed owner_type=`viz_artifact` is invalid: Artifact Service currently accepts only `requirement`, `design`, `adr`, `task`, `knowledge`, and `project`. AI-PM must not invent a generic owner_type value or mislabel a Visualization business record as another business entity.
 
 The exact version-level relation is exclusively the AI-PM `viz.artifact_service_version_binding` row. Business approval remains `viz.approval` → `viz.artifact.id`.
+
+If a project-level generic Reference is later judged useful, it may use the already-supported `owner_type=project` with the stable project ID and an ART-01-approved relation. It is optional metadata only and is not a per-version association or an approval record.
+
+Additionally, current OpenAPI text says duplicate active Reference creation returns the existing record, but current application code performs a plain INSERT and the API handler returns 201 only for a successful insert; a duplicate active tuple raises a uniqueness error. Until Artifact Service implements create-or-return-existing semantics or an exact reconciliation endpoint, AI-PM must not assume Reference creation is idempotent. Reference is therefore omitted from the mandatory generation saga.
 
 ## 6. State and authority mapping
 
@@ -186,16 +184,16 @@ For a new business Visualization record:
 2. AI-PM creates the `viz.artifact` business record (or uses an existing record created by the approved product flow).
 3. AI-PM creates and commits `viz.artifact_service_operation` with a new caller_request_id, Idempotency-Key, request hash and immutable input reference **before** calling Artifact Service.
 4. Resolve the slot binding. If absent, create/find the generic Artifact by stable artifact_key and persist the returned ID. If the response is uncertain, use artifact_key lookup; never mint a second logical Artifact.
-5. Create the ArtifactReference for the business record; repeat is safe under the API's uniqueness/idempotent semantics.
+5. Do not create a per-business-record ArtifactReference in V1. If a project-level Reference is explicitly required, treat it as optional metadata and do not block generation on it; its replay semantics must be resolved before use.
 6. Submit GenerationJob using the operation's caller_request_id and Idempotency-Key. If response is uncertain, use ART-04A lookup by caller_request_id; never create a replacement operation.
 7. Persist `generation_job_id`; poll asynchronously and reconcile after AI-PM process restart.
 8. On Job success, require non-null exact `target_version_id`, fetch that Version, verify same artifact/scope and READY, then persist the version binding.
 9. AI-PM continues its own business workflow: create/request/decide `viz.approval` as required; Artifact Service success never auto-publishes the Visualization.
-10. If AI-PM crashes between any two calls, resume from the operation row and repeat only the idempotent/reconcilable step.
+10. If AI-PM crashes between any two calls, resume from the operation row and repeat only a step with a proven idempotent/reconciliation contract. Artifact create uses stable artifact_key recovery (including stale Idempotency-Key handling); GenerationJob create uses caller_request_id. Do not retry Reference create until its replay/reconciliation contract is fixed.
 
 Failure handling:
-- Artifact created, Reference failed: retain Artifact; retry Reference. Do not delete a potentially shared slot Artifact as compensation.
-- Reference created, Job create uncertain: lookup by caller_request_id; do not create a new caller_request_id.
+- Artifact created, optional project-level Reference failed: retain Artifact; generation may proceed because Reference is not the exact version mapping and is not a required saga step.
+- Job create uncertain: lookup by caller_request_id; do not create a new caller_request_id.
 - Job failed/timed_out/cancelled: close the operation according to AI-PM policy; a deliberate new generation is a new operation with a new caller_request_id.
 - Cancel requested while running: AI-PM remains waiting until Artifact Service reports terminal state; `cancel_requested` is not `cancelled`.
 - Job succeeded but business record was later rejected/cancelled: retain the immutable Version and record the business decision in AI-PM; never rewrite Job history.
@@ -243,8 +241,8 @@ Rollback is not a second writer mode:
 
 ## 10. Open decisions / implementation gates
 
-1. **Artifact lookup by artifact_key** — ART-04A proposes an exact-match filter and same-key create convergence; implementation and SDK support must be reviewed before the AI-PM slot-binding saga is implementable.\n2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the `smark.seecode.input` envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
-2. **Reference relation value** — select an ART-01-approved relation_type for a Visualization business record; do not invent a new enum-like value in the consumer.
+1. **Artifact lookup by artifact_key** — ART-04A proposes an exact-match filter and same-key create convergence; implementation and SDK support must be reviewed, including stale Idempotency-Key reservation recovery, before the AI-PM slot-binding saga is implementable.\n2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the `smark.seecode.input` envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
+3. **Reference semantics** — per-viz-artifact Reference is excluded because owner_type is not supported; only consider optional project-level Reference with owner_type=project, and only after create replay/reconciliation semantics are implemented and tested.
 3. **Output compatibility** — define how legacy HTML/PNG rows, if any, are copied and surfaced when the new SeeCode path is SVG-only.
 4. **Business version numbering** — preserve legacy `version_no` in AI-PM; do not assume Artifact Service `version_number` will equal it.
 5. **Mapping retention** — keep legacy ID mappings for at least the lifetime of AI-PM approvals, audit history, and external references.
