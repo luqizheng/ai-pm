@@ -227,3 +227,15 @@ Exact response JSON Schema and OpenAPI error components remain a separate bilate
 - Add bilateral executable fixtures and two-connection PostgreSQL tests before implementation approval.
 
 **Disposition: DRAFT / CHANGES REQUIRED.** Design artifact only; it does not authorize implementation, migration creation, route changes, or PR merge.
+
+### 1.1 Exact migration-source provenance
+
+Rechecked the actual squashed schema baseline at `migrations/0001_baseline.sql` (blob `6f1e9e59a4a539a26bf83d1826c48ddaf9fea566`) and the current Run-event migration `migrations/0013_task_run_event.sql` (blob `bec35e8e03f9dc36db3f8484a05fad19f6694ef9`) on the audited `ai-pm/master` source revision.
+
+Exact existing `integration.inbound_event` columns are all NOT NULL for `id`, `project_id`, `actor_id`, `source`, `event_type`, `idempotency_key`, `payload`, `payload_hash` and `tenant_id`; `status` and `received_at` have defaults. The baseline defines global `PRIMARY KEY (id)`, `UNIQUE (project_id,id)`, `UNIQUE (project_id,source,idempotency_key)`, and `UNIQUE (tenant_id,id)`, plus `(tenant_id,project_id) → core.project(tenant_id,id)` and `actor_id → core.principal(id)` foreign keys. Therefore `source IS NOT NULL` in the proposed SEM CHECK is an explicit defensive assertion, not a currently nullable-column repair.
+
+Exact existing `delivery.task_run` has global `PRIMARY KEY (id)`, `UNIQUE (project_id,id)` and `UNIQUE (tenant_id,id)`, but no current `UNIQUE (tenant_id,project_id,id)`. The candidate triple key is therefore a new constraint required only to support the proposed three-column composite FK; it is not an existing source invariant. The row also has `run_kind` CHECK values `delivery|review`, so the callback still must lock and semantically reject review Runs because a foreign key cannot express the required delivery-only rule.
+
+Exact `migrations/0013_task_run_event.sql` defines `dedupe_tag text DEFAULT '' NOT NULL`, `lease_generation integer DEFAULT 0 NOT NULL`, `task_run_event_type_check` with eight allowed values, `task_run_event_dedupe_tag_len CHECK (length(dedupe_tag) <= 200)`, and the existing unique index `(run_id,event_type,lease_generation,dedupe_tag)`. The new SEM event type therefore requires replacing the existing named type CHECK; a separate SEM sequence CHECK alone is insufficient. The existing `dedupe_tag` NOT NULL declaration already prevents SQL NULL, while the explicit `IS NOT NULL` in the new SEM-specific CHECK is retained for local clarity.
+
+This is static migration-source verification, not a live PostgreSQL catalog capture. The exact catalog state of a deployed database, applied migration set and any local drift remain unverified until read-only catalog queries are run against the target database.
