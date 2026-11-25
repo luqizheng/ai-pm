@@ -95,13 +95,15 @@ User decisions retained:
 - SEM remains an independent service;
 - RabbitMQ is an existing independent single-instance service without clustering and is not a safety authority.
 
-Still OPEN:
-- exact HIR discriminator/schema design;
-- E6 typed columns/constraints and successor reservation mechanics;
-- notification recipient/delivery normalization;
-- Platform process-sequence persistence and APIs;
-- Barrier migration/index/lock design;
-- full code consumer/route audit.
+Still OPEN for final freeze:
+- executable DDL for HIR discriminator, E6 typed constraints, Notification Recipient, Task Barrier and process registry;
+- exact unique indexes, FK actions, trigger/immutability rules and global lock order;
+- exact OpenAPI/DTO schemas and idempotency contracts for process registration, continuation-consumed, process-exit evidence and process-bound Lease Renewal;
+- recipient Inbox read/assignment routes and complete notification producer/consumer migration;
+- exhaustive direct Run INSERT inventory and every claim/recovery/requeue call site;
+- full route/consumer/code audit and empty-database/concurrency test plan.
+
+SEM-02F closes the *candidate design shape* for the first five entities; it does not close executable migration/API design or code audit.
 
 No migration, API, WSS implementation or Phase 0 work is authorized by this document.
 
