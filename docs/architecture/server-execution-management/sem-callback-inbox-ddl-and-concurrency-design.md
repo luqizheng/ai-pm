@@ -88,6 +88,31 @@ CREATE UNIQUE INDEX uq_task_run_event_sem_sequence
     WHERE event_type = 'sem_infrastructure_observed';
 \`\`\`
 
+Important required event-type CHECK replacement (omitted from the initial illustrative block above):
+
+The current `migrations/0013_task_run_event.sql` defines the named constraint `task_run_event_type_check` with exactly eight event types. Merely adding the separate `task_run_event_sem_sequence_check` does **not** permit the new event type; the old CHECK would continue rejecting every `sem_infrastructure_observed` insert. The migration must replace the existing allow-list in the same forward-only migration:
+
+```sql
+ALTER TABLE delivery.task_run_event
+    DROP CONSTRAINT task_run_event_type_check;
+
+ALTER TABLE delivery.task_run_event
+    ADD CONSTRAINT task_run_event_type_check
+    CHECK (event_type IN (
+        'run_claimed',
+        'run_started',
+        'run_stage_changed',
+        'run_finished',
+        'command_issued',
+        'command_delivered',
+        'command_acked',
+        'command_failed',
+        'sem_infrastructure_observed'
+    ));
+```
+
+This is a source-verified DDL dependency, not an optional hardening step. Migration acceptance must prove the original eight event types remain accepted and unknown event types remain rejected after the replacement.
+
 DDL qualifications before ratification:
 
 - Confirm no existing Inbox rows use reserved source value \`sem\`.
