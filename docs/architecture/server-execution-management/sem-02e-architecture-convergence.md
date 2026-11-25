@@ -203,8 +203,8 @@ HIR 主体复用 `governance.human_intervention`，用 `record_kind=action|hir` 
 
 | Phase | 名称 | 必须交付 |
 |---|---|---|
-| 0 | Safety + Minimum Human Intervention | Task Barrier、复用治理表、最小 HIR/通知、周期 DB orphan scanner、统一 dispatchability、Interaction 双 adapter、安全凭据盘点、SEM-local waiting/restart 修复 |
-| 1 | SEM Control Plane + Runner E3 + Detached Recovery | 独立 SEM DB/API/WSS、Runner process spool、E3 evidence、process sequence、Detached reconnect/reconcile、服务身份与 Claim 幂等 |
+| 0 | Safety + Minimum Human Intervention | Task Barrier、复用治理表、最小 HIR/通知、周期 DB orphan scanner、统一 dispatchability、Platform Process Registry + active sequence fence、process-bound Lease Renewal、Interaction 双 adapter、安全凭据盘点、SEM-local waiting/restart 修复 |
+| 1 | SEM Control Plane + Runner E3 + Detached Recovery | 独立 SEM DB/API/WSS、Runner process spool、E3 evidence 转发、将 Phase 0 临时 Runner MCP process-control adapter 切换为 SEM WSS + Platform HTTPS、Detached reconnect/reconcile、服务身份与 Claim 幂等 |
 | 2 | Independent Deployment + Full Interaction Acceptance | SEM 独立主机部署、Platform/SEM 数据库隔离、全 Interaction terminate/continue 端到端、故障恢复 |
 | 3 | Session Continuity | Session Manager 采集/恢复；Native Resume 默认 false；Fresh Session continuation 明确验收 |
 | 4 | Advanced HIR / Cross-Runner Handoff / E6 | 高级 HIR、监督模式选择、跨 Runner handoff、E6 风险授权与唯一 successor |
@@ -272,3 +272,10 @@ The detailed physical and protocol proposal is [SEM-02F — Executable Physical 
 - RabbitMQ remains an existing independent single-instance service without clustering. It is optional for non-authoritative wake-up only and not required for V1 correctness.
 
 These remain candidate specifications. The exact SQL migration, route/consumer changes and API schemas require review; Phase 0 remains Not Started.
+
+
+## 19. SEM-02G database and API contract draft
+
+[SEM-02G](./sem-02g-database-and-api-contract-draft.md) contains SQL-shaped draft definitions for Task Barrier, HIR discriminator, E6 consultation anchors, Notification Recipient, Process Registry, command sequence reservation, and Platform–SEM/Runner API payloads. It remains a review artifact, not an executable migration.
+
+Phase dependency clarification: Platform-side Process Registry and process-bound Lease Renewal fencing are Phase 0 prerequisites because Interaction continue must safely rotate process identity even before SEM WSS is deployed. During Phase 0 the current Runner control adapter may temporarily call the Platform process-control API; Phase 1 replaces that transitional route with Runner→SEM WSS→Platform HTTPS and removes the direct Runner MCP control path. This temporary migration adapter is not the target architecture.
