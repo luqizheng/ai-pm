@@ -47,14 +47,17 @@ ALTER TABLE integration.inbound_event
 ALTER TABLE integration.inbound_event
     ADD CONSTRAINT inbound_event_sem_sequence_pair
     CHECK (
-        (source = 'sem'
-         AND execution_id IS NOT NULL
-         AND execution_event_sequence IS NOT NULL
-         AND execution_event_sequence >= 1)
-        OR
-        (source <> 'sem'
-         AND execution_id IS NULL
-         AND execution_event_sequence IS NULL)
+        source IS NOT NULL
+        AND (
+            (source = 'sem'
+             AND execution_id IS NOT NULL
+             AND execution_event_sequence IS NOT NULL
+             AND execution_event_sequence >= 1)
+            OR
+            (source <> 'sem'
+             AND execution_id IS NULL
+             AND execution_event_sequence IS NULL)
+        )
     );
 
 CREATE UNIQUE INDEX uq_inbound_event_sem_execution_sequence
