@@ -255,3 +255,8 @@ The follow-up source audit is recorded in [harness-identity-and-business-fencing
 The review also requires separate AI-PM authorization_generation (business MCP fencing) and SEM execution_epoch (Runner binding fencing). Runner disconnect without process-exit evidence must not trigger competing reassignment. Finally, Harness delivery submission advances Running→Submitted; Reviewing→Completed requires acceptance evidence, while Ready→Completed is a human-only manual-task path. Harness cannot self-complete an execution Task. Business terminal decision + Platform Outbox release intent must be atomic.
 
 Source inspection only; no code, migrations or runtime tests changed.
+
+
+## 14. Remote Runner Git evidence contract
+
+The follow-up review §6.1 records that current D4 remote verification is selected by the legacy client: lease_owner prefix, proves remote branch-head visibility and baseline ancestry, but does not prove local Runner worktree HEAD and currently echoes the declared changed-file count. The SEM cutover must define an explicit remote evidence mode, require a unique execution ref, verify the pushed SHA/ref and ancestry, and calculate changed-file facts from the remote object graph (or label them unverified). Do not rely on Platform access to Runner-local workspace or infer remote mode from a legacy credential prefix.
