@@ -195,3 +195,52 @@ Produce SEM-02I with:
 6. explicit API request/response schemas, auth scopes, event idempotency, conflict behavior and WSS ACK levels.
 
 Until SEM-02I passes review, SEM-02G remains a draft and must not be copied into a migration. No Phase 0 implementation is authorized.
+
+
+## 7. Source-level transaction lock audit — confirmed findings
+
+A targeted read of current master application code shows that the lock graph is not merely undocumented; it is currently non-uniform:
+
+| Path | Observed order | Source |
+|---|---|---|
+| Claim | Project → Run → Task | `run_dispatch/claim.rs:417,445-462,522` |
+| TaskReady creation | Project → Task → INSERT Run | `pm-infrastructure/outbox_handlers.rs:60-90, 210-250` |
+| Interaction report | Run → Interaction → later Task | `interaction.rs:129,197,518` |
+| Interaction retry | Interaction → Run | `interaction.rs:783,816` |
+| Interaction cancel | Interaction UPDATE → Run UPDATE → Task FOR UPDATE | `interaction.rs:697-740` |
+| Interaction consumed | Interaction UPDATE → Task FOR UPDATE | `interaction.rs:431-587` |
+| Lost-run recovery | Run → Task | `run_executor.rs:1288-1298` |
+| Orphan reconciliation | Run UPDATE → Task UPDATE; no explicit initial FOR UPDATE/Project lock | `run_executor.rs:480-570` |
+| Failure retry | Run marker UPDATE (separate autocommit) → Task UPDATE → INSERT successor Run | `review/failure.rs:87,188-214` |
+| Project archive | Project → queued Run rows | `archive.rs:65-96` |
+
+### 7.1 Existing Interaction lock inversion
+
+There is a concrete lock-order inversion:
+- `report_interaction` locks the Run first, then locks the open Interaction chain row (`interaction.rs:129,197`);
+- `retry_interaction` locks the Interaction row first, then locks the Run (`interaction.rs:783,816`);
+- `cancel_open_interaction_tx` updates the Interaction row before updating its Run (`interaction.rs:697-740`).
+
+Concurrent report/retry or report/cancel against the same Run/Interaction chain can therefore form a Run↔Interaction wait cycle. This is an existing concurrency defect candidate and must be reproduced with a two-transaction test before claiming it is fixed. SEM's new Barrier/HIR locks must not be layered on top of this inversion.
+
+### 7.2 Orphan reconciliation is not a safe template for the periodic Barrier scanner
+
+Current `reconcile_orphans`:
+- selects candidate IDs without row locks;
+- appends suspicion audit in a separate transaction;
+- updates Run to queued in another transaction;
+- then updates Task blocked→ready;
+- does not lock Project, Task, or a Barrier and does not atomically create an E4/HIR Barrier.
+
+This confirms the periodic Phase 0 scanner must be a new Platform-only transactional path, not a wrapper around the existing B06-D3 sequence. The new scanner must re-read and lock current state, validate expiry/grace/shield/absence of E1-E3, then create Barrier + HIR + notification + audit atomically. It must never queue/release the Run before the Barrier is committed.
+
+### 7.3 Required lock-graph remediation
+
+Before migration:
+1. Choose and document one lock order for every path touching Project, Run, Task, Barrier, Interaction, HIR and Human Consultation.
+2. Refactor retry/cancel/report to eliminate Run↔Interaction inversion.
+3. Refactor orphan reconciliation into a single transaction with a conditional Run state transition and Barrier/HIR creation; no separate audit transaction before the state mutation.
+4. Ensure TaskReady and every Run creation path lock Task and check the active Barrier before inserting a Run.
+5. Add deterministic two-connection concurrency tests for the inversion and scanner-vs-claim race.
+
+This source audit does not yet prove the complete lock graph: Lease Renewal, command ACK/continue, task cancellation, all failure/requeue paths and the remaining outbox handlers still require review.
