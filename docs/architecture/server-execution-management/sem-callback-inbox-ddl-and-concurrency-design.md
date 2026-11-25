@@ -253,6 +253,12 @@ Every test asserts exact row counts and values in all three storage locations, n
 AI-PM must match SEM D-04 exactly:
 
 - Success/duplicate: event_id, execution_id, execution_event_sequence, contiguous_through_sequence, disposition, acknowledged_at.
+
+- Every response after successful callback request authentication is signed by AI-PM, including authenticated 400/404/409/422/429/500. It binds the exact originating method, authority, path and request Content-Digest and includes exactly one `X-SEM-Event-Id` equal to the authenticated `Idempotency-Key` header.
+- Before authentication succeeds (invalid/missing signature, unknown/revoked key, stale/replayed nonce, or early body-size rejection), return only the generic unsigned pre-authentication error: no response signature headers, no `X-SEM-Event-Id`, and no request/event identifiers in the body.
+- Verify signature and exact raw-body digest before JSON parsing. After authentication, reject duplicate JSON members, validate schema, and require the signed `Idempotency-Key` to equal envelope `event_id` before opening the database transaction. If they differ, return signed 400 correlated only to the authenticated header value; do not echo the body event_id and do not write.
+- Application-level 429 is authenticated, signed and includes mandatory `Retry-After`; early edge/WAF throttling is outside the API protocol and must not reflect protocol identifiers.
+- Unknown/wrong tenant/project/execution and review Run IDs are authenticated signed non-enumerating 404 responses.
 - The signed callback ACK MUST include exactly one `X-SEM-Event-Id` correlation header equal to the authenticated callback `event_id`; it must not be derived from an untrusted body/header after verification. The Platform→SEM response direction uses `X-SEM-Request-Id = request_id` (the operation/idempotency identity), not `message_id`.
 - SEM's deterministic response fixture `tests/protocol/fixtures/crypto-vectors-v1.json` (pinned at `smark-sem@3df2d35cd6e8066e2aff831506ab1e0b1ddc6395`) includes both `http_callback_ack` and `http_error_409`; AI-PM's eventual response verifier must validate the exact signed callback 200 ACK and its originating method/authority/path/request-digest context, the signed Platform→SEM 409, and reject mismatched direction-specific correlation headers or a response replayed against another request context.
 - Same event ID with changed identity/body: HTTP 409 IDEMPOTENCY_CONFLICT.
