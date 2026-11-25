@@ -1,0 +1,99 @@
+# SEM-02E — 全量架构收敛评审包
+
+- 状态：**Review Pending — Changes Required**
+- 主基线：[sem-02e-architecture-convergence.md](./sem-02e-architecture-convergence.md)
+- 分支：`docs/sem-02e-architecture-convergence`
+- 本包不是 ADR 冻结，也不是 Phase 0 实施授权。
+
+## 1. 本轮评审输入与裁决
+
+已接受上一轮审查结论：原十项问题中 #3/#5/#8/#9 已闭合；#1/#2/#6/#7/#10 方向正确但仍有缺口。另新增 P0 A/B/C、P1 D/E/F/G 和 P2 状态问题。本轮以 SEM-02E 主基线统一修订。
+
+### 用户已明确裁决
+
+| 事项 | 决策 |
+|---|---|
+| E6 | 作为 ADR-SEM-04/10 的正式修订提案；E6 是人类风险接受，不是终止证据，不释放旧 Barrier，只授权唯一 successor |
+| HIR | 复用并扩展 `governance.human_intervention` |
+| E6 决定 | 复用并扩展 `governance.human_consultation` |
+| 通知 | 复用并扩展 `integration.notification`，保留项目 feed/read_at；投递状态和 recipient 需完整设计 |
+| Barrier | Task 作用域；新 Run 行不得绕过旧 Task Barrier |
+| RabbitMQ | 已有独立单实例服务、无集群；不作为 SEM 安全关键依赖，不等于不存在，也不假设 HA |
+
+## 2. P0 关闭标准
+
+### A — 周期性孤儿检测
+Phase 0 Platform DB-only 周期扫描；候选包括 claimed/running + lease expired + grace + shield none + 无 E1–E3。锁内同事务创建/复用 Task Barrier、HIR、audit 和 notification Outbox。B06-D3 并入同一机制。不能依赖 Worker 重启、Session Manager 或 SEM 上线。
+
+### B — Task 级 Barrier + E6 授权实体
+Barrier 作用域 Task；唯一 active 约束；所有新 Run 行创建、claim、requeue、retry、handoff、E6 successor 均检查。E6 决定复用 human_consultation，绑定 HIR、Barrier、Task、操作者、时间、理由、风险摘要和唯一 successor_run_id。授权与 successor 预分配必须原子完成。
+
+### C — Run+Generation 进程身份序列
+支持 initial_start、interaction_continue 等多个有序 process identity。continue 消耗回复后登记新序列。续租校验当前活动序列；迟到的旧进程退出证据不得关闭新进程。必须增加 late-terminate-evidence-after-continue 测试。
+
+## 3. P1 关闭标准
+
+- D：SEM-local terminate/awaiting-continue 等待期与 Worker restart 不得错误终态化；续租、shield 和 awaiting-continue 恢复语义写入 adapter 契约。
+- E：ADR-SEM-04/10 正式提出修订，审批前仍标 Review Pending。
+- F：完整审计既有三张表、所有迁移、FK/CHECK/索引、routes 和消费者；复用优先，禁止平行重复主表。
+- G：所有 23 份专题文档正文同步；不允许“文末追加，以新节为准”。
+
+## 4. 跨文档强制统一
+
+| 维度 | 唯一规范 |
+|---|---|
+| API prefix | `/internal/sem/v1/`；删除 `/internal/v1` 备选 |
+| WSS process events | `runner.process.exit`、`runner.process.reconciled`、`runner.reconnect_sync` |
+| Continuation receipt | `continuation.consumed` |
+| HIR 状态 | 只在 state-machines.md 定义一套状态域 |
+| Detached / Reconciling | SEM 私有持久状态；不是 scheduling_shield 值 |
+| Barrier | Task 级 Platform 权威 |
+| Process Identity | Run+Generation 内有序序列，不是单 PID |
+| Unknown/lost process | E5/Uncertain，不得 Done{Lost} 后自动重派 |
+| Dispatchability | 所有 claim/recovery/requeue/create/handoff 路径共用事务内谓词 |
+| Phase | 0 Safety+Minimum HIR；1 Control Plane+E3+Detached；2 Independent Deployment+Full Interaction；3 Session Continuity；4 Advanced HIR/Handoff/E6；5 Chaos |
+| RabbitMQ | 已存在单实例；非权威、非安全关键、非 HA；可选唤醒加速需另批 |
+
+## 5. 23 份文档同步矩阵
+
+| 文档 | 必须核验的正文内容 | 状态 |
+|---|---|---|
+| README | 独立 SEM、RabbitMQ 现状、Task Barrier、阶段入口 | Updated |
+| decision-record | ADR-04/10/12/19 修订提案与状态 | Updated |
+| deployment-topology | SEM 独立服务、RabbitMQ 非依赖、数据边界 | Pending |
+| worker-role-separation | Platform DB scanner、SEM local adapter、Outbox 单消费者 | Pending |
+| session-manager-design | SEM 私有 Detached 状态；process sequence；Native Resume 限制 | Pending |
+| execution-safety | Task Barrier、E5、E6、周期 scanner、Uncertain | Pending |
+| runner-supervision-and-handoff | process sequence、E6、HIR、handoff | Pending |
+| domain-model | HIR/consultation/notification 复用、Task Barrier、process identity | Pending |
+| protocol-contracts | API/WSS 名称、ACK、spool、sequence、RabbitMQ | Updated |
+| state-machines | 唯一 HIR/Barrier/Detached/Process state machines | Pending |
+| failure-recovery | 周期 orphan scanner、Detached、迟到证据、卷丢失 | Pending |
+| security-model | E6 权限、服务身份、证据完整性、RabbitMQ边界 | Pending |
+| operational-runbook | scanner、spool、RabbitMQ 单实例降级、HIR | Pending |
+| testing-and-acceptance | A/B/C/D 回归与混沌验收 | Pending |
+| migration-roadmap | 唯一 Phase 0–5 编号及 schema 前置依赖 | Pending |
+| consistency-review | 23 份正文逐项审查，未完成不得 Complete | Pending |
+| code-contract-mapping | 代码路径、事务边界、adapter、scanner | Pending |
+| sem-02d-closure-design-proposal | 删除旧独立 HIR 表提案、更新 Barrier/E6/Phase | Pending |
+| sem-02d-review-package | 历史评审状态指向 SEM-02E | Pending |
+| sem-02d-final-architecture-review | 撤回旧 Design Complete 与阶段冲突 | Pending |
+| resource-aware-runner-scheduling | 不把资源/ broker 状态当终止证据 | Pending |
+| service-protocol-security-and-persistence | API prefix、process evidence、独立 DB、RabbitMQ | Pending |
+| sem-02d-review-findings-corrective-design | 修订为历史记录并链接本规范 | Pending |
+
+> Updated 仅表示已对该文件进行本轮定向修改，不代表全量正文审计已通过。Pending 文档仍是冻结阻断项。
+
+## 6. 最终冻结门槛
+
+只有当 23 份文档逐份完成正文重写/冲突清除，并通过以下检查，才可提交最终架构冻结：
+- 所有实体/表名/约束/外键/唯一性一致；
+- 所有状态机的状态域、转移和终态语义唯一；
+- 所有协议消息名、字段、ACK 层级、API prefix 唯一；
+- 所有流程图不含危险 Done{Lost} 重派；
+- 所有 Phase 依赖一致；
+- 章节编号唯一；
+- 代码映射中的路径和当前代码现状经过重新只读核验；
+- 全新空库初始化、并发、重复事件、迟到证据、Worker/SEM/Runner 重启、RabbitMQ 停机均有验收用例。
+
+本轮仍为 Changes Required。Phase 0 未启动。
