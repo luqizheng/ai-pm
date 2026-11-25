@@ -48,17 +48,13 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 
 环境已有独立 RabbitMQ 单实例服务，没有集群。SEM V1 不新增 RabbitMQ 必需依赖；Claim、Lease、Barrier、HIR、E3 和恢复不依赖 RabbitMQ 可用性。若未来批准，可将其用于非权威唤醒/通知加速，数据库 Outbox/Inbox 与 API 对账仍是可靠性基础。
 
-
-
 ## SEM-02F 可实施契约
 
 [SEM-02F — Executable Physical and Protocol Contracts](./sem-02f-executable-physical-and-protocol-contracts.md) 将 Task Barrier、HIR discriminator、E6 anchors、Notification Recipient、Platform Process Sequence、Lease Renewal fencing、周期 orphan scanner 和 Phase 0 验收细化为候选物理/协议契约。它不是已批准 ADR，也不授权实施。
 
-
 ## SEM-02G 数据库与 API 契约草案
 
 [SEM-02G — Database DDL and Service API Contract Draft](./sem-02g-database-and-api-contract-draft.md) 包含 Task Barrier、HIR、E6、Notification Recipient、Process Registry 的 SQL-shaped 草案，以及 Platform–SEM HTTPS / Runner–SEM WSS 消息样例。仅供评审，不是可执行 Migration。
-
 
 ## SEM-02H DDL / transaction review
 
@@ -67,3 +63,7 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 ## SEM-02I — Corrected Platform Schema and Process API Candidate
 
 [Open SEM-02I](./sem-02i-corrected-platform-schema-and-process-api-candidate.md). This is a candidate design, not an executable migration contract. The lock graph and API scopes remain under review.
+
+## SEM-02J — Platform Transaction and Execution-Path Closure Audit
+
+[Open SEM-02J](./sem-02j-transaction-and-execution-path-closure-review.md). The source audit confirms multiple cross-aggregate lock-order inversions and identifies Task Barrier bypasses in review, retry, reacquire and existing dispatch paths. SEM-02J remains **Changes Required / Audit In Progress**; it does not authorize code changes or Phase 0.
