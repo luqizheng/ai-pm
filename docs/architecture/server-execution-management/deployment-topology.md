@@ -1,5 +1,8 @@
 # Deployment Topology — SEM-02E
 
+> **Authority-boundary revision (2026-11-25):** This document is **under authority-boundary revision**. SEM remains independently deployed and owns Runner connectivity/runtime infrastructure, but the former SEM scheduler/control coordinator acting as a Platform Claim/Lease/business-command proxy is superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Harness business context and Task mutations are exclusively through AI-PM MCP.
+
+
 - Status: Review Pending. Normative baseline: [SEM-02E](./sem-02e-architecture-convergence.md).
 
 ## Deployment units
