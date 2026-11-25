@@ -241,13 +241,15 @@ Rollback is not a second writer mode:
 
 ## 10. Open decisions / implementation gates
 
-1. **Artifact lookup by artifact_key** — ART-04A proposes an exact-match filter and same-key create convergence; implementation and SDK support must be reviewed, including stale Idempotency-Key reservation recovery, before the AI-PM slot-binding saga is implementable.\n2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the `smark.seecode.input` envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
+1. **Artifact lookup by artifact_key** — ART-04A proposes an exact-match filter and same-key create convergence; implementation and SDK support must be reviewed, including stale Idempotency-Key reservation recovery, before the AI-PM slot-binding saga is implementable.
+2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the smark.seecode.input envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
 3. **Reference semantics** — per-viz-artifact Reference is excluded because owner_type is not supported; only consider optional project-level Reference with owner_type=project, and only after create replay/reconciliation semantics are implemented and tested.
-3. **Output compatibility** — define how legacy HTML/PNG rows, if any, are copied and surfaced when the new SeeCode path is SVG-only.
-4. **Business version numbering** — preserve legacy `version_no` in AI-PM; do not assume Artifact Service `version_number` will equal it.
-5. **Mapping retention** — keep legacy ID mappings for at least the lifetime of AI-PM approvals, audit history, and external references.
-6. **Generic Artifact create recovery** — ART-04A caller_request_id is for GenerationJob; artifact_key lookup is needed to reconcile uncertain Artifact creation.
+4. **Output compatibility** — define how legacy HTML/PNG rows, if any, are copied and surfaced when the new SeeCode path is SVG-only.
+5. **Business version numbering** — preserve legacy version_no in AI-PM; do not assume Artifact Service version_number will equal it.
+6. **Mapping retention** — keep legacy ID mappings for at least the lifetime of AI-PM approvals, audit history, and external references.
 7. **Current pointer semantics** — generic current_version_id is not the business-published Visualization pointer.
+8. **Local atomicity** — business draft/operation-ledger persistence must be atomic before remote calls; current helper transaction boundaries need adjustment.
+9. **Legacy call-path inventory** — trace all real production and conversation-triggered callers of the compiler/adapter/render helper; static search found no confirmed production caller of render_artifact, and migration 0020 has no durable legacy render-job table.
 
 ## 11. Non-goals
 
