@@ -726,3 +726,38 @@ This pass checked the remaining application writers behind Task Revision, TaskWa
 The Task↔Product deadlock in §16 is not closed by these checks. `withdraw_task_product` also does not lock Task; its concurrent behavior with a claim's Product-gate read must be covered by a deterministic test. The add path must first be corrected to Task→Product order before any global lock order can be declared.
 
 Status remains **Changes Required / Audit In Progress**. This pass validates current caller ownership patterns for Task Revision, Run creation and task-bound Consultation; it does not repair the §16 deadlock, close the Run↔Interaction inversion, prove predecessor snapshot isolation, execute PostgreSQL replay/catalog capture, or authorize Phase 0.
+
+
+## 18. Eleventh audit pass — Project↔Task inversion through the audit-log foreign key
+
+A further implicit FK edge creates a second concrete deadlock schedule involving the Project lock at the head of Run claim.
+
+### 18.1 Relevant database and writer facts
+
+- Run claim explicitly locks `core.project FOR UPDATE` first, then the candidate Run, then `delivery.task FOR UPDATE` (claim protocol §5.2 / `run_dispatch/claim.rs`).
+- `governance.audit_log` has composite FK `(tenant_id,project_id) → core.project(tenant_id,id)` (baseline `0001_baseline.sql`, constraint `fk_audit_log_tenant_project`).
+- `pm_write::audit::append_audit` and `append_audit_with_after` insert an audit row with `project_id` and derive `tenant_id` from `core.project`; the FK check takes a key-share lock on the referenced Project row.
+- Task PATCH locks the Task row with `SELECT ... FROM delivery.task WHERE id = $1 FOR UPDATE` and subsequently writes its audit row in the same transaction (`pm_write/task.rs`). The Task PATCH path does not first take the Project row lock.
+
+### 18.2 Concrete deadlock schedule
+
+| Transaction A — Run claim | Transaction B — Task PATCH |
+|---|---|
+| Locks Project FOR UPDATE | |
+| Locks candidate Run | |
+| Attempts Task FOR UPDATE and waits | Locks Task FOR UPDATE |
+| **A waits for B's Task lock** | Writes audit_log; FK needs Project KEY SHARE |
+| | **B waits for A's Project lock** |
+
+This is a Project→Task edge in claim and a Task→Project implicit FK edge in the audited Task writer. Unlike the claim's candidate Run lock (which uses SKIP LOCKED), the Task lock is a normal blocking `FOR UPDATE`; the schedule is therefore not avoided by SKIP LOCKED.
+
+This is a new P0 deadlock candidate backed by the exact FK and writer SQL. It must be reproduced with two independent PostgreSQL connections before being labeled a runtime-reproduced deadlock, but the lock compatibility and wait cycle are explicit.
+
+### 18.3 Required closure
+
+- Inventory every transaction that locks Task (or Run/Interaction/Command) and later inserts `governance.audit_log`, including `append_audit`, `append_audit_with_after` and any direct SQL audit writers.
+- Decide a canonical Project lock policy. Options to evaluate include acquiring Project before Task in every affected writer, or changing the claim path's Project row lock strategy only if archive/claim linearization can still be proved. Do not remove the Project lock as a local workaround.
+- Add a deterministic two-connection test: claim holds Project and pauses before Task; Task PATCH holds Task and attempts audit insert; assert the corrected order completes without deadlock.
+- Include audit-log FK KEY SHARE in the global lock graph and in the catalog replay/capture checklist.
+
+The earlier Task↔Product inversion (§16) and Run↔Interaction inversion (§15) remain open. This pass does not change production code and does not claim a runtime deadlock reproduction. Status remains **Changes Required / Audit In Progress**; no global lock order, PR merge or Phase 0 authorization.
