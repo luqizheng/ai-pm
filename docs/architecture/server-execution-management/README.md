@@ -27,7 +27,7 @@ AI-PM 由 Platform、**独立服务 SEM**、Client Runner 和 Harness 构成。P
 | Execution Barrier | Task 作用域，防止新 Run 行绕过旧执行的不确定性 |
 | HIR | 复用并扩展 `governance.human_intervention` |
 | E6 决定 | 复用并扩展 `governance.human_consultation` |
-| Notification | 复用并扩展 `integration.notification`，保留 read_at 语义 |
+| Notification | `integration.notification` 保留项目 Feed/read_at；新增 `integration.notification_recipient` 个人 Inbox 子表 |
 | Orphan detection | Phase 0 Platform DB-only 周期扫描，不依赖 Worker 重启 |
 | Process Identity | Run + Generation 内支持有序进程身份序列，覆盖 Interaction continue |
 | E6 | 提议正式修订 ADR-SEM-04/10；风险授权不等于终止证据，不释放旧 Barrier |
@@ -36,7 +36,7 @@ AI-PM 由 Platform、**独立服务 SEM**、Client Runner 和 Harness 构成。P
 | Runner | 默认 unattended；supervised 需要用户确认 |
 | Git | 每个 Repository 一个权威 origin |
 
-## 23 份专题文档
+## 23 份专题文档 + SEM-02E/02F 收敛规格
 
 以 SEM-02E 为跨文档一致性的主基线。专题文档必须把规范更新写回正文并删除冲突定义，不允许只在文末追加“以新节为准”。
 
@@ -48,3 +48,8 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 
 环境已有独立 RabbitMQ 单实例服务，没有集群。SEM V1 不新增 RabbitMQ 必需依赖；Claim、Lease、Barrier、HIR、E3 和恢复不依赖 RabbitMQ 可用性。若未来批准，可将其用于非权威唤醒/通知加速，数据库 Outbox/Inbox 与 API 对账仍是可靠性基础。
 
+
+
+## SEM-02F 可实施契约
+
+[SEM-02F — Executable Physical and Protocol Contracts](./sem-02f-executable-physical-and-protocol-contracts.md) 将 Task Barrier、HIR discriminator、E6 anchors、Notification Recipient、Platform Process Sequence、Lease Renewal fencing、周期 orphan scanner 和 Phase 0 验收细化为候选物理/协议契约。它不是已批准 ADR，也不授权实施。
