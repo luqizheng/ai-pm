@@ -200,3 +200,8 @@ SEM-02J §17 confirms the Task Revision helper relies on callers holding Task FO
 ## 9. SEM-02J Project–Task implicit FK lock cycle
 
 SEM-02J §18 identifies a second implicit-FK lock-order blocker. Run claim locks Project FOR UPDATE before Task; Task PATCH locks Task then inserts governance.audit_log, whose (tenant_id, project_id) FK requires Project KEY SHARE. This creates a Project→Task versus Task→Project deadlock schedule. It is source/DDL-derived and still needs deterministic two-connection PostgreSQL reproduction; it is not claimed as runtime-reproduced. Global lock order remains unfrozen; Phase 0 remains Not Started.
+
+
+### Project lock-mode mitigation candidates
+
+SEM-02J §18.4 records two candidates for the Project↔Task audit-FK cycle: (1) use FOR NO KEY UPDATE for claim's Project status guard, which should still serialize with Project lifecycle updates while remaining compatible with FK KEY SHARE; or (2) acquire Project KEY SHARE before Task locks in affected writers. Neither is approved; verify PostgreSQL row-lock compatibility, all lifecycle writers, and two-connection schedules before selecting.
