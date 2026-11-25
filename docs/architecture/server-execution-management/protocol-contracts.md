@@ -76,13 +76,14 @@ Renewal constraints:
 
 Carry cancellation commands and ACKs over the authenticated Runner↔SEM WSS channel. Runner does not poll Platform MCP for commands or ACKs. Platform retains `worker_command` business state; SEM stores only transport delivery facts. Do not use Platform database polling or add a separate MCP tool solely for cancellation.
 
-A cancel command carries command ID, Run ID, generation and target process identity.
-- Command receipt acknowledgement is separate from termination confirmation.
-- E3 is sent only after the Runner supervisor observes OS-level process exit through wait/handle result.
-- E3 binds command ID, Run ID, generation, process identity, exit observation and timestamp.
-- Duplicate E3 is idempotent.
-- Mismatched generation/process identity is rejected.
-- Timeout, offline Runner, malformed ACK or missing exit observation is not E3; keep E4/E5 shield.
+A cancel command carries command ID, Run ID, generation and the exact target process identity/sequence.
+- Command receipt ACK means only durable command receipt; it is not command completion or process termination.
+- Command result reports whether the command action succeeded/failed; it is not by itself E3 unless accompanied by the required OS exit observation.
+- E3 process-exit evidence is emitted only after Runner Supervisor observes OS-level exit through wait/handle result or an equivalent strong OS primitive.
+- For command-triggered exit, evidence includes command_id. For natural/uncommanded exit, command_id is optional and the event is still bound to Run, generation, process_sequence, boot_id and OS process creation identity.
+- Duplicate evidence is idempotent. Late evidence for an older sequence may close only that process observation and cannot close a newer active sequence.
+- Mismatched Run/generation/sequence/boot/process identity is rejected or quarantined as diagnostic evidence; it cannot release a Task Barrier.
+- Timeout, offline Runner, malformed ACK or missing exit observation is not E3; keep the Task Barrier/HIR path active.
 
 HTTP 2xx, successful polling, command receipt or request acceptance is never proof of process termination.
 
@@ -191,3 +192,16 @@ E6 is a Platform-authorized human risk decision, not a Runner process observatio
 - E6 is a human authorization, not a process event. It does not emit `runner.process.exit`, E3, or termination ACK, and does not release the old Task Barrier.
 - All dispatch/recovery/requeue paths must invoke the same Platform dispatchability predicate under transaction locks, including B06-D3, E6 successor and queued Run creation.
 - RabbitMQ ACK is never Platform business commit, SEM Inbox commit, Lease renewal, process exit or E3 evidence.
+
+
+## 13. Active process-sequence fencing — implementation blocker
+
+SEM persists OS-level process observations, but Platform remains the Lease/Generation authority and cannot query SEM DB. Therefore the protocol must expose a Platform-authoritative active-process fence:
+
+1. Initial start registers the first process_sequence against the current Run+Generation through an authenticated SEM service API before Lease Renewal can rely on it.
+2. Interaction continue starts a new OS process and sends continuation.consumed with the new process identity and monotonically increasing sequence.
+3. Platform atomically validates the current Run/Generation/Lease/Interaction state and advances the accepted active sequence; duplicate continuation receipts are idempotent, stale/lower sequences are rejected, and a conflicting same-sequence identity is quarantined.
+4. Lease Renewal carries the accepted active process sequence and identity binding. Platform rejects renewal from a superseded process.
+5. Exit evidence for an older sequence remains appendable as historical evidence but cannot clear the current active-process fence or release a Barrier while a newer sequence remains active.
+
+The exact Platform persistence shape (columns on task_run versus a dedicated normalized process-identity table) is OPEN and must be selected after the schema/transaction/locking audit. The current seven-table SEM DB alone is insufficient for Platform-side fencing.
