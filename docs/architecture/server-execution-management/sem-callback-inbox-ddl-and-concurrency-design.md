@@ -2533,9 +2533,9 @@ The required truth-table cases are:
 | non-`sem` | NULL | NULL | existing generic value | NULL | Accept |
 | non-`sem` | non-NULL | NULL | existing generic value | NULL | Reject |
 | non-`sem` | NULL | NULL | existing generic value | non-NULL | Reject |
-| NULL | any | any | any | any | Reject |
+| NULL | any | any | any | any | Reject at the existing column NOT NULL constraint before the SEM CHECK |
 
-The test must execute these rows against PostgreSQL itself and assert both insert success/failure and the exact constraint name; a reimplementation of the Boolean expression in application code is not a substitute.
+The test must execute these rows against PostgreSQL itself and assert insert success/failure plus the expected constraint for each rejected SEM-specific row. The NULL-source row is rejected by the existing column NOT NULL constraint before this CHECK. A reimplementation of the Boolean expression in application code is not a substitute.
 
 
 
