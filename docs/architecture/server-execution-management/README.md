@@ -13,6 +13,10 @@
 - [Platform–SEM execution-message protocol draft](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/protocol/PLATFORM-SEM-EXECUTION-MESSAGE-PROTOCOL-DRAFT.md).
 - [Execution identity/lifecycle/fencing/delivery contract draft](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/protocol/EXECUTION-IDENTITY-LIFECYCLE-FENCING-DELIVERY-CONTRACT-DRAFT.md).
 
+## Callback / Inbox contract review
+
+- [AI-PM SEM callback and Inbox design](./ai-pm-sem-callback-inbox-design-draft.md) — source-verified draft for the dedicated service callback, generic Inbox limitations, `execution_id`↔`task_run.id` mapping, per-execution sequence cursor, transactional ACK and retry semantics.
+
 ## Authority summary
 
 | Concern | Authority |
