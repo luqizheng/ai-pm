@@ -1,5 +1,8 @@
 # SEM V1 Protocol Contracts
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** This protocol document is **SUPERSEDED as an implementation contract** by [authority-boundary-decision.md](./authority-boundary-decision.md). Its Platform Claim/Lease/business-command proxy calls through SEM, and its SEM-owned Task/HIR/Barrier semantics, are not normative. Keep it only as historical design evidence until replacement opaque execution-request/delivery/release/runtime-observation schemas are authored and reviewed.
 
 
