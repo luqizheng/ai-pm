@@ -2519,5 +2519,24 @@ The candidate SQL is corrected to:
 
 Added INBOX-36..38 for each NULL hash and a complete three-valued-logic/DDL-parse truth table. This correction is documentation-only. The SQL still requires actual PostgreSQL parse/replay and catalog verification; it is not a migration.
 
+The required truth-table cases are:
+
+| source | execution_id | sequence | payload_hash | event_envelope_hash | Expected |
+|---|---|---:|---|---|---|
+| `sem` | non-NULL | positive | valid 64-hex | valid 64-hex | Accept |
+| `sem` | NULL | positive | valid 64-hex | valid 64-hex | Reject |
+| `sem` | non-NULL | NULL / zero | valid 64-hex | valid 64-hex | Reject |
+| `sem` | non-NULL | positive | NULL | valid 64-hex | Reject |
+| `sem` | non-NULL | positive | valid 64-hex | NULL | Reject |
+| `sem` | non-NULL | positive | malformed | valid 64-hex | Reject |
+| `sem` | non-NULL | positive | valid 64-hex | malformed | Reject |
+| non-`sem` | NULL | NULL | existing generic value | NULL | Accept |
+| non-`sem` | non-NULL | NULL | existing generic value | NULL | Reject |
+| non-`sem` | NULL | NULL | existing generic value | non-NULL | Reject |
+| NULL | any | any | any | any | Reject |
+
+The test must execute these rows against PostgreSQL itself and assert both insert success/failure and the exact constraint name; a reimplementation of the Boolean expression in application code is not a substitute.
+
+
 
 The shared vector also exercises optional-field identity: its `correlation_id` is present. Independent validators prove that changing its value or omitting it changes the full-envelope hash while leaving the payload hash unchanged. This ensures optional schema fields are included when present and absent fields are not synthesized.
