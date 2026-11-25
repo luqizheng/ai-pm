@@ -190,3 +190,16 @@ This is a design proposal only. OI-01..OI-06 remain open; no migration, route, a
 ### OI-06 — Current SEM binding projection and first-bind/rebind rules (P0, OPEN)
 
 The exact DDL/concurrency companion identifies a blocking gap: its transaction algorithm validates against a “current SEM infrastructure binding tuple”, but the proposed storage only adds the per-attempt event cursor and does not define a current-binding projection or deterministic event-history query. The first `execution.binding_established` event also has no prior binding to compare. Before implementation, specify an atomic consumer-side binding projection or a deterministic replay algorithm, including first bind, duplicate, same-epoch conflict, stale lower epoch, authorized higher-epoch rebind, host-isolation disposition, and rejection while prior state remains uncertain. See §10 of the exact DDL/concurrency design and the SEM D-04 cross-repository review. This remains P0 / Changes Required; no implementation is authorized.
+
+
+## 11. Proposed binding projection and callback validation (P0-06)
+
+Adopt the minimal delivery.task_run_sem_binding projection described in the companion exact DDL design §11. This is preferred over deriving current binding from an unspecified scan of append-only Run events.
+
+The projection stores only the last SEM binding accepted by AI-PM and its lifecycle/evidence references. It is not an authority to dispatch, select a Runner, allocate epochs, or change Task/Run business state.
+
+The callback transaction is extended to lock the delivery Run first, then the binding projection row, then insert the Inbox event and append the Run observation, then advance the per-attempt cursor; commit all changes atomically. The final migration must freeze this lock order and all writers must use it.
+
+The first execution.binding_established event creates the projection. Exact duplicates are resolved by Inbox identity and do not rewrite it. Same-epoch identity changes and lower epochs reject. A higher epoch is accepted only after a positive prior release/no-start proof or an explicit SEM-authorized host-isolation disposition. An uncertain prior binding blocks rebind.
+
+**Important unresolved bilateral dependency:** the current five-event Platform callback contract does not carry an authenticated reference to the dedicated runner.quarantine.resolve host-isolation disposition. execution.infrastructure_uncertain is not such proof. Therefore, do not enable host-isolation rebind until SEM adds an explicit event/reference and the schema/fixtures/acceptance matrix cover it. BIND-01..BIND-12 are added to the PostgreSQL acceptance plan. P0-06 remains open pending bilateral event semantics and executable PostgreSQL tests.
