@@ -1,3 +1,5 @@
+> **Superseding architecture decision (2026-11-25):** The user-confirmed [AI-PM ↔ SEM authority-boundary decision](./authority-boundary-decision.md) changes the ownership model: SEM transports opaque execution messages and manages runtime infrastructure; Harness uses AI-PM MCP for all business context and Task mutations; AI-PM decides business completion and sends SEM a release instruction. SEM-02E/02J remain historical design/audit material where their source findings are useful, but prior SEM-owned Claim/Lease/business-command/HIR/Barrier workflow assumptions are not normative and must be reworked before implementation.
+
 # SEM-02E — 全量架构收敛基线
 
 - 状态：**Design In Progress — Review Pending**
