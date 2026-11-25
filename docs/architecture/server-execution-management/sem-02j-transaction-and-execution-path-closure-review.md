@@ -411,3 +411,39 @@ Add these to the existing J01–J10 matrix:
 Every case uses two independent PostgreSQL connections, explicit barriers, bounded lock/statement timeouts, and verifies final aggregate states plus audit/command/delivery/continuation/event effects.
 
 Status remains **Changes Required / Audit In Progress**. This pass expands the connected lock graph but does not select a global lock order. No code, migration, API/WSS implementation or runtime configuration changed; Phase 0 remains Not Started.
+
+
+## 12. Fifth audit pass — current migration head and late execution-related DDL
+
+The current `master` migration directory contains migrations through **0059** (latest observed: `0059_discovery_round_error.sql`). This pass checked the late migrations that can affect execution ownership, process cleanup, workspace lifecycle or formal human decisions. It does not claim a full replay/semantic review of every migration from 0001 through 0059; the complete chain reconciliation remains open.
+
+### 12.1 Relevant late migration findings
+
+| Migration | DDL effect | SEM relevance |
+|---|---|---|
+| 0046 `human_consultation` | Creates generic four-state Consultation; task FK is `ON DELETE SET NULL`; no composite tenant/project/task FK; no HIR/Barrier/successor unique anchors | E6 cannot be inferred from this table's generic `decided` state; E6 needs typed binding and same-scope FK integrity |
+| 0053 `device_single_active_run` | Partial unique index `uq_task_run_device_active` on `lease_client_id` for claimed/running | Enforces one active Run per device identity, not one process per Runner host or SEM connection; new SEM Runner slot/concurrency authority must preserve and deliberately replace/extend this invariant |
+| 0054 `task_run_cleanup_claim_fencing` | Adds cleanup claim token and due index | Cleanup worker claims are fenced independently; no Platform Run lease/generation authority is transferred |
+| 0055 `workspace_reclamation_ledger` | Adds separate workspace reclamation ledger with Project/Repository/RunRepository FKs and unique resource keys | Filesystem reclamation is separate from process termination and Run state; FK restricts deletion while resource ledger exists |
+| 0056 `workspace_reclamation_bytes` | Adds logical reclaimed byte count | Metrics/accounting only; no execution authority |
+| 0057 `workspace_reclamation_totals` | Adds cumulative resource-kind totals | Metrics/accounting only; no execution authority |
+| 0058 `external_commit_adoption` | Adds external Commit discovery/adoption tables and repository scan anchors | No direct Run ownership change identified in this DDL |
+| 0059 `discovery_round_error` | Adds discovery session error fields | No direct Run ownership change identified in this DDL |
+
+### 12.2 Migration-level integrity observations
+
+1. `human_consultation` has a task FK with `ON DELETE SET NULL`, but no composite FK that proves the Consultation's tenant/project/task all belong to the same scope. This is a schema integrity gap for future E6 use, not a demonstrated current cross-tenant exploit; existing service authorization and data model need separate audit.
+2. The device-active partial unique index is a valuable DB backstop, but its key is `lease_client_id` and it only covers claimed/running. It does not model SEM's Runner connection epoch, host identity, supervisor session, resource reservation or dispatch operation. SEM must not equate device uniqueness with Runner process uniqueness.
+3. Workspace reclamation is intentionally derived-resource bookkeeping. Its completion cannot prove process exit; the process may have exited before cleanup, or cleanup may fail after exit. Conversely, cleanup completion is not a substitute for a process-specific, generation-fenced E3 receipt.
+4. The late migrations 0055–0057 introduce separate filesystem reclamation state and counters. Do not merge these into Run status or the proposed process-evidence ledger.
+5. The current migration head is 0059, whereas the existing schema inventory snapshot is dated 2026-11-15 and predates at least the PA-08 migrations. It is not sufficient evidence for current schema constraints/triggers. Rebuild a fresh schema inventory from the exact current migration head before final DDL approval.
+
+### 12.3 Remaining migration audit
+
+- Inspect baseline DDL sections for `task_run`, `task_interaction`, `worker_command`, `continuation`, `interaction_response_delivery`, `human_intervention`, `task_run_cleanup`, their unique indexes, FKs and triggers.
+- Inspect every intervening migration 0002–0059 for DROP/ADD/RENAME of those constraints and for trigger functions that may introduce additional writes.
+- Replay the full migration chain against an empty PostgreSQL database and capture `pg_constraint`, `pg_index`, `pg_trigger`, `pg_proc` definitions at the resulting head.
+- Compare that live-schema capture with the checked-in migration-derived expectation. The 2026-11-15 inventory must remain historical evidence only.
+- Add DDL tests for the composite tenant/project/task identity guarantees required by HIR, Barrier, E6 and process evidence.
+
+Status remains **Changes Required / Audit In Progress**. The latest migration head is identified as 0059, but the full 0001–0059 schema/trigger reconciliation is not yet complete. No global lock order is selected; no code, migration, API/WSS implementation or runtime configuration changed; Phase 0 remains Not Started.
