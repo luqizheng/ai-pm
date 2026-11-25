@@ -58,3 +58,8 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 ## SEM-02G 数据库与 API 契约草案
 
 [SEM-02G — Database DDL and Service API Contract Draft](./sem-02g-database-and-api-contract-draft.md) 包含 Task Barrier、HIR、E6、Notification Recipient、Process Registry 的 SQL-shaped 草案，以及 Platform–SEM HTTPS / Runner–SEM WSS 消息样例。仅供评审，不是可执行 Migration。
+
+
+## SEM-02H DDL / transaction review
+
+[SEM-02H — DDL Integrity and Transaction Review](./sem-02h-ddl-integrity-and-transaction-review.md) found concrete issues in the SEM-02G SQL-shaped draft. SEM-02G is not executable; do not translate it into migrations before the SEM-02H findings are closed. No implementation is authorized.
