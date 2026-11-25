@@ -41,7 +41,7 @@ Barrier 以 Task 为作用域，至少关联 task_id、origin_run_id、origin_ge
 Phase 0 在 Platform 侧实现 DB-only 周期扫描，不依赖 Worker 重启、SEM 或 Session Manager。扫描 claimed/running、Lease 过期并超过宽限期、Interaction shield=none、无 E1–E3 的候选。必须覆盖 Runner 项目，不得因 claim 候选过滤而漏扫。
 
 单个 Platform DB 事务内：
-1. 按既定锁序锁定 Task/Run；
+1. 按既定锁序锁定 Project → candidate Run → Task；
 2. 重验状态、generation、lease、shield、Barrier 和已有证据；
 3. 创建/复用 Task Barrier；
 4. 创建/关联 HIR；
