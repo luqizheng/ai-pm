@@ -1,5 +1,8 @@
 # SEM-02J — Platform Transaction and Execution-Path Closure Audit
 
+> **Authority-boundary revision (2026-11-25):** **Scope clarification (2026-11-25):** The SQL/source-level findings in this audit remain evidence about the reviewed AI-PM code paths. However, its former SEM control-plane ownership assumptions and any proposed SEM-side business Claim/Lease/Task/HIR/Barrier responsibilities are superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Reclassify each audited writer as AI-PM business authority or SEM infrastructure observation before implementation. The source findings do not authorize SEM to own those business transactions.
+
+
 - Status: **Changes Required / Audit In Progress**.
 - Source baseline: GitHub `master@d0e72fa6805aebeadf1b282e430deba493072fd6`.
 - Related design: [SEM-02H](./sem-02h-ddl-integrity-and-transaction-review.md), [SEM-02I](./sem-02i-corrected-platform-schema-and-process-api-candidate.md).
