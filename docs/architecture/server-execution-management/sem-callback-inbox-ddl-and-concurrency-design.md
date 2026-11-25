@@ -253,6 +253,7 @@ Every test asserts exact row counts and values in all three storage locations, n
 AI-PM must match SEM D-04 exactly:
 
 - Success/duplicate: event_id, execution_id, execution_event_sequence, contiguous_through_sequence, disposition, acknowledged_at.
+- The signed callback ACK MUST include exactly one `X-SEM-Event-Id` correlation header equal to the authenticated callback `event_id`; it must not be derived from an untrusted body/header after verification. The Platform→SEM response direction uses `X-SEM-Request-Id = request_id` (the operation/idempotency identity), not `message_id`.
 - Same event ID with changed identity/body: HTTP 409 IDEMPOTENCY_CONFLICT.
 - Same sequence with another event ID: HTTP 409 EVENT_SEQUENCE_CONFLICT.
 - Sequence gap: HTTP 409 EVENT_SEQUENCE_GAP with expected_sequence.
