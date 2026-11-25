@@ -1,0 +1,175 @@
+# SEM Callback Inbox — Exact DDL and Concurrency Design
+
+- Status: **DRAFT / REVIEW REQUIRED**
+- AI-PM PR: #9, branch \`docs/sem-02e-architecture-convergence\`
+- Audited base: \`master\` at \`d0e72fa6805aebeadf1b282e430deba493072fd6\`
+- Scope: design only; no migration, route, application code, or runtime change is authorized.
+
+## 1. Source audit findings
+
+The current baseline establishes:
+
+1. \`integration.inbound_event.id\` is already a global UUID primary key. Mapping SEM \`event_id\` directly to this column provides global uniqueness across projects and sources. A second global unique index would be redundant.
+2. Existing idempotency is \`UNIQUE(project_id, source, idempotency_key)\`; it does not enforce one event per SEM execution sequence.
+3. \`integration.inbound_event\` requires \`actor_id\` referencing \`core.principal(id)\`. SEM must use a service principal and must never synthesize a HumanActor.
+4. Existing \`pm_application::ingestion::submit_event\` hashes \`serde_json::Value::to_string()\`, inserts through the generic project/source/idempotency key, and creates \`integration.job(job_type='ai_analysis')\` in the same transaction. It is not a valid SEM callback path.
+5. \`delivery.task_run\` has global PK \`id\`, unique \`(tenant_id,id)\` and \`(project_id,id)\`, and \`run_kind\` values \`delivery|review\`. The callback must accept only the intended delivery attempt.
+6. \`delivery.task_run_event\` is append-only, but its existing CHECK excludes \`sem_infrastructure_observed\`. Its existing unique key is \`(run_id,event_type,lease_generation,dedupe_tag)\`; it has no database FK to Run.
+
+The current Inbox constraints are: PK(id), UNIQUE(project_id,id), UNIQUE(tenant_id,id), UNIQUE(project_id,source,idempotency_key), composite FK (tenant_id,project_id) to core.project, and actor_id FK to core.principal.
+
+## 2. Recommended storage mapping
+
+| SEM concept | AI-PM storage |
+|---|---|
+| event_id | integration.inbound_event.id (existing global PK) |
+| execution_id | delivery.task_run.id |
+| execution_event_sequence | new integration.inbound_event.execution_event_sequence |
+| payload | integration.inbound_event.payload JSONB |
+| payload_hash | integration.inbound_event.payload_hash, SHA-256 of RFC 8785 JCS UTF-8 bytes |
+| infrastructure observation | delivery.task_run_event, event_type sem_infrastructure_observed |
+| contiguous cursor | new delivery.task_run.execution_event_sequence, initial value 0 |
+
+Reuse the existing Inbox; do not create a parallel SEM Inbox unless live catalog evidence reveals a concrete blocker. The SEM-specific application port must not call \`submit_event()\`, create \`integration.job\`, or enqueue AI analysis.
+
+## 3. Proposed DDL (illustrative only)
+
+\`\`\`sql
+ALTER TABLE delivery.task_run
+    ADD COLUMN execution_event_sequence bigint NOT NULL DEFAULT 0,
+    ADD CONSTRAINT task_run_execution_event_sequence_nonnegative
+        CHECK (execution_event_sequence >= 0);
+
+ALTER TABLE integration.inbound_event
+    ADD COLUMN execution_id uuid,
+    ADD COLUMN execution_event_sequence bigint;
+
+ALTER TABLE integration.inbound_event
+    ADD CONSTRAINT inbound_event_sem_sequence_pair
+    CHECK (
+        (source = 'sem'
+         AND execution_id IS NOT NULL
+         AND execution_event_sequence IS NOT NULL
+         AND execution_event_sequence >= 1)
+        OR
+        (source <> 'sem'
+         AND execution_id IS NULL
+         AND execution_event_sequence IS NULL)
+    );
+
+CREATE UNIQUE INDEX uq_inbound_event_sem_execution_sequence
+    ON integration.inbound_event (execution_id, execution_event_sequence)
+    WHERE source = 'sem';
+
+ALTER TABLE integration.inbound_event
+    ADD CONSTRAINT fk_inbound_event_sem_execution
+    FOREIGN KEY (tenant_id, execution_id)
+    REFERENCES delivery.task_run (tenant_id, id);
+
+ALTER TABLE delivery.task_run_event
+    ADD CONSTRAINT task_run_event_sem_sequence_check
+    CHECK (
+        event_type <> 'sem_infrastructure_observed'
+        OR length(dedupe_tag) BETWEEN 1 AND 200
+    );
+
+CREATE UNIQUE INDEX uq_task_run_event_sem_sequence
+    ON delivery.task_run_event (run_id, dedupe_tag)
+    WHERE event_type = 'sem_infrastructure_observed';
+\`\`\`
+
+DDL qualifications before ratification:
+
+- Confirm no existing Inbox rows use reserved source value \`sem\`.
+- The proposed FK proves tenant + Run identity, but not project identity or \`run_kind='delivery'\`. Before freezing DDL, either add a reviewed composite key/FK proving tenant + project + execution together, or explicitly retain locked-row semantic validation as the enforcement point and prove it with integration tests.
+- The callback must lock the Run and reject review runs before any write; a CHECK cannot enforce the referenced Run's run_kind.
+- Decide whether to add a composite FK for SEM-only Run observations or retain the current ledger pattern with strict transaction-local validation.
+- Do not add a redundant global unique index on \`inbound_event.id\`; the primary key already supplies it.
+
+## 4. Payload hash and equality
+
+Freeze the same rule in both repositories:
+
+1. Reject duplicate JSON object member names before application processing.
+2. Canonicalize the parsed JSON using RFC 8785 JSON Canonicalization Scheme (JCS).
+3. Compute lowercase hex SHA-256 over the exact UTF-8 JCS bytes.
+4. Store the semantic value in JSONB and the JCS digest in payload_hash.
+5. Same event_id is a duplicate only when execution_id, sequence, and JCS digest all match. Any changed tuple is IDEMPOTENCY_CONFLICT.
+6. Whitespace and object-member order do not change the digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
+
+Never hash raw HTTP bytes on one side and canonical JSON on the other. HTTP signature canonicalization is a separate contract.
+
+## 5. Transaction algorithm and lock order
+
+Authenticate the SEM service principal and verify signature/freshness before opening the database transaction. Then:
+
+1. Resolve the candidate Run by tenant_id + project_id + execution_id. Unknown, wrong-tenant, wrong-project, and review-run IDs return non-enumerating 404.
+2. Lock the exact Run row with SELECT FOR UPDATE. Validate delivery run kind and the current infrastructure binding tuple: runner_id, runner_key_version, boot_id, supervisor_instance_id, binding_epoch, plus event-specific process/evidence identity.
+3. Check event_id globally. Same ID + same execution + same sequence + same JCS hash is a duplicate; any changed identity/sequence/hash is 409 IDEMPOTENCY_CONFLICT.
+4. Require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without a matching committed event is conflict; never lower the cursor.
+5. Insert integration.inbound_event with explicit id=event_id, source='sem', service-principal actor, exact tenant/project, execution ID, sequence, JSONB payload, JCS hash, and received status. Do not create an integration.job.
+6. Insert exactly one task_run_event row: event_type='sem_infrastructure_observed', run_id=execution_id, dedupe_tag=decimal(sequence), and detail containing event ID, sequence, type, binding identity, and evidence references.
+7. Advance task_run.execution_event_sequence to the incoming value, guarded by the old cursor.
+8. Commit. Only after commit return the success ACK.
+
+All callback writers use one lock order: Run row → Inbox event → Run observation. No callback path may lock Inbox first and then Run. A unique-index conflict is not automatically success: read the winning row and compare the full identity/hash tuple. Same sequence/different event ID is EVENT_SEQUENCE_CONFLICT; same event ID/different body is IDEMPOTENCY_CONFLICT.
+
+## 6. PostgreSQL two-connection acceptance matrix
+
+Run with two independent PostgreSQL connections and explicit synchronization barriers. Mock-only tests are insufficient.
+
+| ID | Scenario | Required result |
+|---|---|---|
+| INBOX-01 | First event, sequence 1 | One Inbox row, one observation, cursor 1; ACK only after commit |
+| INBOX-02 | Same event ID/body replay | Duplicate ACK; no second observation |
+| INBOX-03 | Same event ID, changed payload | 409 idempotency conflict; no writes |
+| INBOX-04 | Same event ID, changed execution ID or sequence | 409 idempotency conflict; no writes |
+| INBOX-05 | Concurrent same sequence, different IDs | Exactly one commits; loser sequence conflict |
+| INBOX-06 | Concurrent same event ID/body | Exactly one insert/observation; other returns duplicate |
+| INBOX-07 | N+1 before N | 409 gap with expected N; no writes |
+| INBOX-08 | Commit N, crash before ACK, replay N | Duplicate ACK; cursor remains N |
+| INBOX-09 | Crash before commit | No partial Inbox/event/cursor writes; no ACK |
+| INBOX-10 | Same event ID in another project/source | Global PK conflict; no cross-project disclosure |
+| INBOX-11 | Wrong tenant/project or unknown execution | Non-enumerating 404; no writes |
+| INBOX-12 | Review Run ID | Non-enumerating 404; no writes |
+| INBOX-13 | Stale binding/key version/boot ID | Reject or quarantine; cursor unchanged |
+| INBOX-14 | Process exit without exact exit evidence | Reject; cursor unchanged |
+| INBOX-15 | process_exited release without evidence reference | Reject; cursor unchanged |
+| INBOX-16 | SEM service principal | Accepted only on SEM service route; never HumanActor |
+| INBOX-17 | Any SEM callback | Zero ai_analysis jobs |
+| INBOX-18 | Exit code 0 | Infrastructure observation only; no business success transition |
+| INBOX-19 | N and N+1 concurrent | Serialized; cursor N+1 and two ordered observations |
+| INBOX-20 | Failure after Inbox insert | Full rollback |
+| INBOX-21 | Failure after Run event insert | Full rollback |
+| INBOX-22 | Retry after transient DB failure | Exact same event ID/body replayed; no sequence skip |
+| INBOX-23 | Generic non-SEM ingestion after migration | Existing semantics unchanged |
+| INBOX-24 | Duplicate JSON member or invalid JCS value | Rejected before persistence/cursor movement |
+
+Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
+
+## 7. Response contract
+
+AI-PM must match SEM D-04 exactly:
+
+- Success/duplicate: event_id, execution_id, execution_event_sequence, contiguous_through_sequence, disposition, acknowledged_at.
+- Same event ID with changed identity/body: HTTP 409 IDEMPOTENCY_CONFLICT.
+- Same sequence with another event ID: HTTP 409 EVENT_SEQUENCE_CONFLICT.
+- Sequence gap: HTTP 409 EVENT_SEQUENCE_GAP with expected_sequence.
+- Unknown/wrong tenant/project/run kind: non-enumerating 404.
+- Authentication/signature/freshness failures: exact status classification to be frozen in shared OpenAPI.
+- Transient rate/database/service failure: retryable 429/5xx; no ACK and no partial commit.
+
+Exact response JSON Schema and OpenAPI error components remain a separate bilateral closure item.
+
+## 8. Open decisions and blockers
+
+- OI-01: Ratify execution_id == delivery.task_run.id for one AI-PM attempt.
+- OI-02: Ratify shared integration.inbound_event reuse after live catalog proof.
+- OI-03: Ratify cursor, observation event type, and migration constraints.
+- OI-04: Ratify service principal/key registry and RFC 9421 middleware.
+- OI-05: Ratify retention, compaction, and operator replay.
+- OI-06: Freeze exact success/error schemas and retry classification.
+- Complete empty-database migration replay and capture live PostgreSQL catalog constraints/indexes.
+- Add bilateral executable fixtures and two-connection PostgreSQL tests before implementation approval.
+
+**Disposition: DRAFT / CHANGES REQUIRED.** Design artifact only; it does not authorize implementation, migration creation, route changes, or PR merge.
