@@ -178,8 +178,11 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
 
 1. Resolve the candidate Run by tenant_id + project_id + execution_id. Unknown, wrong-tenant, wrong-project, and review-run IDs return non-enumerating 404.
 2. Lock the exact Run row with SELECT FOR UPDATE. Validate delivery run kind and the current infrastructure binding tuple: runner_id, runner_key_version, boot_id, supervisor_instance_id, binding_epoch, plus event-specific process/evidence identity.
-3. Check event_id globally. If found, compare event_type, execution_id, execution_event_sequence, payload_hash and event_envelope_hash. Exact match is duplicate; any changed tuple or envelope hash is 409 IDEMPOTENCY_CONFLICT.
-4. Check the (execution_id, execution_event_sequence) row. If another event_id already owns the sequence, return 409 EVENT_SEQUENCE_CONFLICT. Then require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without the matching committed event is conflict; never lower the cursor.
+3. Check the global event_id before sequence ownership. If an event_id row already exists, compare event_type, execution_id, execution_event_sequence, payload_hash and event_envelope_hash:
+   - Any changed value is 409 IDEMPOTENCY_CONFLICT. This classification has precedence even if the incoming execution/sequence pair is currently owned by another event. Do not disclose the existing row's tenant/project.
+   - If all values match, query the unique (execution_id, execution_event_sequence) key and require it to resolve to the exact same Inbox row. If it does not, rollback and return a generic integrity error; never ACK a partially inconsistent duplicate.
+   - Only when the event_id row and the matching sequence row are the same row is the request an exact duplicate.
+4. If no event_id row exists, check the (execution_id, execution_event_sequence) key. If another event_id already owns the sequence, return 409 EVENT_SEQUENCE_CONFLICT. Then require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without the matching committed event is conflict; never lower the cursor.
 5. Insert the Inbox row using an all-constraint conflict-safe statement, not a plain INSERT:
 
    INSERT INTO integration.inbound_event (...)
@@ -187,13 +190,13 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
    ON CONFLICT DO NOTHING
    RETURNING id;
 
-   This catches the global event_id primary key and the SEM partial unique execution-sequence index without aborting the transaction. If no row is returned, issue a new SELECT statement (READ COMMITTED obtains a fresh statement snapshot) by global event_id and by (execution_id, execution_event_sequence):
-   - Read both conflict keys. Return duplicate only when the event_id row and execution/sequence row identify the same single row and its event_type, execution_id, sequence, payload_hash and event_envelope_hash all match the request.
-   - An event_id row with any changed tuple/hash → 409 IDEMPOTENCY_CONFLICT.
-   - An execution/sequence row owned by a different event_id → 409 EVENT_SEQUENCE_CONFLICT.
-   - If both lookups return different rows, or only one lookup returns a row when the schema invariants require both to identify the same Inbox row, treat it as an integrity invariant violation; rollback and return a generic server error, never ACK.
-   - If neither lookup returns a winner, treat it as an unexpected integrity invariant violation; rollback and return a generic server error, never ACK.
-   This post-conflict read is a new SQL statement after ON CONFLICT DO NOTHING; it does not rely on querying inside a transaction-aborted state.
+   This catches the global event_id primary key and the SEM partial unique execution-sequence index without aborting the transaction. If no row is returned, issue new SELECT statements under READ COMMITTED (each obtains a fresh statement snapshot), first by global event_id and then, as applicable, by (execution_id, execution_event_sequence):
+   - If the event_id row exists and any event_type, execution_id, sequence, payload_hash or event_envelope_hash value differs, return 409 IDEMPOTENCY_CONFLICT. This takes precedence over any simultaneous sequence-owner conflict.
+   - If the event_id row exists and all values match, require the sequence lookup to identify that exact same row; otherwise rollback and return a generic integrity error, never ACK.
+   - If no event_id row exists but the sequence key is owned by another event_id, return 409 EVENT_SEQUENCE_CONFLICT.
+   - If neither row exists after ON CONFLICT DO NOTHING, rollback and return a generic integrity error, never ACK.
+   The two lookups may return different rows only when the event_id already conflicts with a changed tuple; in that case IDEMPOTENCY_CONFLICT takes precedence and no winner details are disclosed. A matching event_id row and a different sequence row is an invariant violation.
+   This post-conflict read uses new SQL statements; it never queries inside an aborted transaction.
 6. For a successful Inbox insert, insert exactly one task_run_event row: event_type='sem_infrastructure_observed', run_id=execution_id, dedupe_tag=decimal(sequence), and detail containing event ID, sequence, type, binding identity, and evidence references. The explicit NOT NULL + length CHECK rejects a missing/NULL dedupe tag.
 7. Advance task_run.execution_event_sequence to the incoming value, guarded by the old cursor. Because all events for one execution lock the same Run row first, same-execution sequence writes serialize; the unique index remains a database backstop.
 8. Commit. Only after commit return the success ACK.
@@ -245,6 +248,9 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-37 | SEM Inbox row has `event_envelope_hash = NULL` | CHECK rejects the row; SQL NULL/UNKNOWN must not satisfy SEM hash integrity |
 | INBOX-38 | Execute the complete SEM source CHECK against SEM/non-SEM NULL and malformed-hash truth-table cases | DDL parses; only the explicitly permitted SEM/non-SEM row shapes pass; no UNKNOWN result is accepted for SEM rows |
 | INBOX-39 | Optional `correlation_id` is present in one envelope and omitted in another with all other fields equal | Payload hash remains equal; full-envelope hash differs because only schema-defined fields actually present are canonicalized |
+| INBOX-40 | Existing global event_id belongs to a different execution/body while the incoming execution/sequence is also owned by another event | Deterministic precedence: 409 IDEMPOTENCY_CONFLICT; no winner tenant/project disclosure and no writes |
+| INBOX-41 | Existing event_id and all envelope hashes/tuple match, but the sequence lookup does not resolve to the same Inbox row | Generic integrity failure; rollback and never ACK an inconsistent duplicate |
+| INBOX-42 | No event_id row exists but the incoming execution/sequence is already owned by another event_id after a concurrent conflict | 409 EVENT_SEQUENCE_CONFLICT; no cursor movement or observation insert |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
@@ -574,3 +580,16 @@ The shared vector also exercises optional-field identity: its `correlation_id` i
 The separate evaluation document `sem-jcs-canonicalizer-dependency-evaluation.md` identifies `canonprims-json 0.1.4` as the leading technical candidate for an isolated AI-PM-only spike. It accepts raw bytes, rejects duplicate members and invalid I-JSON values before producing canonical bytes, and provides explicit limits and a shared conformance corpus. It requires Rust 1.88.0; AI-PM's current Docker builder floats on `rust:1-slim` and the workspace does not declare an MSRV. SEM's candidate workspace remains at Rust 1.85 and need not change if the JCS dependency stays AI-PM-only.
 
 No dependency or toolchain change is approved. Before implementation, the spike must prove corpus parity, cross-language callback envelope hashes, refusal/no-side-effect behavior, and dependency provenance. The Rust 1.88 AI-PM build floor must be explicitly ratified before adding the crate.
+
+## 11. Conflict classification precedence correction (2026-11-25)
+
+The prior post-conflict text was ambiguous: it said a one-sided lookup result could be an integrity failure, while also requiring an existing global event_id with a changed execution tuple to return IDEMPOTENCY_CONFLICT. A cross-execution collision can legitimately produce exactly that one-sided event_id lookup.
+
+The algorithm now has explicit precedence:
+
+1. If the global event_id exists and any authenticated tuple/hash differs, return 409 IDEMPOTENCY_CONFLICT. This wins even if the incoming execution/sequence is also owned by another row.
+2. If the global event_id exists and the tuple/hash matches exactly, the execution/sequence lookup MUST resolve to the same Inbox row; otherwise this is a database invariant failure and no ACK is allowed.
+3. If no global event_id exists but the execution/sequence key is owned, return 409 EVENT_SEQUENCE_CONFLICT.
+4. If ON CONFLICT reports no insert but neither key can be found, rollback and return generic integrity failure.
+
+Added INBOX-40..42 for cross-key conflict precedence, exact-duplicate row consistency and sequence-only conflict. This is a design correction; no migration or runtime code changed.
