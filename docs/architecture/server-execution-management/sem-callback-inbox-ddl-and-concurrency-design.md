@@ -234,6 +234,7 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-32 | Rust and an independent Node/Python implementation canonicalize the same callback envelope | Exact JCS UTF-8 bytes, payload_hash and event_envelope_hash match |
 | INBOX-33 | Callback payload contains RFC 8785 numeric boundary values, negative zero, and UTF-16 ordering cases | Rust and independent implementation produce identical canonical bytes and hashes; invalid non-finite/unpaired-surrogate values reject |
 | INBOX-34 | Duplicate object member names, including escaped-equivalent and nested duplicates, arrive at the callback boundary | Reject before serde_json::Value materialization, persistence or cursor movement |
+| INBOX-35 | Rust and Node independently verify the pinned shared SEM callback envelope fixture | Exact payload/envelope JCS bytes and both SHA-256 values match; changed event fields or payload fail the vector |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
@@ -870,3 +871,17 @@ The candidate now keeps two hashes with distinct meanings:
 The SEM CHECK requires a lowercase 64-character hex event_envelope_hash for source='sem' and NULL for non-SEM rows. Duplicate detection compares event_type, execution_id, sequence, payload_hash and event_envelope_hash. Added INBOX-29..31 for changed event_type, changed schema_version/occurred_at, and semantically identical JSON with different whitespace/member order.
 
 This is a design correction only. The candidate DDL, migration replay, two-connection tests and bilateral hash vectors remain unratified; no migration or runtime code was changed.
+
+
+## 10. Shared callback-envelope JCS vector (2026-11-25)
+
+The SEM protocol repository now carries a deterministic cross-language callback vector:
+
+- File: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`
+- Pinned fixture commit: `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`
+- Event type: `execution.infrastructure_uncertain`
+- The fixture includes the complete authenticated envelope, payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256.
+
+SEM's Python and Node validators independently canonicalize the same fixture and compare exact UTF-8 bytes and both hashes. AI-PM's Rust implementation must consume this exact fixture (pinned to the commit above until a ratified SEM protocol tag exists) and match all expected bytes/hashes. The vector is intentionally ASCII-only with integer values; it proves cross-language agreement for the complete-envelope shape, not the full Unicode/numeric edge matrix. INBOX-33 continues to require the broader RFC 8785 cases.
+
+This is test-contract evidence only. No AI-PM canonicalizer dependency or production parser has been selected or added. Acceptance matrix now has 35 cases.
