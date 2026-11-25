@@ -20,3 +20,8 @@ Current normative decisions:
 - Phase 0–5 numbering follows SEM-02E §14.
 
 Do not implement from this historical package. Final architecture freeze requires full review of all 23 topic documents and explicit user approval.
+
+
+## SEM-02F superseding implementation contract
+
+The historic SEM-02D review package is superseded for physical schema/protocol details by [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md). Do not implement the old independent HIR table name, Run+Generation-only Barrier, or earlier notification Outbox assumptions. The current candidate uses a discriminator on `governance.human_intervention`, Task Barrier, `notification_recipient`, and Platform process identity fencing. This historical document is not an implementation source.
