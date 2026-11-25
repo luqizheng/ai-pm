@@ -821,3 +821,45 @@ Add the following to the two-connection PostgreSQL matrix:
 5. TaskProduct withdraw versus claim: define whether claim observes the association as active based on transaction order; verify snapshot and gate decision agree.
 
 This pass is source-level only. No PostgreSQL server is available in the current audit environment; none of these concurrency schedules has been runtime-executed. The three P0 deadlock candidates in §§15, 16 and 18 remain open; no fix, global lock order, PR merge or Phase 0 authorization is implied. Status remains **Changes Required / Audit In Progress**.
+
+
+## 20. Thirteenth audit pass — Project↔Run inversion through Interaction creation
+
+The Project lock cycle in §18 is not limited to Task PATCH. A production Run-first writer inserts a Project-scoped Interaction before it reaches the Task transition, so the Project FK itself creates a Project↔Run wait cycle.
+
+### 20.1 Exact source and DDL path
+
+- Run claim acquires `core.project FOR UPDATE` before selecting/locking the candidate Run (`run_dispatch/claim.rs::claim_core_in_project`).
+- `interaction::report_interaction` begins by selecting the target Run `FOR UPDATE OF r` (`interaction.rs::report_interaction`); it does not first lock Project.
+- The same transaction then inserts `delivery.task_interaction` with `project_id`. The baseline DDL has a Project-scoped FK to `core.project`; PostgreSQL's FK check takes KEY SHARE on the referenced Project row.
+- This Interaction INSERT occurs before the later Task transition and before the audit append. Therefore the reverse edge is not dependent on the audit helper: it is present in the primary Interaction creation path itself.
+
+### 20.2 Concrete deadlock schedule
+
+| Transaction A — Run claim | Transaction B — report_interaction |
+|---|---|
+| Locks Project `FOR UPDATE` | |
+| Attempts candidate Run `FOR UPDATE OF r` and waits | Locks the same Run `FOR UPDATE OF r` |
+| **A waits for B's Run lock** | Inserts `task_interaction`; Project FK needs KEY SHARE |
+| | **B waits for A's Project lock** |
+
+This is a source/DDL-derived P0 deadlock candidate. It is distinct from §18's Project→Task / Task→Project schedule, although both share the same Project lock head. It has not been runtime-reproduced.
+
+### 20.3 Consequences for the Project lock policy
+
+- The §18.4 claim-side `FOR NO KEY UPDATE` candidate is now more valuable than a local Task PATCH workaround: PostgreSQL permits the FK KEY SHARE edge while the claim retains conflict with Project lifecycle writers using explicit `FOR UPDATE`.
+- An alternative is for `report_interaction` to acquire Project KEY SHARE before locking Run, but this must be applied consistently to every Run-first writer that inserts Project-scoped rows or appends audit. A one-handler fix does not establish a global order.
+- Do not select either correction yet. Verify the exact PostgreSQL lock compatibility and archive/claim/interaction linearization using deterministic two-connection tests.
+- The same pattern must be searched for in response persistence, WorkerCommand ACK, continuation/recovery, and other Run/Interaction/Command-first transactions that later insert a Project-scoped row or audit row. Their presence is an audit scope, not yet a claim that every such path is independently deadlocking.
+
+### 20.4 Required deterministic test
+
+Add a two-connection case with explicit pause points:
+
+1. Connection A starts Run claim, locks Project `FOR UPDATE`, then pauses before candidate Run lock.
+2. Connection B starts `report_interaction`, locks the same Run, then attempts the `task_interaction` INSERT.
+3. Assert the current schedule produces the expected wait cycle/deadlock detector result in the unmodified baseline (or a bounded lock timeout demonstrating both waits).
+4. Under the selected correction, assert both transactions complete, and assert the resulting Run/Interaction/Project lifecycle state is valid.
+5. In the same test suite, race Project archive against Interaction creation to prove the weaker lock or explicit Project-first ordering preserves the archive gate.
+
+This is a source/DDL-derived finding only. No PostgreSQL concurrency test was executed in this environment. §§15, 16, 18 and 20 remain open P0 lock-order blockers; no global lock order, production fix, PR merge or Phase 0 authorization is implied. Status remains **Changes Required / Audit In Progress**.
