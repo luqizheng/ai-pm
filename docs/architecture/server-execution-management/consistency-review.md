@@ -260,3 +260,8 @@ Source inspection only; no code, migrations or runtime tests changed.
 ## 14. Remote Runner Git evidence contract
 
 The follow-up review §6.1 records that current D4 remote verification is selected by the legacy client: lease_owner prefix, proves remote branch-head visibility and baseline ancestry, but does not prove local Runner worktree HEAD and currently echoes the declared changed-file count. The SEM cutover must define an explicit remote evidence mode, require a unique execution ref, verify the pushed SHA/ref and ancestry, and calculate changed-file facts from the remote object graph (or label them unverified). Do not rely on Platform access to Runner-local workspace or infer remote mode from a legacy credential prefix.
+
+
+### MCP capability/scope enforcement detail
+
+The exact source audit further confirms that PM_MCP_TASK_UPDATE is not assigned in the current MCP permission map, while pm_report_progress and pm_submit_result mutate business state without being mapped to that dedicated permission; pm_get_task_context checks project membership but not a per-execution Task grant. The delegated grant must therefore be checked in application services for every operation and exact Task/Run/attempt tuple. Formal review/approval remains behind require_human_principal. See §13 review artifact §1.1.
