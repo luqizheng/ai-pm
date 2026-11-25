@@ -92,3 +92,8 @@ The fifth pass identified the current migration head as 0059 and inspected late 
 ## Transaction and migration audit
 
 - [SEM-02J Platform Transaction and Execution-Path Closure Audit](./sem-02j-transaction-and-execution-path-closure-review.md) — lock-order, Run creation/dispatch/recovery paths, current migration baseline provenance and late DDL. Status remains **Changes Required / Audit In Progress**; full PostgreSQL replay/catalog capture and global lock-order closure are still open.
+
+
+## Execution-core baseline DDL audit
+
+SEM-02J §14 records the 59-file migration manifest (0001 baseline + 0002–0059, same filenames/blob SHAs on master and the review branch), exact execution-core baseline entities, FK/unique-index/trigger semantics, and post-baseline DDL deltas. This remains a static Git DDL audit only: fresh PostgreSQL replay, catalog capture, full writer validation, and global lock-order closure are still open.
