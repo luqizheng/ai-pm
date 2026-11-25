@@ -168,3 +168,10 @@ The full lock graph, migration-chain reconciliation, API/background route invent
 - 0058/0059 do not directly alter Run ownership in the inspected DDL.
 
 Full migration-chain replay, catalog capture, baseline trigger/constraint audit and comparison against the exact 0059 head remain open. No implementation or Phase 0 is authorized.
+
+
+## 4. SEM-02J migration and transaction audit status
+
+SEM-02J now records the provenance of the current migration chain: `0001_baseline.sql` is a 2026-11-09 pg_dump squash of the prior 0001–0065 chain (schema plus seed/data statements); current incremental migrations restart at 0002 and the observed current head is 0059. Exact DDL for 0053–0059 has been rechecked. This is not equivalent to a completed fresh-database replay or catalog capture.
+
+The following remain blocking evidence: a complete migration-directory manifest with version continuity; successful replay of the exact current sqlx chain on an empty PostgreSQL database; catalog capture for constraints/indexes/triggers/functions; and reconciliation of implicit FK/index/trigger lock effects with every application transaction. No global lock order is selected until those passes and the remaining source-path audit are complete. Phase 0 remains Not Started.
