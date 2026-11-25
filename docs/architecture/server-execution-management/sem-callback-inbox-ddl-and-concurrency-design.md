@@ -1540,6 +1540,7 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-46 | SEM observation detail omits event_id, sequence, sem_event_type, event_envelope_hash or binding_epoch, or sequence differs from dedupe_tag | SEM CHECK rejects insert; no partial Inbox/cursor state |
 | INBOX-47 | SEM observation row is populated from a Run with wrong tenant/project/task/client or substitutes SEM binding_epoch for AI-PM lease_generation | Integration test fails; observation must copy scope/client/lease_generation from locked Run and store binding_epoch separately in detail |
 | INBOX-48 | Exact Inbox duplicate exists but its task_run_event observation is missing or detail event_id/envelope hash differs | Generic integrity failure; no duplicate ACK, no new observation and no cursor movement |
+| INBOX-49 | Exact Inbox duplicate and observation exist, but the locked Run cursor is lower than the committed event sequence | Generic integrity failure; never ACK an impossible regressed cursor |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
