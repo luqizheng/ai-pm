@@ -101,8 +101,23 @@ Barrier 作用域 Task；唯一 active 约束；所有新 Run 行创建、claim�
 
 ## 7. Additional schema/protocol blockers found after the first rewrite
 
-The current migration baseline proves that the selected reuse direction is not a drop-in mapping. `human_intervention` currently stores intervention actions, `human_consultation` needs E6-specific relational anchors, and `integration.notification` is only a project feed with row-level `read_at`. The detailed evidence and required schema contract are in [sem-02e-schema-and-protocol-gap-register.md](./sem-02e-schema-and-protocol-gap-register.md).
+The current migration baseline proves that the selected reuse direction is not a drop-in mapping. SEM-02F now proposes the concrete shape: `human_intervention` discriminator `record_kind=action|hir`; typed E6 anchors on `human_consultation`; `notification_recipient` as a child of the existing project Feed; Task Barrier table; and Platform process identity registry. See [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md) and [schema gap register](./sem-02e-schema-and-protocol-gap-register.md).
 
-A further P0 is Platform-side active process-sequence fencing: SEM can observe OS process identities, but Platform owns Lease Renewal and cannot query SEM DB. The Platform registration/continuation/renewal sequence contract and persistence shape must be closed before implementation.
+Platform-side active process-sequence fencing remains a P0 approval item. SEM-02F specifies the candidate registry, active sequence pointer, continuation reservation and process-bound Lease Renewal contract; exact migration DDL, API schemas and lock order still need review.
 
 The PR remains **Changes Required**. No Phase 0 authorization.
+
+
+## 8. SEM-02F implementation-specification progress
+
+SEM-02F turns the prior open design gaps into concrete candidate contracts:
+
+- Task Barrier: one unreleased row per Task, with an exact E6 successor exception.
+- HIR: existing `human_intervention` with a record discriminator; action history remains distinguishable from HIR lifecycle.
+- E6: typed anchors on `human_consultation`, one E6 per Barrier and one successor.
+- Notification: existing project Feed remains unchanged; `notification_recipient` stores per-principal Inbox and unassigned queue.
+- Process identity: Platform-owned `task_run_process` and active sequence fence.
+- Orphan scanner: periodic Platform DB-only loop; no dependency on SEM, Runner or RabbitMQ.
+- Dispatchability: a single transaction-scoped predicate covers Run creation, claim, recovery and requeue.
+
+These are candidate contracts, not Ratified ADRs or implementation authorization. Remaining blockers: exact DDL and lock-order review; exhaustive direct Run INSERT/notification route audit; API/OpenAPI schemas; and full cross-document conflict elimination.
