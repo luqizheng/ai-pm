@@ -200,3 +200,10 @@ The latest design correction is documented in AI-PM PR #9. This is a determinist
 
 
 INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 39 cases.
+
+
+## 13. Explicit PostgreSQL CHECK truth table
+
+The DDL design now lists the required PostgreSQL execution cases for the SEM source CHECK: valid SEM hashes accept; NULL execution ID/sequence, NULL or malformed payload hash, NULL or malformed envelope hash reject; valid non-SEM rows retain NULL execution tuple/envelope hash; non-SEM rows with SEM-only fields reject; NULL source rejects. The test must execute these rows in PostgreSQL and assert the named constraint, not merely duplicate the Boolean expression in application code.
+
+This makes INBOX-36..38 executable acceptance requirements. The candidate expression has been textually repaired but still has no PostgreSQL replay/catalog proof.
