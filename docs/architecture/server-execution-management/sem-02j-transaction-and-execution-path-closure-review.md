@@ -694,3 +694,35 @@ This is a concrete lock cycle: Task→Product versus Product→Task (the latter 
 - Include FK key-share edges in the lock graph; an application-only list of explicit FOR UPDATE statements is incomplete.
 
 This pass identifies a source-level deadlock schedule; it does not modify the production code or claim a fix. The Run↔Interaction inversion and all earlier P0s remain open. Status remains **Changes Required / Audit In Progress**; no PostgreSQL replay/catalog capture, global lock-order closure, PR merge or Phase 0 authorization.
+
+
+## 17. Tenth audit pass — remaining writer ownership and gate-linearization checks
+
+This pass checked the remaining application writers behind Task Revision, TaskWaiting/Human Consultation, dependency gates and Run-start snapshots.
+
+### 17.1 Task Revision ownership
+
+- `snapshot_and_insert` itself does not acquire a Task row lock. Its correctness is a caller precondition.
+- The Task PATCH path obtains `delivery.task FOR UPDATE` before updating the Task and calling `snapshot_and_insert`.
+- Task creation / plan materialization / command-created Task paths insert the Task and initial Revision in the same transaction before exposing the new Task.
+- `insert_task_run` explicitly requires the caller to hold the Task row lock. The TaskReady outbox handler locks Task before calling it; Review retry updates/locks Task before creating the retry Run; lease recovery calls it inside the claim transaction after the claim path has locked Task.
+- Thus the normal writers preserve same-Task Revision ownership by transaction construction, despite the missing composite FK from Task/Run to Revision. Keep the caller-lock precondition explicit and test all call sites when adding a new Run-creation path.
+
+### 17.2 Human Consultation and TaskWaiting
+
+- `create_consultation` inserts Human Consultation and, when `task_id` is non-null, inserts `task_waiting` in the same transaction.
+- Although 0046's Human Consultation Task FK is only a single-column FK, the paired TaskWaiting row has both tenant/project and project/task composite FKs. A task-bound consultation therefore cannot commit through the current application writer with a Task from a different Project/Tenant: the paired TaskWaiting insert fails and rolls back the transaction.
+- The API also performs project visibility/membership checks before creation. Unbound consultations (`task_id IS NULL`) are project-level decisions and have no Task relation.
+- The TaskWaiting FK's key-share lock serializes its insertion against Run claim's Task `FOR UPDATE`. No reverse Consultation-row lock edge was found in the claim path. The ordering is linearizable: if claim owns Task first, the consultation is created after that claim; if the waiting row is committed first, claim observes it and is denied. This does not terminate an already-running process; that is a separate execution-intervention requirement.
+
+### 17.3 Dependency gate and Run-start snapshots
+
+- Dependency edge writers acquire the per-Project advisory graph lock before locking the downstream Task; the Run claim path locks the Task before checking dependencies. Both serialize on the downstream Task row for the same Task, and no reverse advisory-lock edge from the claim path was found in this pass.
+- The dependency predicate is read-only and does not lock predecessor Tasks. The later Run-start snapshot reads predecessor Task revision pointers and writes `task_run_dependency_snapshot` rows in the same claim transaction. No current cross-project writer was found, but predecessor revision changes are not explicitly row-locked by the snapshot reader; add a two-connection test to establish the intended snapshot semantics if predecessor Task revisions can still change after completion.
+- `task_run_dependency_snapshot` has intentionally thin FK coverage; current writer derives Task/Project/Tenant from the locked claim context and dependency edges. This is application-enforced, not catalog-enforced.
+
+### 17.4 Task Product mutation remains the new P0
+
+The Task↔Product deadlock in §16 is not closed by these checks. `withdraw_task_product` also does not lock Task; its concurrent behavior with a claim's Product-gate read must be covered by a deterministic test. The add path must first be corrected to Task→Product order before any global lock order can be declared.
+
+Status remains **Changes Required / Audit In Progress**. This pass validates current caller ownership patterns for Task Revision, Run creation and task-bound Consultation; it does not repair the §16 deadlock, close the Run↔Interaction inversion, prove predecessor snapshot isolation, execute PostgreSQL replay/catalog capture, or authorize Phase 0.
