@@ -171,3 +171,21 @@ The downstream SEM repository now contains a detailed, review-pending proposal f
 Its proposed two-stage Runner-bound bootstrap is a candidate design, not an approved credential architecture. AI-PM must retain authority over delegated grant issuance, exact Task/Run/attempt scope, operation allow-list, authorization_generation and per-call MCP enforcement. SEM transports the opaque bootstrap ticket and prompt; it must not be able to redeem the ticket or inspect the resulting MCP credential.
 
 The SEM contract also standardizes binding_epoch as the SEM-side Runner-binding fence, separate from AI-PM authorization_generation. Runner disconnect without positive process-exit or independently verified isolation evidence remains infrastructure_uncertain and prohibits competing reassignment. The detailed contract is cross-repository design input only; it does not change the verified current AI-PM source behavior or authorize implementation.
+
+
+## 10. Follow-up source verification: current device credential is not a Runner-bound execution identity
+
+Read-only source baseline checked on 2026-11-25 (AI-PM master at the review branch's source baseline; relevant files and symbols):
+
+- `apps/pm-api/src/pm_devices.rs`: device registration accepts device metadata and `is_runner`; there is no public-key/certificate enrollment field in the registration request. Device credential issue/revoke/permission management is performed by the device owner or tenant admin.
+- `crates/pm-application/src/device_credential.rs`: current `cpk_` credential is a reusable 256-bit random static secret, stored as SHA-256 hash in `devenv.device`, issued once and revoked by updating `credential_revoked_at`. `resolve` checks device active state, revocation and owner principal active state on each request. It does not bind the credential to a Task, Run, attempt, execution_id, authorization_generation, Runner key or operation-specific grant.
+- `apps/pm-api/src/auth.rs`: successful `cpk_` authentication constructs an `AuthedPrincipal` and injects `HumanActor` for MCP. This is device attribution under the existing user-owned device model, not a delegated Harness principal.
+- `crates/pm-mcp/src/caller.rs` and `crates/pm-mcp/src/tools.rs`: caller authorization still uses the owner human principal/project membership and broad project-member checks; task_ref is a selector and current checks are not a per-execution grant boundary.
+
+Consequences:
+1. Existing `cpk_` must not be reused as the delegated Harness credential. Its static, device-wide, owner-attributed semantics are incompatible with the required per-execution scope and non-impersonation rule.
+2. Existing device enrollment does not establish a cryptographic Runner public-key identity. The two-stage bootstrap cannot be implemented securely until enrollment/attestation and key rotation/revocation are designed.
+3. The new design needs a distinct delegated execution grant and a separate Harness executor audit identity; do not silently repurpose `devenv.device` / `cpk_` without an explicit domain/security review.
+4. The current permission vocabulary (`PM_MCP_READ`, `PM_MCP_AGENT_REPORT`, `PM_MCP_COMMAND`) is not sufficient proof of exact Task/Run/attempt scope. The grant must be enforced by the AI-PM application-service boundary for every operation.
+
+This is a source finding, not an implementation instruction. It reinforces the credential/enrollment design gate; it does not authorize a schema migration or compatibility change.
