@@ -116,3 +116,8 @@ Confirmed P0 findings:
 SEM-02J also records current concurrency-test coverage and the deterministic two-connection acceptance matrix. No application code or migration was changed. The final global lock order is deliberately not selected yet; remaining Run INSERT/UPDATE paths, SQL FK/trigger lock side effects, and all background/API entrypoints must be inventoried first.
 
 Overall status remains **Changes Required / Review Pending**. PR #9 remains Draft; no migration authoring, code changes, merge or Phase 0 start is authorized.
+
+
+SEM-02J follow-up detail:
+- The Task dependency graph advisory lock is part of the same lock graph. Its helper requires acquisition before any row lock, but Review finalization can lock a Review Run before invoking terminal Task transition and thereby acquiring the graph lock. This is a lock-order contract violation requiring pairing tests; a universal deadlock cycle is not asserted without the remaining pairing audit.
+- Task cancellation holds Task before Interaction/Run linkage, while Claim/recovery paths hold Run before Task. Review retry directly inserts a review Run without Project/Task locking, and Review Claim locks only the Run. These are additional Barrier and Project lifecycle closure items.
