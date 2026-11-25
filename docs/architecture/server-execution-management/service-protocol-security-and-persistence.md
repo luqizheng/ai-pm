@@ -1,5 +1,8 @@
 # Service Protocol, Security and Persistence — SEM-02E
 
+> **Authority-boundary revision (2026-11-25):** This document's former SEM→Platform Claim/Lease/business-state API path is **SUPERSEDED** by [authority-boundary-decision.md](./authority-boundary-decision.md). Independent service authentication, TLS, idempotency, durable message delivery and no-shared-database principles remain applicable; endpoint scopes and persistence entities must be redesigned around opaque execution messages and infrastructure observations.
+
+
 - Status: Review Pending alignment.
 - Normative baseline: [SEM-02E](./sem-02e-architecture-convergence.md).
 
