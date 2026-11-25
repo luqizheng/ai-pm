@@ -185,3 +185,8 @@ SEM retains the durable event until it receives a valid success ACK. A callback 
 The exact DDL candidate, source-level findings, RFC 8785 JCS hash rule, callback transaction/lock order, and 24-case two-connection PostgreSQL acceptance matrix are now documented in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
 
 This is a design proposal only. OI-01..OI-06 remain open; no migration, route, application code, or runtime change is authorized.
+
+
+### OI-06 — Current SEM binding projection and first-bind/rebind rules (P0, OPEN)
+
+The exact DDL/concurrency companion identifies a blocking gap: its transaction algorithm validates against a “current SEM infrastructure binding tuple”, but the proposed storage only adds the per-attempt event cursor and does not define a current-binding projection or deterministic event-history query. The first `execution.binding_established` event also has no prior binding to compare. Before implementation, specify an atomic consumer-side binding projection or a deterministic replay algorithm, including first bind, duplicate, same-epoch conflict, stale lower epoch, authorized higher-epoch rebind, host-isolation disposition, and rejection while prior state remains uncertain. See §10 of the exact DDL/concurrency design and the SEM D-04 cross-repository review. This remains P0 / Changes Required; no implementation is authorized.
