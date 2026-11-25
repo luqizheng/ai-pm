@@ -299,11 +299,11 @@ Rules:
 
 Canonical event names:
 - `runner.process.registered`
-- `runner.continuation.consumed`
+- `continuation.consumed`
 - `runner.process.exit`
 - `runner.process.reconciled`
-- `runner.command.received`
-- `runner.command.result`
+- `command.received`
+- `command.result`
 
 Semantics:
 - received ACK = command durably accepted by Runner Supervisor;
