@@ -1,5 +1,8 @@
 # SEM-02J — Platform Transaction and Execution-Path Closure Audit
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** **Scope clarification (2026-11-25):** The SQL/source-level findings in this audit remain evidence about the reviewed AI-PM code paths. However, its former SEM control-plane ownership assumptions and any proposed SEM-side business Claim/Lease/Task/HIR/Barrier responsibilities are superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Reclassify each audited writer as AI-PM business authority or SEM infrastructure observation before implementation. The source findings do not authorize SEM to own those business transactions.
 
 
