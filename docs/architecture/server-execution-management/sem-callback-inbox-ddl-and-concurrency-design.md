@@ -475,7 +475,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
@@ -563,7 +563,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload; absent optional fields are omitted and unknown fields are rejected before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -871,7 +871,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
@@ -971,7 +971,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload; absent optional fields are omitted and unknown fields are rejected before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -1280,7 +1280,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
@@ -1368,7 +1368,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload; absent optional fields are omitted and unknown fields are rejected before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -1676,7 +1676,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
@@ -1776,7 +1776,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload; absent optional fields are omitted and unknown fields are rejected before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -2085,7 +2085,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
@@ -2173,7 +2173,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload; absent optional fields are omitted and unknown fields are rejected before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -2481,7 +2481,7 @@ This is static migration-source verification, not a live PostgreSQL catalog capt
 
 ## 9. Independent replay-identity review correction (2026-11-25)
 
-A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version` or `occurred_at` and be incorrectly classified as a duplicate.
+A further review found an idempotency gap in the original candidate rule: comparing only `execution_id`, `execution_event_sequence` and a JCS hash of `payload` does not prove that the complete authenticated event envelope is unchanged. The same `event_id` and payload could otherwise be replayed with a changed `event_type`, `schema_version`, `occurred_at` or `correlation_id` and be incorrectly classified as a duplicate.
 
 The candidate now keeps two hashes with distinct meanings:
 
