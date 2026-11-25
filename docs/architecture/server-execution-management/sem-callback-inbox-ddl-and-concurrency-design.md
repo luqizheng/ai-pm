@@ -353,3 +353,17 @@ AI-PM must match SEM D-04 exactly:
 | `crates/pm-application/src/run_events.rs` | blob `8e7a8abcb6026682994598864a401d919bd10d8e` | Existing generic `record_run_event()` INSERT ... SELECT mapping; SEM must not call it because its occurred_at/dedupe behavior differs |
 
 Existing `integration.inbound_event` constraints include global PK(id), unique `(project_id,id)`, `(tenant_id,id)`, `(project_id,source,idempotency_key)`, project FK and actor principal FK. `delivery.task_run` has `lease_generation`, `run_kind` and a unique `(tenant_id,project_id,id)` candidate added by this proposal. `task_run_event` has no FK to Run and is append-only; this proposal retains transaction-local linkage.
+
+
+## 10. OPEN P0: current SEM binding projection and first-bind/rebind validation
+
+The transaction algorithm in §5 step 2 requires validation against the current SEM binding tuple (`runner_id`, `runner_key_version`, `boot_id`, `supervisor_instance_id`, `binding_epoch`, and process/launch/containment/evidence identities). The proposed DDL currently adds only `task_run.execution_event_sequence`; it does not define where the current binding tuple is durably stored or how the receiver derives it. `task_run_event` is append-only, but no query/replay algorithm or allowed binding-transition table is specified.
+
+The first `execution.binding_established` event exposes the gap: no current binding exists yet, so the generic “compare against current binding” rule cannot be applied. Before implementation, choose one explicit consumer-side representation:
+
+- a minimal `delivery.task_run_sem_binding` projection keyed by the exact delivery attempt, atomically updated in the same transaction as Inbox + Run observation + cursor; or
+- a deterministic event-history projection algorithm over accepted `sem_infrastructure_observed` events, with exact ordering, corruption detection and transition rules.
+
+Whichever representation is chosen must define: initial bind; exact duplicate; same epoch with changed Runner tuple; lower/stale epoch; higher epoch after a positively completed prior release; rebind after SEM's separately authorized host-isolation disposition without claiming process exit; and attempted rebind while prior process/binding remains uncertain (reject and retain quarantine/reservation). SEM remains the authority that allocates binding_epoch and chooses the Runner; AI-PM stores only the last accepted binding reference for validation and must not use it to authorize dispatch or mutate Task/Run business state.
+
+Required PostgreSQL acceptance cases: first binding inserts exactly one current-binding projection; exact duplicate does not rewrite it; same-epoch conflicting tuple is rejected; lower epoch is rejected; authorized higher-epoch rebind atomically replaces the projection while retaining append-only history; higher epoch while prior state is uncertain is rejected; transaction crash rolls back Inbox, observation, cursor and projection together. Until these are specified and tested, callback Inbox design is Changes Required and no route/migration implementation is authorized.
