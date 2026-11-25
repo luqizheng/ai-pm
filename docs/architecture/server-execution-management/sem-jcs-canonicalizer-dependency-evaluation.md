@@ -69,3 +69,16 @@ Only after that spike passes should the dependency/version and toolchain floor b
 ## 5. Decision boundary
 
 No dependency, `Cargo.toml`, `Cargo.lock`, Dockerfile, toolchain pin, migration or runtime parser was changed by this evaluation. A Rust 1.88 floor for AI-PM is a build-compatibility decision and must be explicitly accepted before the spike becomes an implementation change.
+
+
+## 6. Source evidence reviewed on 2026-11-25
+
+- Published crate documentation: https://docs.rs/canonprims-json/0.1.4/canonprims_json/
+- Exact release source and workspace MSRV: https://github.com/3leaps/canonprims/tree/3595826f2a7c0963783c842cc77e5f6242f335fd
+- Exact release crate manifest: https://github.com/3leaps/canonprims/blob/3595826f2a7c0963783c842cc77e5f6242f335fd/crates/canonprims-json/Cargo.toml
+- Normative implementation profile: https://github.com/3leaps/canonprims/blob/3595826f2a7c0963783c842cc77e5f6242f335fd/docs/spec/jcs-rfc8785.md
+- Shared conformance corpus and pinned manifest: https://github.com/3leaps/canonprims/tree/3595826f2a7c0963783c842cc77e5f6242f335fd/conformance/canonical-json/v0
+- Alternative serializer source: https://github.com/evik42/serde-json-canonicalizer
+- Alternative parser/canonicalization crate: https://docs.rs/json-syntax/0.13.1/json_syntax/
+
+The `canonprims` repository metadata at review time showed 25 commits, 0 stars and 0 forks; its README itself acknowledges the shared Rust/Go parser architecture and describes where the independent ECMAScript/Python witnesses apply. This is recorded as a supply-chain maturity risk, not as a claim that the implementation is incorrect.
