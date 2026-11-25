@@ -147,3 +147,18 @@ The current D4 remote verifier is selected by lease_owner starting with client:.
 The new architecture removes the old Runner Claim/lease_owner identity as the natural selector for this path. It must define an explicit execution workspace evidence mode; do not infer it from a credential string prefix. For a remote Runner, the contract should require a unique execution branch/ref to be pushed before submission, bind the submitted SHA to that ref, verify the ref and ancestry on the remote, and calculate changed-file facts from the remote object graph rather than trusting the Harness declaration. If a commit is not pushed or cannot be fetched, submission must be rejected or remain explicitly pending; do not silently fall back to an unverified local claim.
 
 If the product requires proof of the exact local worktree HEAD rather than remote branch state, define a separate Runner-signed attestation and trust model. A plain Harness JSON claim is not independent evidence. Tests must run with AI-PM on a host that cannot access the Runner workspace.
+
+
+## 8. P1 — Keep Task, AI-PM Run and SEM Execution as three lifecycles
+
+The new design must not equate Task completion with process exit or SEM release. There are three distinct lifecycles:
+
+| Lifecycle | Authority | Meaning |
+|---|---|---|
+| Task | AI-PM | Business work state: Running → Submitted → Reviewing → Completed, plus guarded blocked/cancelled/failed paths |
+| Run / attempt | AI-PM | One business execution attempt, its authorization generation, delivery association and Platform-decided outcome |
+| SEM Execution | SEM | Infrastructure delivery/binding/process/release state |
+
+Harness MCP may perform guarded business transitions such as starting (Task=running) and submitting a validated delivery (Task=submitted). It cannot set completed. Review/acceptance decides completion. Runner process start/exit is an infrastructure observation; AI-PM correlates it with its Run and decides the Run outcome. A zero exit code is not business success.
+
+SEM release should occur when AI-PM decides the specific Run/attempt no longer needs a runtime. This may be after accepted delivery while Task is still submitted/reviewing, after cancellation, or while awaiting human input. Do not trigger release only from Task=completed. Persist the release intent in the same Platform transaction as the relevant Run/Task decision through Outbox.
