@@ -194,7 +194,7 @@ The corrected text is still not a validated migration. PostgreSQL must execute t
 
 A schema re-read found that Platform–SEM `EventBase` permits optional top-level `correlation_id`. The earlier full-envelope hash field list omitted it. That would have allowed a callback to be replayed with a changed correlation_id while retaining the same envelope hash.
 
-The contract is corrected: JCS covers every schema-defined envelope field that is present, including `correlation_id` when present. Absent optional fields are omitted; unknown fields are rejected by schema validation before hashing. The shared vector now includes `correlation_id` and pins to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. Python and Node assert that changing correlation_id changes the full-envelope hash.
+The contract is corrected: JCS covers every schema-defined envelope field that is present, including `correlation_id` when present. Absent optional fields are omitted; unknown fields are rejected by schema validation before hashing. The shared vector now includes `correlation_id` and pins to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. Python and Node assert that changing correlation_id or omitting a previously present optional field changes the full-envelope hash while leaving the payload hash unchanged.
 
 The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
 
