@@ -1,5 +1,8 @@
 # SEM-02F — Executable Physical and Protocol Contracts
 
+> **Authority-boundary revision (2026-11-25):** **Supersession notice (2026-11-25):** This candidate contains Platform schema/API and SEM control-plane assumptions that predate the user-confirmed [authority-boundary decision](./authority-boundary-decision.md). It is historical review material, not an implementation contract. Re-evaluate every SEM Claim/Lease/Command/Task/HIR/Barrier entity and API before implementation; retain source-derived findings only where still applicable to AI-PM.
+
+
 - Status: **Candidate / Review Pending / Not an approved ADR**.
 - Code evidence baseline: GitHub `master@4bc78620f54440a21a113cf7cdb14964d1a14dcb`.
 - Existing SEM design baseline: SEM-02E branch `docs/sem-02e-architecture-convergence`.
