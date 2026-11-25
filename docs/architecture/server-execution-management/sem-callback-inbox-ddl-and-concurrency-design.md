@@ -524,3 +524,19 @@ This is a design sketch, not executable migration SQL: the final CHECK must expl
 - UNBOUND-08 released_unbound never creates process-exit or Runner stop evidence.
 
 The current five-event schema cannot carry this event. AI-PM must not accept a lookalike execution.release_status payload with missing Runner identity. P0-07 remains open until SEM publishes the sixth-event schema and bilateral fixtures.
+
+
+## 13. Canonical projection shape and lock-order correction
+
+Sections 11 and 12 describe one projection, not two tables. The canonical candidate is **only** delivery.task_run_sem_execution. The earlier delivery.task_run_sem_binding name in §11 is superseded and MUST NOT be created as a second table. The final projection must combine:
+- dispatch_state (including eligible and released_unbound);
+- nullable current binding tuple for the unbound states;
+- exact binding/process/release evidence references for bound states;
+- last accepted SEM event identity/sequence;
+- tenant/project/Run composite identity.
+
+Use §12's execution-projection table name and unbound semantics, and §11's binding validation/rebind rules as the lifecycle rules for its bound tuple. Before implementation, rewrite the illustrative SQL into one complete DDL block with exhaustive state/NULLability CHECK constraints. No duplicate projection or dual-write is permitted.
+
+Freeze the callback lock order as: **delivery.task_run FOR UPDATE → delivery.task_run_sem_execution FOR UPDATE (or insert under the Run lock) → integration.inbound_event insert/lookup → delivery.task_run_event insert → task_run cursor CAS → COMMIT**. All callback writers use this order. The per-execution Run lock serializes first-row creation; a unique PK on task_run_id is the backstop. Exact duplicate handling may verify existing Inbox/observation before projection mutation, but must not acquire locks in a different order.
+
+Add this as a required migration review gate: the projection row, Inbox, Run observation and cursor either all commit or all roll back. The projection is an AI-PM consumer reference only, never SEM dispatch authority.
