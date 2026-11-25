@@ -97,3 +97,8 @@ The fifth pass identified the current migration head as 0059 and inspected late 
 ## Execution-core baseline DDL audit
 
 SEM-02J §14 records the 59-file migration manifest (0001 baseline + 0002–0059, same filenames/blob SHAs on master and the review branch), exact execution-core baseline entities, FK/unique-index/trigger semantics, and post-baseline DDL deltas. This remains a static Git DDL audit only: fresh PostgreSQL replay, catalog capture, full writer validation, and global lock-order closure are still open.
+
+
+## Application-writer and lock-order evidence
+
+SEM-02J §15 traces production writers for Interaction, Response, ResponseDelivery, Continuation and WorkerCommand. The normal write path derives a coherent Task/Run/Project tuple from a locked Run or Interaction, but the schema does not independently enforce all composite identities. The Run↔Interaction lock inversion is confirmed by exact source statements; the global lock order remains open.
