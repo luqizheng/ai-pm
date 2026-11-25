@@ -215,3 +215,8 @@ SEM-02J §19 expands the Project lock inventory and distinguishes Project-first 
 ## 11. SEM-02J Project↔Run implicit Interaction-FK cycle
 
 SEM-02J §20 finds that the Project↔Task audit-FK cycle is not the only Project lock inversion. Run claim locks Project `FOR UPDATE` before Run; `report_interaction` locks Run first, then inserts `delivery.task_interaction`, whose Project FK requests KEY SHARE. This creates a separate Project→Run / Run→Project deadlock candidate before the Task transition or audit append. The claim-side Project `FOR NO KEY UPDATE` candidate may address both Project-FK cycles while retaining conflict with explicit Project `FOR UPDATE` lifecycle guards, but it remains unapproved pending PostgreSQL two-connection tests and archive/interaction linearization checks. Response persistence, WorkerCommand ACK, continuation and recovery Run-first writers remain in the expanded audit scope. No runtime concurrency tests were run; P0 findings remain open and Phase 0 remains Not Started.
+
+
+## 12. SEM-02J expanded Project↔Run writer inventory
+
+SEM-02J §21 confirms that the Project→Run / Run→Project inversion extends beyond `report_interaction`: `recovery::reacquire_lease` locks Run then appends Project-scoped audit; continue `worker_command::ack_command` holds Command, updates Run, then appends audit; `record_response_persisted_tx` updates Interaction then Run then appends audit. These are source-confirmed writer orders reaching the Project KEY SHARE edge. The exact claim-side `FOR NO KEY UPDATE` mitigation remains unapproved pending deterministic PostgreSQL tests for each schedule and Project archive linearization. No runtime concurrency tests were executed; Phase 0 remains Not Started.
