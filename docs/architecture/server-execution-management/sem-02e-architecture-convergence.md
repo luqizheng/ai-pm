@@ -279,3 +279,10 @@ These remain candidate specifications. The exact SQL migration, route/consumer c
 [SEM-02G](./sem-02g-database-and-api-contract-draft.md) contains SQL-shaped draft definitions for Task Barrier, HIR discriminator, E6 consultation anchors, Notification Recipient, Process Registry, command sequence reservation, and Platform–SEM/Runner API payloads. It remains a review artifact, not an executable migration.
 
 Phase dependency clarification: Platform-side Process Registry and process-bound Lease Renewal fencing are Phase 0 prerequisites because Interaction continue must safely rotate process identity even before SEM WSS is deployed. During Phase 0 the current Runner control adapter may temporarily call the Platform process-control API; Phase 1 replaces that transitional route with Runner→SEM WSS→Platform HTTPS and removes the direct Runner MCP control path. This temporary migration adapter is not the target architecture.
+
+
+## 20. SEM-02H DDL integrity review
+
+[SEM-02H — DDL Integrity and Transaction Review](./sem-02h-ddl-integrity-and-transaction-review.md) reviews SEM-02G against the current master schema and identifies concrete SQL integrity defects. SEM-02G remains a draft; do not author migrations from it until the P0/P1 findings, process evidence ledger, E6 atomicity, notification Inbox semantics and global transaction lock graph are closed.
+
+The review also updates the schema evidence baseline to current master `d0e72fa6805aebeadf1b282e430deba493072fd6`. No code or migration changes were made.
