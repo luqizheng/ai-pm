@@ -58,7 +58,7 @@ ALTER TABLE integration.inbound_event
              AND execution_id IS NOT NULL
              AND execution_event_sequence IS NOT NULL
              AND execution_event_sequence >= 1
-             AND payload_hash ~ '^[0-9a-f]{64}
+             AND payload_hash ~ '^[0-9a-f]{64}$'
              AND event_envelope_hash ~ '^[0-9a-f]{64}$'
             OR
             (source <> 'sem'
