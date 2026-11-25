@@ -63,6 +63,25 @@ The paths above are only the confirmed cycles found so far. Existing lock patter
 
 These sequences cannot be combined safely by adding Barrier/HIR locks ad hoc. The final lock order must cover Project, Task, Run, Barrier, Interaction, worker_command, HIR and Human Consultation, including all multi-row Task operations and deterministic ordering when a Task has multiple Runs.
 
+
+### P0-05 / P1 — Project dependency-graph advisory lock participates in the lock graph
+
+The Task lifecycle has a transaction-scoped project graph lock in `task_dependency::acquire_project_graph_lock`. Its source contract explicitly says it must be acquired before any row lock.
+
+- `pm_write::update_task` for terminal transitions acquires the graph advisory lock before locking the Task row (`pm_write/task.rs:200-222`).
+- `command_executor::apply_task_transition` also acquires the graph lock for terminal transitions, before its Task `FOR UPDATE` (`command_executor/transition.rs:55-73`).
+- However, some callers already hold another row lock before invoking that transition service. In particular, `review::run_review` locks and finalizes the Review Run, then calls `advance_after_review`; the approved auto-completion path calls `apply_task_transition(TaskStatus::Completed)`, which acquires the graph lock afterwards (`review/worker.rs` run-finalization path; `review/decide.rs:240-382`). This violates the graph-lock helper's documented “before any row lock” rule.
+
+This is a lock-order contract violation that must be included in the full graph and tested against Task cancellation, dependency-edge mutation and other terminal transitions. The current evidence is sufficient to reject a claim that the global lock order is already consistent, but not sufficient to assert a specific deadlock cycle for every such pairing.
+
+### P0-06 — Task cancellation extends the inversion beyond a single Interaction helper
+
+Both Task cancellation entrypoints lock the Task before invoking `task_cancelled_linkage_tx`:
+- REST direct update: `pm_write::update_task` locks Task at `pm_write/task.rs:217`, updates it, then invokes the cancellation linkage.
+- Command channel: `command_executor::update_task_status` calls `apply_task_transition` (Task lock) and then invokes the same linkage.
+
+The linkage then takes Interaction → Run locks. This gives Task → Interaction → Run, while delivery Claim and several recovery paths take Run → Task. The Task-level cancellation race therefore remains even if report/retry are individually reordered.
+
 ## 3. Execution Barrier bypasses found in existing paths
 
 The proposed Task Barrier must be checked at both Run creation and every dispatch/ownership transition. Current source paths do not yet have this gate.
