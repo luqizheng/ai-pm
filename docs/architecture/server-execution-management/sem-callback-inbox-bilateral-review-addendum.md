@@ -166,7 +166,7 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 42 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 42 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
