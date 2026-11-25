@@ -1,5 +1,8 @@
 # SEM V1 Protocol Contracts
 
+> **Authority-boundary revision (2026-11-25):** This protocol document is **SUPERSEDED as an implementation contract** by [authority-boundary-decision.md](./authority-boundary-decision.md). Its Platform Claim/Lease/business-command proxy calls through SEM, and its SEM-owned Task/HIR/Barrier semantics, are not normative. Keep it only as historical design evidence until replacement opaque execution-request/delivery/release/runtime-observation schemas are authored and reviewed.
+
+
 Status: normative design target. Exact route/function names must be reconciled with code before implementation.
 
 ## 1. Trust boundaries
