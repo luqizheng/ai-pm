@@ -255,8 +255,8 @@ This corrects the prior open-policy note. It is a Draft contract alignment only.
 A re-review found an ambiguity in the post-`ON CONFLICT DO NOTHING` recovery algorithm. An event_id collision across executions can legitimately produce an event_id lookup hit but no matching sequence lookup. That must be classified as IDEMPOTENCY_CONFLICT, not as an integrity failure.
 
 The DDL design now freezes this precedence:
-1. Existing global event_id under a non-SEM source, with a different idempotency_key, or with any changed event_type/execution_id/sequence/payload_hash/event_envelope_hash → 409 IDEMPOTENCY_CONFLICT, regardless of whether the incoming execution/sequence is also owned by another row. Never disclose the existing row's tenant/project.
-2. A stored tenant_id/project_id that disagrees with the locked Run-derived scope is a generic integrity failure; rollback and never ACK.
+1. A stored tenant_id/project_id that disagrees with the locked Run-derived scope is a generic integrity failure; rollback and never ACK or disclose the stored scope.
+2. Otherwise, an existing global event_id under a non-SEM source, with a different idempotency_key, or with any changed event_type/execution_id/sequence/payload_hash/event_envelope_hash → 409 IDEMPOTENCY_CONFLICT, regardless of whether the incoming execution/sequence is also owned by another row. Never disclose the existing row's tenant/project.
 3. Existing event_id with exact tuple/hash and matching Run scope → the sequence lookup must identify the same SEM Inbox row; otherwise generic integrity failure and no ACK.
 4. No event_id row but SEM sequence key owned by another event → 409 EVENT_SEQUENCE_CONFLICT.
 5. ON CONFLICT returns no row and neither key can be found → rollback and generic integrity failure.
