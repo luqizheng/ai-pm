@@ -166,7 +166,7 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 38 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 39 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
@@ -187,7 +187,7 @@ The latest review identified two defects in the illustrative SEM Inbox CHECK: re
 
 The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
 
-The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 38 cases.
+The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 39 cases.
 
 
 ## 12. Optional correlation_id is part of authenticated envelope identity
@@ -197,3 +197,6 @@ A schema re-read found that Platform–SEM `EventBase` permits optional top-leve
 The contract is corrected: JCS covers every schema-defined envelope field that is present, including `correlation_id` when present. Absent optional fields are omitted; unknown fields are rejected by schema validation before hashing. The shared vector now includes `correlation_id` and pins to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. Python and Node assert that changing correlation_id changes the full-envelope hash.
 
 The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
+
+
+INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 39 cases.
