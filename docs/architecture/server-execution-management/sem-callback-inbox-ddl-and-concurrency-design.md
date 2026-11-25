@@ -124,10 +124,11 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
    RETURNING id;
 
    This catches the global event_id primary key and the SEM partial unique execution-sequence index without aborting the transaction. If no row is returned, issue a new SELECT statement (READ COMMITTED obtains a fresh statement snapshot) by global event_id and by (execution_id, execution_event_sequence):
-   - same event_id + same execution + same sequence + same JCS hash → duplicate;
-   - same event_id with any changed tuple/hash → 409 IDEMPOTENCY_CONFLICT;
-   - same execution/sequence with a different event_id → 409 EVENT_SEQUENCE_CONFLICT;
-   - no matching winner on either key → treat as an unexpected integrity invariant violation; rollback and return a generic server error, never ACK.
+   - Read both conflict keys. Return duplicate only when the event_id row and execution/sequence row identify the same single row and its execution_id, sequence and JCS hash all match the request.
+   - An event_id row with any changed tuple/hash → 409 IDEMPOTENCY_CONFLICT.
+   - An execution/sequence row owned by a different event_id → 409 EVENT_SEQUENCE_CONFLICT.
+   - If both lookups return different rows, or only one lookup returns a row when the schema invariants require both to identify the same Inbox row, treat it as an integrity invariant violation; rollback and return a generic server error, never ACK.
+   - If neither lookup returns a winner, treat it as an unexpected integrity invariant violation; rollback and return a generic server error, never ACK.
    This post-conflict read is a new SQL statement after ON CONFLICT DO NOTHING; it does not rely on querying inside a transaction-aborted state.
 6. For a successful Inbox insert, insert exactly one task_run_event row: event_type='sem_infrastructure_observed', run_id=execution_id, dedupe_tag=decimal(sequence), and detail containing event ID, sequence, type, binding identity, and evidence references. The explicit NOT NULL + length CHECK rejects a missing/NULL dedupe tag.
 7. Advance task_run.execution_event_sequence to the incoming value, guarded by the old cursor. Because all events for one execution lock the same Run row first, same-execution sequence writes serialize; the unique index remains a database backstop.
