@@ -15,10 +15,10 @@
 | E6 | 正式提出修订 ADR-SEM-04 与 ADR-SEM-10；仍需最终评审批准，不得伪称已 Ratified |
 | HIR | 复用并扩展 `governance.human_intervention`；不另建语义重复的 HIR 主表 |
 | E6 决定 | 复用并扩展 `governance.human_consultation` 记录正式人工决定；必须强关联 HIR、Barrier 和唯一 successor |
-| 通知 | 复用并扩展 `integration.notification`；增加明确 recipient / delivery / retry 语义；是否拆投递表须经现有结构审计后决定 |
+| 通知 | 保留 `integration.notification` 项目 Feed 与原 `read_at`；新增 `integration.notification_recipient` 承载个人 Inbox、收件人和未分派队列；V1 站内通知与 HIR/Interaction 同事务写入 |
 | Execution Barrier | 提升为 Task 作用域；至少记录 task_id、origin_run_id、generation、状态和证据；每个 Task 至多一个 active Barrier |
-| 周期性孤儿扫描 | Phase 0 必须实现 Platform 侧纯 DB 周期扫描，不依赖 Worker 重启或 SEM Session Manager |
-| 进程身份 | Run + Generation 内允许有序多个 Process Identity；Interaction continue 创建新进程，必须登记序列 |
+| 周期性孤儿扫描 | Phase 0 由 Platform Worker 执行纯 DB 周期扫描；不是 SEM 扫描，不调用 SEM/Runner，不依赖 Worker 重启 |
+| 进程身份 | Platform 新增 `delivery.task_run_process` 登记 Run+Generation 内有序进程身份；Lease Renewal 只接受当前 active_process_sequence |
 | RabbitMQ | 环境中已有独立 RabbitMQ 单实例服务、未做集群。SEM 不部署第二套、不假定 HA；安全权威路径不依赖它。可选用作非权威唤醒/通知加速，但 DB Outbox/Inbox 与 API 对账才是可靠性依据 |
 | 状态 | 23 份专题文档必须同步；本轮未完成全文核验前，整体不得标记 Design Complete |
 
@@ -164,15 +164,15 @@ SEM-local Worker 重启时必须恢复 awaiting-interaction/awaiting-continue �
 
 ## 11. HIR / Interaction / Cleanup / Notification 生命周期
 
-HIR、Interaction、Human Consultation、Cleanup Need、Execution Barrier 是不同实体：
+HIR、Interaction、Human Consultation、Cleanup Need、Execution Barrier 和 Notification Recipient 是不同实体：
 - Interaction：Agent 请求用户输入/决策/权限；continue 产生 continuation。
 - HIR：执行异常、失联、风险处置、接管协调的人工工作项。
 - Human Consultation：正式人工决定，包括 E6 风险接受。
 - Cleanup Need：Workspace / 进程清理任务。
 - Execution Barrier：Task 级物理执行不确定性安全约束。
-- Notification：将 HIR/Interaction 的待处理事实投递给明确 recipient。
+- Notification：`integration.notification` 保持项目级 Feed；`integration.notification_recipient` 负责每位收件人的 Inbox 状态与未分派队列。父表 `read_at` 语义不变。
 
-HIR 必须在 Phase 0 可创建、查询、分派责任人、通知、追加证据、受控处置、审计。HIR 状态域只定义一套规范状态机；状态名称、合法转移和 terminal semantics 在 state-machines.md 中唯一登记。HIR closed 不自动释放 Barrier。
+HIR 主体复用 `governance.human_intervention`，用 `record_kind=action|hir` 区分既有干预动作与 HIR 工作项；HIR 状态域以 state-machines.md 为唯一规范。HIR closed 不自动释放 Barrier。Interaction 创建与 HIR 创建必须在同一 Platform 事务中写入 Feed + Recipient 行；V1 站内 Inbox 不需要 RabbitMQ 或异步投递成功才能可见。
 
 ## 12. RabbitMQ 使用边界
 
@@ -257,3 +257,18 @@ A read-only fetch of the current migration baseline and application source found
 - Platform must persist/fence the active process sequence because Platform owns Lease Renewal and cannot query SEM DB. The authenticated sequence-registration and continuation-consumed API plus idempotent transaction contract is a P0 blocker.
 
 These findings supersede any wording elsewhere that suggests the existing tables are already a drop-in HIR/E6/notification implementation. The design direction is selected; the exact schema is not frozen.
+
+
+## 18. SEM-02F executable contract baseline
+
+The detailed physical and protocol proposal is [SEM-02F — Executable Physical and Protocol Contracts](./sem-02f-executable-physical-and-protocol-contracts.md). It supersedes the open-ended implementation wording in this document for the following candidate contracts:
+
+- `delivery.task_execution_barrier`: one unreleased Barrier per Task; only the exact E6-bound successor can pass a `risk_accepted_unconfirmed` Barrier.
+- `governance.human_intervention`: `record_kind=action|hir`; preserve existing action rows while adding the seven-state HIR lifecycle.
+- `governance.human_consultation`: typed E6 anchors and one unique successor, with E6-specific restrictive FK semantics.
+- `integration.notification` + `integration.notification_recipient`: preserve the project Feed and parent `read_at`; add per-principal Inbox membership and an explicit unassigned queue.
+- `delivery.task_run_process` plus `task_run.active_process_sequence`: Platform-side process identity fence used by Lease Renewal and continuation.
+- Platform Worker periodic DB-only orphan scanner: startup scan is an optimization only; B06-D3 direct requeue is removed.
+- RabbitMQ remains an existing independent single-instance service without clustering. It is optional for non-authoritative wake-up only and not required for V1 correctness.
+
+These remain candidate specifications. The exact SQL migration, route/consumer changes and API schemas require review; Phase 0 remains Not Started.
