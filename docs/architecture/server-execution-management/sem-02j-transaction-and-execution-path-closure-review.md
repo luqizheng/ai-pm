@@ -180,3 +180,87 @@ Each test must assert transaction completion, lock timeout behavior, unique cons
 - No Phase 0 start.
 - PR #9 remains Draft and must not be merged.
 
+
+
+## 9. Second audit pass — Run writes, FK/index/trigger side effects
+
+Source baseline remains `master@d0e72fa6805aebeadf1b282e430deba493072fd6`. This pass inspected the concrete Run creation/retry implementations and the checked-in schema/inventory evidence. It remains read-only.
+
+### 9.1 Run INSERT paths — expanded findings
+
+The application source confirms the five business creation paths listed above. Their transaction properties are not equivalent:
+
+| Path | Source behavior | Lock/gate result |
+|---|---|---|
+| Delivery TaskReady | `run_dispatch::insert_task_run`; shared helper documents that caller must already hold Task `FOR UPDATE` | Helper itself does not acquire Project gate or Task Barrier; caller must supply both |
+| Delivery lease-loss recovery | `recover_lost_run` → terminalize old Run → `insert_task_run` | Caller precondition is Task row lock; Run transition happens before new Run insert; Barrier/gate still must be supplied by outer transaction |
+| Review enqueue | `review::queue::enqueue_review` → Project activity gate → Task `FOR UPDATE` → `insert_review_run` | Project gate and Task lock exist; Task Barrier check is absent |
+| Review retry | `review::worker::schedule_retry` directly inserts `delivery.task_run` | **No Project activity gate, no Task row lock, no Task Barrier check**; reads max review attempt and current Task revision without locking Task |
+| Delivery retry after failure | `review::failure::judge_delivery_failures` → `insert_task_run` | The retry transaction updates Task before INSERT, which obtains a Task row lock, but this code path has no Project activity gate or Task Barrier check |
+
+Review retry has an additional concurrency defect candidate: two workers can read the same `max(attempt_no)+1` before either inserts. The partial unique index `uq_task_run_attempt_review` rejects the duplicate, while `uq_task_review_active` only permits one queued/running Review Run. These constraints are useful last-line integrity guards; they do not replace the missing Task lock, Project gate or Barrier check. A deterministic two-connection retry/retry test is required.
+
+The failure-judge path needs a precise lock-order interpretation: it performs a conditional Run `UPDATE finished_at` as a standalone pool statement, so that Run row lock is released before its later transaction updates Task and inserts a replacement Run. The inspected code therefore does **not**, by itself, prove a simultaneous Run→Task lock hold in that specific retry transaction. It still lacks Project activity and Barrier checks, and the scan/claim/decision sequence must be tested against duplicate workers and Project closure. Do not overstate this path as another proven Run→Task deadlock.
+
+### 9.2 Run UPDATE and ownership-transition paths
+
+The inspected source confirms the following distinct classes of writes:
+
+- Delivery claim/lease issuance and same-Run reacquire update lease owner, token hash, expiry and generation.
+- Recovery can terminalize an old Run and create a successor in the same transaction.
+- Dispatch qualification can requeue an eligible queued Run with backoff; redispatch also performs a guarded same-row queued update.
+- Run executor and cancellation/finalization paths update status/outcome/finished timestamps and record Run events.
+- Review worker paths update Review Run status through separate Review-only transitions: queued→running, running→succeeded/failed/timed_out. Review retry creates a successor Review Run.
+- Project archive cancels queued Runs in its Project-close transaction; active Run cancellation is then handled by the follow-up cancellation protocol.
+- Run cleanup updates `task_run_cleanup`, not the authoritative Run lease/status. Cleanup state must not be treated as process-exit evidence.
+
+This is a source-path inventory, not yet a claim that every SQL statement in every module has been exhaustively enumerated. The remaining code-search pass must continue across all Run state columns and all API/MCP/background entrypoints before the inventory can be marked closed.
+
+### 9.3 Foreign-key side effects
+
+The checked-in schema evidence establishes that `delivery.task_run` is not an isolated row:
+
+- Parent references include `(tenant_id, project_id) → core.project`, `(project_id, task_id) → delivery.task`, device identity through `(tenant_id, lease_client_id)`, and self-reference through `supersedes_run_id`.
+- Child references include Interaction, Continuation, interaction responses/deliveries, checkpoints, worker commands, failure records, Run repository snapshots, cleanup, execution authorization, review findings/verdicts/approvals and repository commits.
+- Several child references use `ON DELETE CASCADE` (for example cleanup, Run repository snapshot, review finding/verdict/approval rows); others use RESTRICT/NO ACTION or the default behavior. Run deletion is therefore not a harmless cleanup operation and must remain outside the execution-recovery protocol.
+- In PostgreSQL, FK validation and unique-index conflict handling can acquire implicit key-share/index locks. The transaction graph must account for these effects, especially when a path inserts a child row while another path updates/deletes its parent, or when two paths concurrently allocate the same per-Task attempt number.
+
+The FK/index inventory also shows why a Task-level Barrier must be enforced before creating either Run kind: both delivery and review Runs share the same Task parent and the same `delivery.task_run` identity space.
+
+### 9.4 Unique indexes and triggers
+
+The checked-in index inventory records these important guards:
+
+- `uq_task_run_active`: at most one active Delivery Run per Task for queued/claimed/running.
+- `uq_task_review_active`: at most one active Review Run per Task for queued/running.
+- `uq_task_run_attempt_delivery` and `uq_task_run_attempt_review`: per-kind attempt uniqueness.
+- `uq_task_run_source_event`: one Run per non-NULL source event.
+- `uq_task_run_project_id` / `uq_task_run_tenant_id`: composite FK targets.
+
+These indexes serialize some conflicting inserts or reject duplicates, but none encodes “Task has an unreleased Execution Barrier”; they cannot be used as a substitute for the Platform transaction predicate.
+
+The inspected trigger inventory shows:
+- `trg_review_report_immutable` on `delivery.task_run` (BEFORE UPDATE) protects Review report/anchor immutability.
+- `trg_task_run_event_guard` protects the append-only Run event table.
+- `task_run_failure_immutable` protects failure evidence against UPDATE/DELETE.
+
+No inspected trigger was found to acquire Project, Task, Run, Interaction or Command locks as a secondary side effect. The Review report trigger runs on the already-targeted Run row; the event/failure triggers target their own row. This is limited to the inspected trigger inventory and must be rechecked against the final migration chain, not generalized to every database trigger.
+
+### 9.5 Updated conclusions
+
+1. Review retry is a confirmed direct Run-creation bypass: no Project gate, no Task row lock and no Task Barrier.
+2. Delivery retry after failure has a Task write/row lock but still lacks the Project activity gate and Barrier check.
+3. Review Claim and stuck-Review recovery still operate without the Project activity gate; Project archive pairing tests remain required.
+4. Unique indexes are integrity backstops, not dispatch authorization. They do not close Barrier bypasses.
+5. FK validation introduces implicit parent-key locks and must be included in the final lock graph. The current evidence does not justify declaring a complete global lock order.
+6. The exact failure-judge sequence must not be mislabeled as a simultaneous Run→Task lock inversion: its standalone Run update commits/releases before the later Task transaction.
+
+### 9.6 Remaining audit work
+
+- Finish exhaustive code search for every Run INSERT and every write to `status`, `lease_generation`, `lease_token_hash`, `lease_owner`, `lease_expires_at`, `scheduling_shield`, `executor_session`, `supersedes_run_id` and process-sequence fields.
+- Finish the full Task/Interaction/Continuation/Command/HIR/Consultation/Barrier/Notification read-write route inventory.
+- Reconcile migration DDL from the current migration head against the 2026-11-15 schema inventory; the inventory is evidence, not a substitute for replaying the current migration chain.
+- Add deterministic tests for Review retry vs Review retry, Review retry vs Project archive, Review Claim vs Project archive, Delivery retry vs Project archive, and FK/unique-conflict wait behavior.
+- Only after those passes, derive the canonical lock order and decide whether some writes need a shared transaction helper or a single dispatchability predicate.
+
+Status remains **Changes Required / Audit In Progress**. No migration, business code, API/WSS, Dockerfile, Compose, Worker/Runner loop or runtime configuration was changed. Phase 0 remains Not Started; PR #9 must not be merged.
