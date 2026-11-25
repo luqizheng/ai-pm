@@ -33,3 +33,14 @@ Re-audit all Run creation sites, claim/recovery/requeue paths, B06-D3, worker st
 
 ## Current evidence status
 The prior review identified P0 gaps in periodic orphan discovery, Task Barrier scope, process identity sequence and SEM-local waiting recovery. This file does not claim those gaps are fixed in code. Phase 0 remains Not Started.
+
+
+## Current-master verification refresh — 2026-11-25
+
+The latest master code confirms that `reconcile_orphans` is called once at startup in `apps/ai-pm-worker/src/main.rs`; the dispatch loop has no periodic call. The current `reconcile_orphans` still contains B06-D3 direct `running → queued` behavior after a one-hour lease threshold. This must be replaced, not merely wrapped in a timer.
+
+The current claim path locks candidate Run then Task and checks `candidate_shield` only in the expired-claimed recovery branch; the normal queued path needs the same Task Barrier + Interaction shield predicate. `insert_task_run` is a shared creation helper but all direct Run INSERTs still require a repository-wide audit.
+
+Current Interaction creation writes task_interaction, shield, Task waiting, terminate command and audit in one transaction, but no notification. Current project Feed is `integration.notification`; `supervision/feed.rs` reads it and multiple producers write it. SEM-02F therefore preserves this parent Feed and adds recipient rows instead of changing the parent read semantics.
+
+The code evidence baseline is master `4bc78620f54440a21a113cf7cdb14964d1a14dcb`. No business code was modified by this review.
