@@ -107,3 +107,8 @@ SEM-02J §15 traces production writers for Interaction, Response, ResponseDelive
 ## Implicit FK lock-order finding
 
 SEM-02J §16 identifies a new P0 Task↔Product deadlock schedule: Run claim locks Task then Product, while add_task_product locks Product before its Task FK check acquires key-share on Task. This is an implicit FK edge and requires the association writer to adopt the canonical Task→Product order plus a deterministic two-connection regression test. No production fix has been applied.
+
+
+## Remaining gate-writer audit
+
+SEM-02J §17 traces Task Revision, TaskReady/Run creation, Human Consultation/TaskWaiting and dependency-gate writers. Normal callers preserve Task ownership through row locks or same-transaction creation; task-bound Consultation also writes TaskWaiting with composite scope FKs. The Task↔Product implicit-FK deadlock in §16 remains open, and predecessor-revision snapshot semantics still need a two-connection test.
