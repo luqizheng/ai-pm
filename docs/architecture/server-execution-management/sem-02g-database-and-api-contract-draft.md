@@ -114,8 +114,14 @@ ALTER TABLE governance.human_intervention
     ADD COLUMN severity text,
     ADD COLUMN status text,
     ADD COLUMN assigned_to uuid,
+    ADD COLUMN assigned_at timestamptz,
     ADD COLUMN resolved_by uuid,
     ADD COLUMN resolved_at timestamptz,
+    ADD COLUMN closed_by uuid,
+    ADD COLUMN closed_at timestamptz,
+    ADD COLUMN cancelled_by uuid,
+    ADD COLUMN cancelled_at timestamptz,
+    ADD COLUMN updated_by uuid,
     ADD COLUMN disposition text,
     ADD COLUMN evidence_refs jsonb NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
@@ -135,7 +141,14 @@ ALTER TABLE governance.human_intervention
             AND intervention_type IS NOT NULL
             AND task_id IS NULL AND run_id IS NULL
             AND lease_generation IS NULL AND barrier_id IS NULL
-            AND status IS NULL
+            AND interaction_id IS NULL AND category IS NULL
+            AND severity IS NULL AND status IS NULL
+            AND assigned_to IS NULL AND assigned_at IS NULL
+            AND resolved_by IS NULL AND resolved_at IS NULL
+            AND closed_by IS NULL AND closed_at IS NULL
+            AND cancelled_by IS NULL AND cancelled_at IS NULL
+            AND updated_by IS NULL AND disposition IS NULL
+            AND evidence_refs = '[]'::jsonb
         )
         OR
         (
@@ -186,6 +199,58 @@ ALTER TABLE governance.human_intervention
 ALTER TABLE governance.human_intervention
     ADD CONSTRAINT fk_human_intervention_hir_resolver
     FOREIGN KEY (resolved_by) REFERENCES core.principal(id);
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT fk_human_intervention_hir_closer
+    FOREIGN KEY (closed_by) REFERENCES core.principal(id);
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT fk_human_intervention_hir_canceller
+    FOREIGN KEY (cancelled_by) REFERENCES core.principal(id);
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT fk_human_intervention_hir_updater
+    FOREIGN KEY (updated_by) REFERENCES core.principal(id);
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT fk_human_intervention_hir_assignee_member
+    FOREIGN KEY (project_id, assigned_to)
+    REFERENCES core.project_member(project_id, principal_id);
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT ck_human_intervention_hir_lifecycle_timestamps
+    CHECK (
+        record_kind = 'action'
+        OR (
+            (assigned_to IS NULL AND assigned_at IS NULL)
+            OR
+            (assigned_to IS NOT NULL AND assigned_at IS NOT NULL)
+        )
+    );
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT ck_human_intervention_hir_resolved
+    CHECK (
+        record_kind = 'action'
+        OR status NOT IN ('resolved', 'closed')
+        OR (resolved_by IS NOT NULL AND resolved_at IS NOT NULL)
+    );
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT ck_human_intervention_hir_closed
+    CHECK (
+        record_kind = 'action'
+        OR status <> 'closed'
+        OR (closed_by IS NOT NULL AND closed_at IS NOT NULL)
+    );
+
+ALTER TABLE governance.human_intervention
+    ADD CONSTRAINT ck_human_intervention_hir_cancelled
+    CHECK (
+        record_kind = 'action'
+        OR status <> 'cancelled'
+        OR (cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL)
+    );
 
 CREATE UNIQUE INDEX uq_human_intervention_one_hir_per_barrier
     ON governance.human_intervention(barrier_id)
@@ -323,6 +388,14 @@ CREATE UNIQUE INDEX uq_notification_recipient_principal
 CREATE UNIQUE INDEX uq_notification_recipient_unassigned
     ON integration.notification_recipient(notification_id)
     WHERE recipient_principal_id IS NULL;
+
+CREATE INDEX idx_notification_recipient_inbox
+    ON integration.notification_recipient(recipient_principal_id, created_at DESC)
+    WHERE recipient_principal_id IS NOT NULL;
+
+CREATE INDEX idx_notification_recipient_unassigned_queue
+    ON integration.notification_recipient(project_id, created_at DESC)
+    WHERE assignment_state = 'unassigned';
 ```
 
 V1 in-app notification rows are immediately available on transaction commit. `attempt_count/next_attempt_at/last_error` are reserved for a separately approved external-channel adapter; they are not needed to make the in-app Inbox durable. Existing parent `read_at` remains untouched.
@@ -331,7 +404,8 @@ V1 in-app notification rows are immediately available on transaction commit. `at
 
 ```sql
 ALTER TABLE delivery.task_run
-    ADD COLUMN active_process_sequence integer;
+    ADD COLUMN active_process_sequence integer
+    CHECK (active_process_sequence IS NULL OR active_process_sequence >= 1);
 
 CREATE TABLE delivery.task_run_process (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -423,7 +497,18 @@ ALTER TABLE delivery.worker_command
 
 The exact legacy command backfill is not needed for production history under the Greenfield policy, but all test fixtures and seed rows must be updated. The application must reserve `new_process_sequence` while holding the Run row lock and reject two competing continuation reservations.
 
-## 8. Platform–SEM HTTPS API draft
+## 8. Platform notification Inbox API draft
+
+The existing project Feed endpoint remains unchanged. Add separate authenticated Platform endpoints for per-principal Inbox operations:
+
+- `GET /api/v1/projects/{project_id}/inbox?cursor=...`: only recipient rows where `recipient_principal_id = authenticated_principal`; never infer recipient from client-supplied principal IDs.
+- `GET /api/v1/projects/{project_id}/inbox/unassigned?cursor=...`: only project operators with explicit HIR assignment permission.
+- `POST /api/v1/projects/{project_id}/inbox/{recipient_row_id}/read`: updates only that principal's recipient `read_at`.
+- `POST /api/v1/projects/{project_id}/inbox/unassigned/{recipient_row_id}/assign`: assigns to an active project member, writes audit, and updates HIR assignment only when the parent notification is HIR-related.
+
+The project Feed's existing parent `read_at` endpoint/semantics are not changed by these routes.
+
+## 9. Platform–SEM HTTPS API draft
 
 Base path: `/internal/sem/v1`. All endpoints require the short-lived service JWT from ADR-SEM-22; each operation also validates its domain-level device/Run/Generation binding. Idempotency keys are independent from JWT `jti`.
 
@@ -531,7 +616,7 @@ Platform verifies:
 
 SEM forwards `lease_proof` ephemerally and must not persist or log it. `request_id` is idempotent; retries use the same key. WSS heartbeat and Agent Activity are not renewals.
 
-## 9. Runner–SEM WSS event draft
+## 10. Runner–SEM WSS event draft
 
 All messages carry `schema_version`, `event_id`, `connection_epoch`, `device_id`, `run_id`, `lease_generation` where applicable.
 
@@ -548,7 +633,7 @@ All messages carry `schema_version`, `event_id`, `connection_epoch`, `device_id`
 
 SEM must persist each incoming process evidence event before acknowledging it. Runner retains its local spool until SEM returns durable evidence ACK. SEM then forwards to Platform with idempotency; Platform's acknowledgement does not mean the Run is terminal unless the relevant state transition commits.
 
-## 10. Error contract
+## 11. Error contract
 
 | HTTP / code | Meaning | Required behavior |
 |---|---|---|
@@ -562,7 +647,7 @@ SEM must persist each incoming process evidence event before acknowledging it. R
 | 409 `continuation_not_ready` | Reply/command/Interaction prerequisites missing | Keep shield; do not advance process sequence |
 | 503 `platform_temporarily_unavailable` | Platform API unavailable | SEM retains durable delivery; retry idempotently |
 
-## 11. Transaction and idempotency rules
+## 12. Transaction and idempotency rules
 
 - Lock order for operations touching execution safety: Project → existing Run → Task → Task Barrier → HIR/Consultation. Run creation without an existing Run locks Project → Task → Barrier. Do not introduce a later lock on an earlier entity.
 - The Platform Task row is the serialization point for Barrier creation, E6, new Run creation and dispatchability.
@@ -572,7 +657,7 @@ SEM must persist each incoming process evidence event before acknowledging it. R
 - SEM durable receipt ACK, Platform API acceptance and committed business state are distinct acknowledgements.
 - No distributed transaction between Platform DB, SEM DB, Runner spool or RabbitMQ.
 
-## 12. Open review items
+## 13. Open review items
 
 1. Confirm the HIR discriminator DDL does not conflict with any unseen reader that assumes `intervention_type NOT NULL`.
 2. Confirm the deferred composite FK for `task_run.active_process_sequence` is valid under the actual migration order and does not create an update deadlock.
