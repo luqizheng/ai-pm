@@ -122,6 +122,7 @@ ALTER TABLE delivery.task_run_event
             AND detail ? 'event_envelope_hash'
             AND detail ? 'binding_epoch'
             AND detail ? 'schema_version'
+            AND COALESCE(detail->>'schema_version', '') ~ '^[1-9][0-9]*$'
             AND detail ? 'occurred_at'
             AND COALESCE(detail->>'event_id', '') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             AND COALESCE(detail->>'sem_event_type', '') <> ''
