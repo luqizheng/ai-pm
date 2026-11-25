@@ -286,3 +286,9 @@ Phase dependency clarification: Platform-side Process Registry and process-bound
 [SEM-02H — DDL Integrity and Transaction Review](./sem-02h-ddl-integrity-and-transaction-review.md) reviews SEM-02G against the current master schema and identifies concrete SQL integrity defects. SEM-02G remains a draft; do not author migrations from it until the P0/P1 findings, process evidence ledger, E6 atomicity, notification Inbox semantics and global transaction lock graph are closed.
 
 The review also updates the schema evidence baseline to current master `d0e72fa6805aebeadf1b282e430deba493072fd6`. No code or migration changes were made.
+
+## 21. SEM-02I corrected schema/API candidate
+
+[SEM-02I — Corrected Platform Schema and Process API Candidate](./sem-02i-corrected-platform-schema-and-process-api-candidate.md) consolidates the proposed HIR discriminator, Task Barrier, E6 consultation binding, append-only process evidence ledger, per-principal Inbox and process registration/continue/exit/Lease Renewal API shapes.
+
+SEM-02I is a candidate only. Its transaction lock graph is explicitly not approved because current code has Run↔Interaction lock inversion and orphan reconciliation is not atomic. See SEM-02H §7. Do not create migrations or start Phase 0.
