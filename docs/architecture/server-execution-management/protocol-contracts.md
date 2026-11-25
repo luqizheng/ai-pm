@@ -138,15 +138,6 @@ These are ratified target design constraints, not current implementation facts.
 Runner Supervisor may send `runner.resource.report` over the authenticated WSS control channel. The report contains `boot_id`, monotonic `sample_seq`, `observed_at`, CPU logical count and normalized utilization windows, memory total/available/pressure, and free/total bytes for the configured Workspace volume. Runner identity is derived from the authenticated connection, not trusted from payload. Resource reports are separate from Heartbeat and never renew Lease. Stale, out-of-order, invalid, or unavailable samples make the Runner resource state `unknown` and block new dispatch; they do not prove process termination. SEM persists the latest snapshot in `runner_connection` and associates resource-profile/reservation metadata with `dispatch_operation`. Exact sampling intervals and admission thresholds are deployment-tuned and must be validated under Windows load tests; no unsupported fixed CPU/memory/disk threshold is assumed.
 
 
-## 10. Resource telemetry and admission (ADR-SEM-26)
-
-Runner Supervisor reports resource facts over the authenticated Runner–SEM WSS connection using `runner.resource.report`. The report includes `boot_id`, monotonically increasing `sample_seq`, UTC `observed_at`, CPU logical capacity and utilization windows, memory total/available/pressure, and total/free capacity of the actual Workspace volume. Runner identity is taken from the authenticated connection, never from a self-asserted payload field.
-
-SEM stores the latest accepted snapshot in `runner_connection`; `dispatch_operation` stores the task Resource Profile and atomic CPU/memory/Workspace-volume reservation. This does not add an eighth mandatory SEM table. Samples that are stale, duplicated, out of order, invalid, or from an old boot must not overwrite the latest snapshot. Unknown/stale resources block new dispatch only; they do not stop active Runs or release reservations.
-
-Resource reports are distinct from Runner Heartbeat, Lease Renewal and Harness Agent Activity. They never renew a Lease and never prove process start/exit or E1/E2/E3. A resource reservation is released only after definitive Platform Claim rejection (no Lease created) or after the relevant Run reaches a safe terminal/termination disposition. Unknown Claim outcomes retain the reservation and reuse the same `claim_request_id`.
-
-
 ## 13. Process-exit evidence and reconnect sync (SEM-02E normative proposal)
 
 WSS V1 adds:
@@ -171,7 +162,7 @@ Platform `worker_command` remains business command state; SEM `command_delivery`
 ## 15. Notification and dispatchability requirements (SEM-02F candidate contract)
 
 - `integration.notification` remains the project Feed; do not repurpose its `read_at` as per-user state.
-- `integration.notification_recipient` provides per-principal Inbox membership, per-recipient read state, delivery state and an explicit unassigned queue.
+- `integration.notification_recipient` provides per-principal Inbox membership, per-recipient read state and an explicit unassigned queue. External channel delivery attempts, if later needed, use a separate ledger.
 - HIR/Interaction creation writes the Feed row and recipient rows in the same Platform transaction as the business record. V1 in-app delivery is DB availability, not a separate asynchronous broker delivery.
 - Recipient resolution uses active Task assignee, then active project owner members, otherwise an unassigned queue row + alert.
 - 120-second Interaction deadline is only the user response deadline, never a notification delay.
@@ -194,19 +185,6 @@ E6 is a Platform-authorized human risk decision, not a Runner process observatio
 - E6 is a human authorization, not a process event. It does not emit `runner.process.exit`, E3, or termination ACK, and does not release the old Task Barrier.
 - All dispatch/recovery/requeue paths must invoke the same Platform dispatchability predicate under transaction locks, including B06-D3, E6 successor and queued Run creation.
 - RabbitMQ ACK is never Platform business commit, SEM Inbox commit, Lease renewal, process exit or E3 evidence.
-
-
-## 13. Active process-sequence fencing — candidate implementation contract
-
-SEM persists OS-level process observations, but Platform remains the Lease/Generation authority and cannot query SEM DB. Therefore the protocol must expose a Platform-authoritative active-process fence:
-
-1. Initial start registers the first process_sequence against the current Run+Generation through an authenticated SEM service API before Lease Renewal can rely on it.
-2. Interaction continue starts a new OS process and sends continuation.consumed with the new process identity and monotonically increasing sequence.
-3. Platform atomically validates the current Run/Generation/Lease/Interaction state and advances the accepted active sequence; duplicate continuation receipts are idempotent, stale/lower sequences are rejected, and a conflicting same-sequence identity is quarantined.
-4. Lease Renewal carries the accepted active process sequence and identity binding. Platform rejects renewal from a superseded process.
-5. Exit evidence for an older sequence remains appendable as historical evidence but cannot clear the current active-process fence or release a Barrier while a newer sequence remains active.
-
-The exact Platform persistence shape (columns on task_run versus a dedicated normalized process-identity table) is OPEN and must be selected after the schema/transaction/locking audit. The current seven-table SEM DB alone is insufficient for Platform-side fencing.
 
 
 ## 18. Platform process registry and renewal identity (SEM-02F)
