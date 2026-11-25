@@ -246,3 +246,12 @@ Runner Supervisor owns the local OS process boundary: Harness availability check
 The read-only mapping found that current MCP Task state transitions are specialized and coupled to the old Claim/Lease path: pm_report_progress renews the Run lease and first stage=started advances Task to running; pm_submit_result advances Task to submitted; pm_get_run_context exposes the fuller execution contract but requires pm_claim_task's lease token; pm_get_task_context currently exposes only Task fields, latest linked requirement revision and milestone. No generic Task status setter was found in the reviewed MCP tool declarations.
 
 The new architecture must preserve guarded Task transitions through AI-PM MCP while removing the Runner Claim/Lease prerequisite. It needs a complete, project-scoped Harness context read; business progress must be split from infrastructure heartbeat; pm_submit_result authorization must be reworked around the AI-PM execution mapping. Do not add an unrestricted arbitrary Task status setter. See [execution-path-ownership-mapping.md](./execution-path-ownership-mapping.md) §3.1. Source inspection only; no code or runtime behavior changed.
+
+
+## 13. Delegated Harness identity, dual fencing and completion boundary
+
+The follow-up source audit is recorded in [harness-identity-and-business-fencing-review.md](./harness-identity-and-business-fencing-review.md). It confirms that current MCP auth resolves human API Keys to HumanActor; the cpk_ device credential also maps to the device owner's human principal; service JWTs are rejected; and caller_from_ctx requires HumanActor. The existing identity ADR explicitly avoids independent Agent credentials. This does not provide per-execution Task/Run authorization. A scoped, short-lived, revocable Delegated Execution grant is required; it must not impersonate a human or permit human approval.
+
+The review also requires separate AI-PM authorization_generation (business MCP fencing) and SEM execution_epoch (Runner binding fencing). Runner disconnect without process-exit evidence must not trigger competing reassignment. Finally, Harness delivery submission advances Running→Submitted; Reviewing→Completed requires acceptance evidence, while Ready→Completed is a human-only manual-task path. Harness cannot self-complete an execution Task. Business terminal decision + Platform Outbox release intent must be atomic.
+
+Source inspection only; no code, migrations or runtime tests changed.
