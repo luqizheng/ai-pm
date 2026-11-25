@@ -128,3 +128,7 @@ These are candidate contracts, not Ratified ADRs or implementation authorization
 SEM-02H has identified P0 relational defects in SEM-02G: HIR Run-to-Task FK mismatch, missing unique target for the E6 HIR composite FK, a PostgreSQL CHECK NULL loophole allowing Barrier release without an evidence class, and no mandatory formal E6 consultation reference on a risk-accepted Barrier. It also specifies an append-only process evidence ledger, notification Inbox normalization, event-id persistence, continuation race serialization and a required global lock graph.
 
 The review baseline is current master `d0e72fa6805aebeadf1b282e430deba493072fd6`; SEM-02G's original `4bc78620` declaration was stale. **Changes Required** remains the overall status. No migration or Phase 0 authorization.
+
+## 10. SEM-02I corrected schema/API candidate
+
+SEM-02I consolidates the corrected relational model and process API shapes. It does not close the implementation gate: the source-level audit found an existing Run↔Interaction lock inversion (`report_interaction` Run→Interaction vs `retry_interaction` Interaction→Run), and `reconcile_orphans` still performs Run/Task recovery without a single Barrier/HIR transaction. These must be corrected and concurrency-tested before migration authoring.
