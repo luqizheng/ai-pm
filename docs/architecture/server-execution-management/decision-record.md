@@ -8,24 +8,24 @@
 | # | 决策 | 依据 | 推翻条件 |
 |---|---|---|---|
 | ADR-SEM-01 | 循环 1/2/3/5/6/7/8 + pm-worker + pm-api audit listener 留 Platform；循环 4 执行子步迁 SEM | SEM-01 + 本轮复核（`worker-role-separation.md` §1） | 出现新的执行型循环且不 spawn 进程 |
-| ADR-SEM-02 | Outbox 单消费者：循环 3 只在 Platform 运行；SEM 角色不装配 handler，误配 fail-fast | `register_all_handlers` 全集装配（`outbox.rs:394`）；单消费者消解集合分叉面 | 引入真正的消息中间件（当前禁止） |
+| ADR-SEM-02 | Outbox 单消费者：循环 3 只在 Platform 运行；SEM 角色不装配 handler，误配 fail-fast | Outbox 权威写入与消费留在 Platform；RabbitMQ 的存在不改变此边界 | 经正式架构评审批准改变 Outbox 消费归属 |
 | ADR-SEM-03 | 角色开关 `AI_PM_WORKER_ROLE=platform\|execution\|all`，默认 all；Phase 1 不拆新二进制 | 单文件改动、开发态零漂移 | execution 角色膨胀出独立调度需求时派生 `apps/ai-pm-execution-worker` |
-| ADR-SEM-04 | 回收必须以终止证据为前提（E1/E2/E3 才可重派；E4 只隔离；E5 永不回收） | DB 租约 ≠ 进程死亡；代码证据 `claim.rs:574-674`、`run_executor.rs:489-583` | 出现比三证据/心跳更可靠的进程事实源 |
+| ADR-SEM-04（修订提案，SEM-02E） | E1/E2/E3 才可基于终止证据安全释放 Barrier 并自动重派；E4/E5 隔离；E6 是明确的人类风险授权，只允许一个绑定 successor，不构成终止证据且不释放旧 Barrier | DB 租约 ≠ 进程死亡；E6 不得伪装成 E1/E2/E3 | 仅经正式架构评审批准后生效；变更需再次修订 ADR |
 | ADR-SEM-05 | Workspace 唯一所有权：一区一进程；新 Attempt 永远新工作区 | 双写冲突不可由 DB fencing 防护（fencing 盲区） | 工作区改为无状态对象存储（远超 V1 范围） |
 | ADR-SEM-06 | Session Manager = `pm-application` 逻辑模块，非微服务；Attempt = task_run 行链（attempt_no + supersedes_run_id），不新增 execution 表 | 现有模型已表达 attempt 血缘；Greenfield 审慎新增 | attempt 维度出现独立查询/权限需求 |
 | ADR-SEM-07 | Harness Native Session 以 `task_run.harness_session_id` + `harness_kind` 两列采集；能力表在代码（const），不进 DB | 能力是编译期事实；`executor_session` 语义不得混用（任务明令） | 能力需要按租户/项目动态配置时 |
-| ADR-SEM-08 | Platform PostgreSQL 是业务 Run/Lease/Generation 的唯一权威源；宿主机文件系统是本机进程证据；不引入 Redis/Kafka/RabbitMQ | 执行权必须由业务权威方仲裁；服务边界另由 ADR-SEM-19 定义 | 业务权威存储策略改变时复审 |
+| ADR-SEM-08 | Platform PostgreSQL 是业务 Run/Lease/Generation 的唯一权威源；宿主机文件系统是本机进程证据。环境已有独立 RabbitMQ 单实例（无集群），但 SEM 安全关键路径不依赖它 | 执行权必须由业务权威方仲裁；RabbitMQ 可用性不构成执行安全事实 | 若未来批准将 RabbitMQ 用于非权威唤醒/通知加速，另行评审 |
 | ADR-SEM-09 | 跨 Runner 接管 = 新设备全新合法 claim（generation+1、token 重签）；不放宽 `lease_client_id` 校验 | 任务硬约束；正门 claim 已具备全部仲裁能力 | 「预授权转移」真实需求出现（另立迁移+校验） |
-| ADR-SEM-10 | HIR 决策 Q1=B / Q2=B / Q3=A；E4/E5 挂起的 Run 以 HIR 为唯一自动出路 | 用户已确认三项决策 | 用户改裁 |
+| ADR-SEM-10（修订提案，SEM-02E） | HIR 是执行异常与人工处置的统一入口；复用 `governance.human_intervention`。HIR 可关联 Interaction 与 Human Consultation；E6 通过正式 Human Consultation 授权一个 successor；HIR closed 不释放 Task Barrier | 人工处置必须可追踪、可通知、可审计；HIR 不是终止证据 | 仅经正式架构评审批准后生效 |
 | ADR-SEM-11 | Greenfield 政策适用：可直接重构 Schema/接口，不为未发布行为保留兼容层；执行安全不降低 | `engineering-lifecycle-policy.md` | 项目进入有客户/生产数据阶段时复审 |
-| ADR-SEM-12 | HIR 使用独立实体 `governance.human_intervention_request`，关联 Run/Attempt/Project/Runner；不复用审计事件承载业务生命周期 | 需要可查询、可处置、可统计的独立生命周期 | HIR 被证明不需要独立查询/状态/授权时 |
+| ADR-SEM-12（修订提案，SEM-02E） | HIR 复用并扩展现有 `governance.human_intervention`，不另建平行 HIR 主表；需先核验完整 schema、约束、迁移与调用方 | 基线已存在 `governance.human_intervention`；复用可避免重复治理实体 | 若完整 schema 审计证明无法安全扩展，提交独立 ADR 说明原因 |
 | ADR-SEM-13 | Harness Resume 能力默认关闭；能力声明与真实恢复成功分离，未完成版本化实测不得启用 | 当前没有充分实测证据；失败必须降级为 Fresh Attempt | 对具体 Harness 版本完成可重复恢复验收 |
 | ADR-SEM-14 | Runner 命令与 ACK 通过 Runner 主动建立的认证 WSS 长连接传输；ACK 必须绑定 run/attempt/generation，并由 Runner 在 OS 进程句柄确认退出后发送 | WSS 是 SEM↔Runner 的唯一实时控制通道；普通消息 ACK/命令送达不构成终止证据 | 若 WSS 在特定环境不可用，需另立 ADR 定义安全降级通道 |
 | ADR-SEM-15 | Runner 默认 `unattended`；仅显式配置为 `supervised` 才要求领取前用户确认 | 用户明确决策；监督模式与在线/忙碌状态正交 | 用户明确改变产品默认值 |
 | ADR-SEM-16 | E4 Run 进入持久化 scheduling shield：不进入普通 claim 候选集、不因租约过期自动重派；由 HIR 处置；只允许受控人工/证据驱动解除 | 避免 E4 被其他回收路径重新领取；必须有可审计解除条件 | 状态模型重构时，以等价或更强的持久化隔离替代 |
 | ADR-SEM-17 | Workspace/Worktree/Git Mirror 不做备份；运行期间仍使用持久卷，丢失后按 E4/E5 安全隔离，不得推断进程死亡 | 用户明确决策；这些内容可由唯一 origin 重建，运行现场不作为备份目标 | 产品未来明确要求灾难恢复现场 |
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
-| ADR-SEM-19 | **Platform 与 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform 是 Run、Lease、Generation、业务状态的权威方；SEM 通过 API 请求认领、取消、查询并上报执行状态/事件。Platform 使用 Transactional Outbox 触发派发，SEM 以幂等方式接收；SEM 可通过 API 拉取/对账补偿。Runner 与 SEM 使用 WSS。V1 不引入消息代理。 | 用户于 2026-11-24 明确确认方案 A；服务独立部署需要明确 API 契约和数据所有权 | API 吞吐/可靠性需求证明 HTTP + Outbox 不足时，另立决策评估消息代理；不得恢复共享数据库耦合作为默认方案 |
+| ADR-SEM-19 | **Platform 与独立服务 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform Outbox → HTTPS → SEM Inbox，Runner ↔ SEM 使用 WSS。RabbitMQ 已作为独立单实例服务存在，但不属于本 ADR 的权威通信路径，也不是 SEM 安全关键依赖；可选非权威唤醒用途须另行批准。 | 服务独立部署、单一业务权威、幂等与对账；现有 RabbitMQ 无集群，不应成为执行安全单点 | 若未来改变权威通信路径，另立 ADR；不得恢复共享数据库耦合 |
 | ADR-SEM-20 | **SEM 是 Runner 控制面的唯一派发与接管协调者。** Runner 不再主动轮询 Platform MCP Claim、命令或恢复接口；SEM 选择/确认目标 Runner 后，代表该 Runner 调用 Platform HTTPS API 请求 Claim，Platform 在权威事务中校验目标设备/项目授权/可执行性并签发 Lease、Generation。成功后 SEM 才能经 WSS 派发。Harness 保留 Platform MCP 业务访问。 | 用户于 2026-11-24 明确确认；避免 Runner 直连 Claim 与 SEM 调度形成双控制面 | 若未来需 Runner 直连 Platform 控制面，必须另立 ADR；不得静默恢复双路径 |
 | ADR-SEM-21 | **Lease Renewal 唯一路径：Runner Supervisor → WSS → SEM → Platform HTTPS API。** WSS Heartbeat 与 Harness Agent Activity 均不续租；只有 Platform 校验通过并提交后才更新 Lease。 | 用户于 2026-11-24 确认；区分 Runner 存活、执行权续租和 Agent 业务活动 | 若未来更换监督/租约模型，另立 ADR；不得增加第二续租通道 |
 | ADR-SEM-22 | **Platform↔SEM 使用双向独立服务身份与短时非对称签名 JWT。** TLS、issuer/audience/scope/kid/jti 校验、密钥轮换；服务身份不得映射为 human principal；mTLS 可作为额外防护。 | 最小权限、可撤销、避免共享静态密钥和服务身份混入用户身份 | 若部署身份基础设施发生变化，另立 ADR；不得退回无身份内网信任 |
@@ -119,3 +119,19 @@ ADR-SEM-14 中“ACK 必须由 Runner 在 OS 进程句柄确认退出后发送�
 4. `continuation.consumed`：用户回复已注入且新 Agent 已启动。
 
 自然退出、lease-loss cleanup、startup orphan cleanup 和 boot transition 也可产生 E3 process-exit evidence，不要求先有 cancel command。该澄清尚待评审，不新增或改写已批准 ADR。
+
+
+## SEM-02E 评审提案（2026-11-25）
+
+以下为待批准修订，不因写入本文件而自动生效：
+
+- **ADR-SEM-04 修订**：引入 E6 Human Risk Acceptance 作为独立人工风险授权类别。E6 允许唯一绑定 successor，但旧 Task Barrier 保持 `risk_accepted_unconfirmed`，不代表旧执行端终止。
+- **ADR-SEM-10 修订**：HIR 作为人工处置入口，复用 `governance.human_intervention`；E6 正式决定复用 `governance.human_consultation`；通知复用 `integration.notification`。HIR closed 不释放 Barrier。
+- **ADR-SEM-12 修订**：撤销新建 `governance.human_intervention_request` 的候选方案，改为扩展现有 `governance.human_intervention`。实施前需对账完整 schema、所有迁移、routes、查询和消费者。
+- **Task Barrier**：安全作用域提升到 Task，防止新 Run 行绕过旧执行的不确定性。一个 Task 最多一个 active Barrier。
+- **周期扫描**：Phase 0 必须在 Platform 执行 DB-only 周期孤儿扫描；启动时扫描不能作为唯一机制。
+- **RabbitMQ**：环境已有单实例、无集群服务；不引入新 broker，也不依赖 RabbitMQ 完成 Claim、Lease、Barrier、HIR、E3 或恢复。非权威唤醒用途另行批准。
+
+### E6 对 ADR-SEM-04/10 的正式变更门槛
+
+在用户明确批准前，上述均标记为 Proposed Amendment；ADR-SEM-04/10 的当前 Ratified 版本不被静默覆盖。批准后需更新 ADR 版本、决策日期、理由、推翻条件及所有引用文档。
