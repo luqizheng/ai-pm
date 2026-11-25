@@ -9,7 +9,7 @@ Status: normative design target. Exact route/function names must be reconciled w
 - SEM owns only execution-side private persistence: durable command-delivery records, connection/session metadata and local execution coordination. These records must not become a second Run/Lease authority.
 - Platform ↔ SEM communication uses versioned HTTPS service APIs. Platform Transactional Outbox reliably triggers dispatch; SEM processes requests idempotently and reconciles through Platform APIs.
 - Runner ↔ SEM communication uses authenticated WSS. Runner supervises its local Harness process through OS process APIs.
-- No shared database and no message broker in V1.
+- No shared database. RabbitMQ exists as a separate single-instance service without clustering; SEM safety-critical correctness does not depend on it. Platform Outbox/HTTPS/SEM Inbox remains authoritative. RabbitMQ may only be considered for non-authoritative wake-up/notification acceleration after separate approval.
 
 ## 2. Platform–SEM service API
 
@@ -32,7 +32,7 @@ Status: normative design target. Exact route/function names must be reconciled w
 
 ### 2.3 API contract requirements
 
-- Version prefix (for example `/internal/sem/v1/`); exact routes, DTOs, status codes and error envelopes must be frozen in SEM-02D before Phase 1 implementation.
+- The single candidate version prefix is `/internal/sem/v1/`. `/internal/v1` is obsolete and must not appear as an alternative. Exact OpenAPI routes, DTOs, status codes and error envelopes must be frozen before implementation.
 - Service-to-service authentication, TLS, least-privilege scopes, request correlation ID, idempotency key, timeout and bounded retry policy.
 - Mutating calls carry Run ID and expected generation where applicable; stale generation and mismatched ownership fail closed.
 - No distributed transaction across Platform and SEM databases. Use outbox/inbox, idempotency, explicit operation state and reconciliation/compensation.
@@ -146,10 +146,10 @@ SEM stores the latest accepted snapshot in `runner_connection`; `dispatch_operat
 Resource reports are distinct from Runner Heartbeat, Lease Renewal and Harness Agent Activity. They never renew a Lease and never prove process start/exit or E1/E2/E3. A resource reservation is released only after definitive Platform Claim rejection (no Lease created) or after the relevant Run reaches a safe terminal/termination disposition. Unknown Claim outcomes retain the reservation and reuse the same `claim_request_id`.
 
 
-## 11. Process-exit evidence and reconnect sync (Review Pending)
+## 13. Process-exit evidence and reconnect sync (SEM-02E normative proposal)
 
 WSS V1 adds:
-- `runner.process.exit`: natural exit or observed termination. Required fields: `message_id`, `connection_epoch`, `run_id`, `generation`, `boot_id`, `process_identity`, `exit_outcome`, `observed_at`, `source`, `evidence_digest`; `command_id` is optional for unsolicited/natural exits.
+- `runner.process.exit`: natural exit or observed termination. Required fields: `message_id`, `connection_epoch`, `run_id`, `generation`, `boot_id`, `process_identity`, `exit_outcome`, `observed_at`, `source`, `evidence_digest`; `command_id` is optional for unsolicited/natural exits. Evidence is validated against the registered Run+Generation process-identity sequence; it is not required to match a single original PID or a command ID when the exit is unsolicited.
 - `runner.process.reconciled`: after Runner restart, report each prior process as alive / absent-with-proof / unknown. Unknown is never converted to exit evidence.
 - `runner.reconnect_sync`: current boot identity, active process inventory and pending local evidence spool references.
 
@@ -157,7 +157,7 @@ The Runner writes evidence to a local durable spool before WSS transmission and 
 
 E3 requires OS-observed exit for the exact process identity. Command receipt ACK and command result are separate. Natural exit, command termination, lease-loss cleanup, startup orphan cleanup, shutdown and boot-transition reconciliation must all report. If OS boot identity or process identity cannot be verified, classify E5.
 
-## 12. Interaction command execution contract (Review Pending)
+## 14. Interaction command execution contract (SEM-02E normative proposal)
 
 Interaction terminate/continue commands must have exactly one execution adapter for the Run's execution placement:
 - Remote Runner: Platform business command → SEM durable `command_delivery` → Runner WSS → Runner Supervisor.
@@ -167,7 +167,7 @@ Both adapters implement terminate, continue-with-response, process-exit reportin
 
 Platform `worker_command` remains business command state; SEM `command_delivery` is remote transport state. For local execution, the same command result/evidence semantics apply without pretending a WSS delivery occurred. Command receipt, command result, E3 and continuation consumption are independent acknowledgements.
 
-## 13. Notification and dispatchability requirements (Review Pending)
+## 15. Notification and dispatchability requirements (SEM-02E normative proposal)
 
 - `interaction.created` and HIR creation append notification Outbox events in the same transaction as their business records.
 - Notification recipient resolution and per-recipient delivery status are explicit; project-level unassigned inbox is the fail-visible fallback.
@@ -177,6 +177,17 @@ Platform `worker_command` remains business command state; SEM `command_delivery`
 See [corrective design](./sem-02d-review-findings-corrective-design.md).
 
 
-## 14. E6 Human Risk Acceptance protocol (Review Pending)
+## 16. E6 Human Risk Acceptance protocol (SEM-02E normative proposal)
 
 E6 is a Platform-authorized human risk decision, not a Runner process observation. It is recorded through the Platform HIR disposition API, with authenticated human principal, high-risk permission, explicit second confirmation, reason, displayed residual risks, mitigation record and a single bound successor Run/Generation. SEM may dispatch only the exact successor authorized by Platform after Claim succeeds. E6 must never be serialized as `process.terminated`, E3, command ACK or successful OS exit. The old Execution Barrier remains `risk_accepted_unconfirmed` until E1/E2/E3 independently proves termination. Duplicate or broader successor requests are rejected.
+
+
+## 17. SEM-02E protocol convergence rules
+
+- The Task-level Execution Barrier is authoritative for dispatch blocking. Interaction `scheduling_shield` remains a separate four-value business shield; Detached/Reconciling are not added to its CHECK constraint.
+- Run+Generation may contain multiple sequential process identities. `continuation.consumed` registers the newly started process identity and sequence. Late exit evidence for an earlier process may close only that process observation and cannot mark a later process exited.
+- Unified WSS names are `runner.process.exit`, `runner.process.reconciled`, `runner.reconnect_sync`, and `continuation.consumed`. Remove `process.terminated` and other competing aliases from normative diagrams and examples.
+- Natural process exit does not require `command_id`; destructive command correlation is required only when the evidence claims to satisfy a specific command.
+- E6 is a human authorization, not a process event. It does not emit `runner.process.exit`, E3, or termination ACK, and does not release the old Task Barrier.
+- All dispatch/recovery/requeue paths must invoke the same Platform dispatchability predicate under transaction locks, including B06-D3, E6 successor and queued Run creation.
+- RabbitMQ ACK is never Platform business commit, SEM Inbox commit, Lease renewal, process exit or E3 evidence.
