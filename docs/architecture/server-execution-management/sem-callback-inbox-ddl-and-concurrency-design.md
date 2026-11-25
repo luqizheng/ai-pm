@@ -34,6 +34,27 @@ The current Inbox constraints are: PK(id), UNIQUE(project_id,id), UNIQUE(tenant_
 
 Reuse the existing Inbox; do not create a parallel SEM Inbox unless live catalog evidence reveals a concrete blocker. The SEM-specific application port must not call \`submit_event()\`, create \`integration.job\`, or enqueue AI analysis.
 
+### 2.1 Required SEM Inbox row mapping
+
+Every first-time SEM callback insert uses these exact values:
+
+| Column | Value |
+|---|---|
+| `id` | incoming `event_id` UUID |
+| `project_id`, `tenant_id` | resolved from the locked delivery Run, never trusted from an unvalidated payload |
+| `actor_id` | configured SEM service principal's `core.principal.id`; never a HumanActor |
+| `source` | literal `sem` |
+| `event_type` | authenticated envelope's `event_type` |
+| `idempotency_key` | `event_id` serialized as canonical lowercase hyphenated UUID text |
+| `payload` | authenticated envelope's `payload` JSON value |
+| `payload_hash` | JCS SHA-256 of that payload value |
+| `event_envelope_hash` | JCS SHA-256 of the complete authenticated event envelope |
+| `status` | existing default unless the application contract explicitly freezes another initial value |
+| `execution_id`, `execution_event_sequence` | exact authenticated envelope values |
+
+`schema_version` and `occurred_at` are covered by `event_envelope_hash` even though they are not separate Inbox columns. The Run-derived tenant/project identity is authoritative for the FK scope. All hashes are computed and validated before opening the transaction; the transaction still revalidates the locked Run and binding tuple before insertion.
+
+
 For SEM rows, set `integration.inbound_event.id = event_id` and `idempotency_key = event_id` serialized as the canonical lowercase hyphenated UUID string. This keeps the existing `(project_id, source, idempotency_key)` uniqueness aligned with event identity, while the global primary key remains the cross-project uniqueness authority and the new partial `(execution_id, execution_event_sequence)` index remains the sequence uniqueness authority. Do not use sequence or payload hash as the idempotency key.
 
 ## 3. Proposed DDL (illustrative only)
