@@ -23,6 +23,7 @@ The current Inbox constraints are: PK(id), UNIQUE(project_id,id), UNIQUE(tenant_
 | SEM concept | AI-PM storage |
 |---|---|
 | event_id | integration.inbound_event.id (existing global PK) |
+| idempotency_key | Canonical lowercase hyphenated UUID text of the same event_id; do not use execution sequence or payload hash |
 | execution_id | delivery.task_run.id |
 | execution_event_sequence | new integration.inbound_event.execution_event_sequence |
 | payload | integration.inbound_event.payload JSONB |
@@ -32,6 +33,8 @@ The current Inbox constraints are: PK(id), UNIQUE(project_id,id), UNIQUE(tenant_
 | contiguous cursor | new delivery.task_run.execution_event_sequence, initial value 0 |
 
 Reuse the existing Inbox; do not create a parallel SEM Inbox unless live catalog evidence reveals a concrete blocker. The SEM-specific application port must not call \`submit_event()\`, create \`integration.job\`, or enqueue AI analysis.
+
+For SEM rows, set `integration.inbound_event.id = event_id` and `idempotency_key = event_id` serialized as the canonical lowercase hyphenated UUID string. This keeps the existing `(project_id, source, idempotency_key)` uniqueness aligned with event identity, while the global primary key remains the cross-project uniqueness authority and the new partial `(execution_id, execution_event_sequence)` index remains the sequence uniqueness authority. Do not use sequence or payload hash as the idempotency key.
 
 ## 3. Proposed DDL (illustrative only)
 
