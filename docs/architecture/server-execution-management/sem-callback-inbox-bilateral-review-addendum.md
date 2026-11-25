@@ -166,7 +166,7 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 44 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 48 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
@@ -187,7 +187,7 @@ The latest review identified two defects in the illustrative SEM Inbox CHECK: re
 
 The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
 
-The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 44 cases.
+The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 48 cases.
 
 
 ## 12. Optional correlation_id is part of authenticated envelope identity
@@ -199,7 +199,7 @@ The contract is corrected: JCS covers every schema-defined envelope field that i
 The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
 
 
-INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 44 cases.
+INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 48 cases.
 
 
 ## 13. Explicit PostgreSQL CHECK truth table
@@ -261,4 +261,24 @@ The DDL design now freezes this precedence:
 4. No event_id row but SEM sequence key owned by another event → 409 EVENT_SEQUENCE_CONFLICT.
 5. ON CONFLICT returns no row and neither key can be found → rollback and generic integrity failure.
 
-Added INBOX-40..44 for simultaneous cross-key conflict precedence, inconsistent exact-duplicate row identity, sequence-only ownership, non-SEM global event_id collisions and Run-derived tenant/project integrity. The PostgreSQL acceptance matrix now has 44 cases. This is a design correction only; no migration or runtime code changed.
+Added INBOX-40..44 for simultaneous cross-key conflict precedence, inconsistent exact-duplicate row identity, sequence-only ownership, non-SEM global event_id collisions and Run-derived tenant/project integrity. The PostgreSQL acceptance matrix now has 48 cases. This is a design correction only; no migration or runtime code changed.
+
+
+## 19. Run observation row mapping and transaction-local Inbox linkage
+
+A source-level recheck of `migrations/0013_task_run_event.sql` found that `delivery.task_run_event` has required denormalized columns `tenant_id`, `project_id`, `task_id`, `run_id`, `client_id`, `event_type`, `lease_generation` and `dedupe_tag`; `detail` is nullable JSONB. The earlier abbreviated insert description was insufficient to implement safely.
+
+The DDL design now freezes the complete SEM observation row:
+- tenant/project/task/run copied from the locked delivery Run;
+- client_id copied from Run.lease_client_id (nullable; no synthetic SEM client);
+- lease_generation copied from the AI-PM Run at observation time;
+- event_type fixed to sem_infrastructure_observed;
+- dedupe_tag is the decimal sequence;
+- occurred_at comes from the authenticated envelope; received_at/created_at use DB defaults;
+- detail is a required JSON object containing event_id, sequence, SEM event type, schema version, occurred_at, event_envelope_hash, binding_epoch, Runner/Supervisor identity and applicable process/evidence references.
+
+SEM binding_epoch and AI-PM task_run_event.lease_generation are different dimensions and must never be conflated. The exact INSERT ... SELECT and cursor compare-and-set SQL are in the DDL design. The generic record_run_event() helper is not used because its occurred_at and dedupe behavior do not implement the SEM callback contract.
+
+Draft decision: keep the existing append-only task_run_event schema without a new source_event_id column/FK. The Inbox insert, observation insert and cursor update are atomic in one transaction; the SEM detail CHECK and partial unique index provide database backstops; duplicate replay verifies the existing observation's scope, event_id and event_envelope_hash before ACK. This avoids adding a new retention FK coupling but requires real PostgreSQL two-connection/crash tests.
+
+Added INBOX-45..48 for missing/non-object detail, required detail fields/sequence consistency, denormalized Run provenance and broken duplicate Inbox↔observation linkage. The matrix now contains 48 cases. This remains a Draft design choice, not a migration or implementation authorization.
