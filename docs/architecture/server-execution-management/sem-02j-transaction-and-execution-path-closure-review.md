@@ -495,3 +495,101 @@ The GitHub file-fetch audit in this pass verified the baseline provenance and se
 - P1: add DDL-level tests for tenant/project/task composite identity and for the future Barrier/HIR/E6/process-evidence anchors.
 
 Status remains **Changes Required / Audit In Progress**. This pass improves migration provenance and verifies exact late DDL, but does not close the full migration audit, select a global lock order, authorize schema implementation, or start Phase 0. No business code, migration, API/WSS implementation or runtime configuration was changed.
+
+
+## 14. Seventh audit pass — exact execution-core baseline DDL and post-baseline delta inventory
+
+This pass inspected the complete current `migrations/` directory and extracted the execution-core table definitions, constraints, foreign keys, unique indexes and relevant triggers from `0001_baseline.sql`. It also fetched every post-baseline migration file and searched its SQL for changes to the execution-core relations.
+
+### 14.1 Migration manifest: verified against both refs
+
+- Current `master` contains exactly **59 SQL files**: `0001_baseline.sql` plus every numbered migration `0002` through `0059`.
+- No missing, duplicate or out-of-range version was found in the directory listing.
+- The PR branch `docs/sem-02e-architecture-convergence` contains the same 59 filenames and the same blob SHA for every migration file. The PR branch does not carry a divergent migration chain.
+- This is a Git tree/filename/blob comparison only. It is not evidence that PostgreSQL accepted the chain.
+
+### 14.2 Baseline execution-core entities and database-enforced relationships
+
+The following definitions were extracted directly from `0001_baseline.sql` (line numbers refer to the current master blob):
+
+| Entity | Baseline definition | Important database constraints / indexes |
+|---|---:|---|
+| `delivery.task` | 1680–1706 | PK `id`; unique `(project_id,id)`, `(tenant_id,id)`; tenant/project composite FK; milestone composite FK; active/status lookup index; code uniqueness added later by 0050 |
+| `delivery.task_run` | 1894–1960 | PK `id`; unique `(project_id,id)`, `(tenant_id,id)`; composite `(project_id,task_id)` FK to Task; `(tenant_id,lease_client_id)` FK to device; partial active Run, attempt, source-event and dispatch/lease indexes |
+| `delivery.task_interaction` | 1770–1798 | PK; unique `(project_id,id)`, `(run_id,event_id)`; unique one-open-chain-per-Task partial index; separate single-column FKs to Task, Run and Project |
+| `delivery.interaction_response` | 1448–1461 | PK; unique `(project_id,id)`; one response per Interaction and idempotency index; separate single-column FKs to Interaction, Task, Run and Project |
+| `delivery.interaction_response_delivery` | 1468–1487 | PK; unique `(project_id,id)`; unique one delivery per response; separate single-column FKs to Interaction, Response, Run and Project |
+| `delivery.continuation` | 1427–1441 | PK; unique `(project_id,id)`, `(run_id,generation)`; separate single-column FKs to Interaction, Task and Run |
+| `delivery.worker_command` | 2236–2262 | PK; unique `(project_id,id)`; partial active-command unique index on `(run_id,command_type,interaction_id)`; separate single-column FKs to Interaction, Task and Run |
+| `delivery.task_waiting` | 2114–2128 | PK; partial one-active-waiting-per-Task unique index; composite project/task FK |
+| `delivery.task_run_cleanup` | 2016–2031 | PK on `run_id`; Run FK with cascade; due/human indexes; 0054 adds claim fencing |
+| `governance.human_intervention` | 2531–2543 | PK; tenant/project composite FK; proposal/actor FKs; seven action-history types, not a Run-scoped HIR lifecycle |
+| `integration.notification` | 2687–2697 | PK; tenant/project composite FK; proposal source unique; Project Feed shape with shared `read_at` |
+
+### 14.3 Composite-identity gaps in the existing execution schema
+
+The baseline has useful composite keys on Task and Run, and the normal Run→Task relation is correctly constrained by `(project_id,task_id)`. However, several child records carry multiple aggregate IDs but validate them independently:
+
+- `task_interaction`: Task, Run, tenant and project are separately referenced; there is no composite FK proving that the referenced Run belongs to the referenced Task and same Project/Tenant.
+- `interaction_response`: Interaction, Task and Run are independently referenced. A valid set of individual IDs can therefore still describe different aggregate identities unless the application transaction checks them.
+- `interaction_response_delivery`: Interaction, Response and Run are independently referenced; no composite FK proves the response/interaction/run tuple is coherent.
+- `continuation`: Task, Run and origin Interaction are independently referenced; no DB constraint proves that all three belong to the same Task/Run lineage.
+- `worker_command`: Task, Run and optional Interaction are independently referenced; no composite FK proves that the command target tuple is coherent.
+- `human_consultation` (0046): nullable Task FK is only `task_id → task(id) ON DELETE SET NULL`; `tenant_id` separately references Tenant, and `project_id` has no same-Project composite FK. This is a generic consultation row, not a typed HIR/E6 binding.
+- `task_run_event` (0013) intentionally has no database FK, as its migration comment explicitly delegates cross-aggregate identity to application validation.
+
+These are **schema-enforced integrity gaps**, not proof that current API handlers accept mismatched IDs. The source transaction audit must verify every writer validates the full tuple under the appropriate locks. SEM's future HIR, Barrier, process-evidence and E6 anchors must not repeat this independent-FK pattern; use matching composite unique targets and deferred constraints where a real cycle requires them.
+
+### 14.4 Revision and start-gate snapshot references
+
+Two additional schema details matter to execution provenance:
+
+- 0042 creates `delivery.task_revision` with `FOREIGN KEY (task_id) REFERENCES delivery.task(id)`; `task.current_task_revision_id` and `task_run.task_revision_id` each reference Revision by ID only. The DDL does not prove that the current Revision belongs to that Task, or that the Run's Revision belongs to the Run's Task. Application CAS/ownership validation is therefore part of the correctness boundary.
+- 0044 creates `task_run_dependency_snapshot` with a Run ID FK and a separate Tenant FK, and stores Task/predecessor IDs without a composite Task/Run identity FK. The snapshot is historical gate evidence, but its relational ownership is not fully enforced by the DDL.
+
+### 14.5 Unique-index and trigger semantics that affect concurrent transactions
+
+- `uq_task_run_active`, `uq_task_review_active`, attempt-number indexes, source-event idempotency, open Interaction chain, active Task waiting and active Worker command indexes are database serialization points. Their unique-index waits/conflicts must be included in concurrency tests; they do not replace Task Barrier authorization.
+- `uq_worker_command_active(run_id, command_type, interaction_id)` has a nullable `interaction_id`. PostgreSQL unique indexes treat NULL values as distinct, so multiple otherwise-identical active commands with NULL interaction_id are not prevented by this index. Verify whether command creation supplies a separate idempotency key or serializes this case; do not assume this index alone enforces one active terminate command.
+- 0013 adds an append-only UPDATE guard to `task_run_event`; DELETE remains permitted by design. This event ledger is not a process-exit evidence ledger.
+- The baseline has a BEFORE UPDATE guard on `task_run` for immutable Review report fields. 0050 adds a BEFORE INSERT trigger on `delivery.task` to fill its business code.
+- 0050's trigger computes `MAX(code)+1` without an advisory/row lock. Its `EXCEPTION WHEN unique_violation` block encloses only the SELECT, not the outer INSERT that later checks `uq_task_code_project`; a concurrent unique-index conflict raised after the trigger returns cannot be caught by that block. The documented fallback `P-<id>` therefore does not handle the concurrent INSERT collision as written. This is an adjacent Task-creation concurrency defect and must be tracked separately from SEM's Run lock order.
+- FK checks take key-share locks on referenced rows; FK deletes/updates and unique-index conflicts can add waits even when application SQL does not explicitly request a row lock. These implicit edges remain part of the complete lock graph.
+
+### 14.6 Post-baseline delta inventory affecting the execution core
+
+A fetch-and-scan of every `0002–0059` SQL file found these direct execution-core changes:
+
+| Migration | Direct effect |
+|---|---|
+| 0010 | Adds `delivery.task.implementation_baseline_id` |
+| 0011 | Adds Task Plan revision/key references and a partial unique index |
+| 0013 | Adds `task_run_event` append-only event ledger and indexes/trigger |
+| 0014 | Adds pinned knowledge revision to Task knowledge refs |
+| 0015 | Adds Task schedule columns and CHECK constraints |
+| 0042 | Adds Task Revision table, Task current-revision pointer and Run revision pointer |
+| 0044 | Adds Task→Product relation, Run dependency snapshot, and Run product-gate snapshot fields |
+| 0045 | Adds Product-specific Task acceptance records |
+| 0046 | Adds generic Human Consultation table with nullable Task FK |
+| 0047 | Product-link withdrawal semantics; no direct Task/Run DDL |
+| 0050 | Adds Task business code, unique index and insert trigger |
+| 0051 | No direct Task/Run DDL; execution log remains the Run event ledger |
+| 0052 | Adds issue/risk/blocker entities; blocker may reference a Task |
+| 0053 | Adds per-device active Run partial unique index on `lease_client_id` |
+| 0054 | Adds `task_run_cleanup.claim_token` and changes due index to `(next_retry_at,run_id)` |
+| 0055 | Adds separate Workspace reclamation ledger with restrictive FKs to Project, Project Repository and Run Repository |
+| 0056–0057 | Add reclaimed-byte accounting and cumulative totals |
+| 0058–0059 | No direct Task/Run/Interaction/Command DDL identified |
+
+The inventory is based on static SQL content and direct text inspection. It does not yet include a PostgreSQL parser's resolved dependency graph or catalog-confirmed trigger/function state.
+
+### 14.7 Updated blockers and status
+
+- P0: fresh-database replay of the exact 59-file chain remains unexecuted.
+- P0: live catalog capture (`pg_constraint`, `pg_index`, `pg_trigger`, `pg_proc`) remains unexecuted; the Git baseline is not a substitute.
+- P0: finish application-writer validation for the independent-FK tuples above and incorporate FK key-share/unique-index waits into the global lock graph.
+- P1: resolve the nullable `worker_command` uniqueness case and the 0050 Task-code concurrent allocation defect, or record explicit application-level idempotency/serialization proof.
+- P1: add cross-Task/Project negative tests for Task Revision, Interaction/Response/Continuation/Command, Human Consultation and Run dependency snapshots.
+- Existing P0 lock-order and Task Barrier bypass findings from §§9–11 remain open. No global lock order is selected by this pass.
+
+Status remains **Changes Required / Audit In Progress**. This pass verifies the Git migration manifest and static DDL relationships; it does not claim a successful PostgreSQL replay, live catalog capture, complete writer audit, or deadlock-free lock order. No business code, migration, API/WSS implementation or runtime configuration was changed. No PR merge or Phase 0 authorization.
