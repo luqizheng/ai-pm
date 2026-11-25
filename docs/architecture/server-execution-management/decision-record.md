@@ -141,5 +141,16 @@ ADR-SEM-14 中“ACK 必须由 Runner 在 OS 进程句柄确认退出后发送�
 
 1. ADR-SEM-14 must distinguish command receipt ACK, command execution result, process-exit evidence and continuation-consumed receipt. Natural process exit has no command_id; command-triggered exit correlates to its command. E3 requires OS-level exit observation and exact Run+Generation+process_sequence+boot_id+process identity.
 2. ADR-SEM-16 must be amended because Interaction scheduling_shield and Task Execution Barrier are separate protections. Barrier is authoritative for E4/E5 execution uncertainty; shield remains for Interaction lifecycle. Every dispatchability path checks both in one Platform transaction.
-3. The Platform-side active process-sequence fence is still an unresolved protocol requirement. SEM owns OS observations, but Platform must be able to validate the currently accepted sequence for Lease Renewal and reject stale/late sequence reports. Define the atomic continuation-consumed/sequence-advance API before implementation.
+3. SEM-02F specifies the candidate Platform process-sequence fence: `delivery.task_run_process` plus `task_run.active_process_sequence`, authenticated initial registration, continuation-consumed sequence advance and process-bound Lease Renewal. Exact DDL/API/lock order remains a P0 review item.
 4. HIR reuse of governance.human_intervention is a user-approved direction, not yet a proven drop-in fit: current repository evidence describes it as intervention-action history (veto/rollback/freeze). The domain model must preserve action history versus HIR work-item lifecycle.
+
+
+## L. SEM-02F physical contract proposals (Review Pending)
+
+- HIR: extend `governance.human_intervention` with `record_kind=action|hir`; preserve existing action semantics and add the seven-state HIR lifecycle.
+- Notification: preserve `integration.notification` project Feed and parent `read_at`; add `integration.notification_recipient` for per-principal Inbox and explicit unassigned queue.
+- Process identity: add Platform-owned `delivery.task_run_process` and `task_run.active_process_sequence` for process-bound Lease Renewal fencing.
+- Barrier: `delivery.task_execution_barrier`, one unreleased Barrier per Task; E6 authorizes only the exact bound successor without releasing the Barrier.
+- Orphan detection: periodic Platform DB-only scanner, not a SEM function; B06-D3 direct requeue is removed.
+
+These proposals are specified in [SEM-02F](./sem-02f-executable-physical-and-protocol-contracts.md). They do not alter ADR status or authorize implementation.
