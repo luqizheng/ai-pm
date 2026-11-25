@@ -189,3 +189,14 @@ Consequences:
 4. The current permission vocabulary (`PM_MCP_READ`, `PM_MCP_AGENT_REPORT`, `PM_MCP_COMMAND`) is not sufficient proof of exact Task/Run/attempt scope. The grant must be enforced by the AI-PM application-service boundary for every operation.
 
 This is a source finding, not an implementation instruction. It reinforces the credential/enrollment design gate; it does not authorize a schema migration or compatibility change.
+
+## 11. SEM Runner enrollment and WSS dispatch readiness alignment
+
+The canonical SEM D-01 proposal is maintained in [smark-sem: Runner Enrollment and Cryptographic Identity](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/architecture/runner-enrollment-and-cryptographic-identity-draft.md).
+
+The infrastructure enrollment flow is SEM-owned and GitLab-Runner-style: an SEM administrator creates a short-lived, single-use registration credential; an operator registers the Runner host against the SEM registry URL; the Runner generates its private key locally and submits only its public key; SEM assigns the immutable `runner_id`. The registration token is bootstrap-only and is never a steady-state WSS or AI-PM MCP credential.
+
+The Runner maintains an outbound authenticated long-lived WSS session to SEM. SEM uses this existing session both for liveness and task delivery; it does not establish a new connection or rely on per-task HTTP polling. However, an open WSS socket alone does not make a Runner dispatch-ready. SEM's admission predicate also requires a fresh application heartbeat, fresh resource telemetry for the same boot identity, a healthy Supervisor, explicit accepting-work state, and sufficient capacity after durable reservations.
+
+AI-PM must treat the resulting Runner identity/binding event as infrastructure evidence only. AI-PM still creates and fences its own delegated execution grant; SEM's WSS session, registration token and Runner identity do not authorize MCP operations. WSS disconnect or heartbeat timeout is not process-exit evidence and must not trigger blind reassignment of the same attempt.
+
