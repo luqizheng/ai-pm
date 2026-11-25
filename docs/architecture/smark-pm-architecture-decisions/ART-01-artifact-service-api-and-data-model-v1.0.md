@@ -595,3 +595,10 @@ AI-PM 自己运行消费者契约与集成测试：SDK 兼容、授权委托、�
 ART-01 冻结了 V1 的目标服务边界、资源模型、API 目录、授权委托原则、file-service 适配契约、Generator 安全契约、Visualization 数据迁移方向和实施门禁。
 
 **ART-01 完成不等于 Artifact Service 已实现。** 在 ART-02 取得真实 IAM、file-service、RustFS、CI 和 viz 数据证据之前，不得创建生产迁移或开放生产流量。后续实施必须逐项满足本文契约，并将实现证据以 ART-03 及后续记录归档。
+
+
+## 15. V1 API Errata
+
+本基线的 GenerationJob 响应字段、请求错误和取消语义补充见 [ART-01 V1 API Errata 001](ART-01-V1-API-ERRATA-001.md)。该 Errata 已由用户确认并纳入 V1 正式契约；与本文对应条款不一致时，以 Errata 对 GenerationJob 增量契约的明确规定为准。
+
+**重要实施边界：** API 契约确认不代表生成能力启用。SeeCode Adapter 不可用时，创建 GenerationJob 仍须 fail-closed，返回 `503 GENERATOR_UNAVAILABLE`；LMMS delegation 与 File Service upload-finalize 两个 ART-02 P0 门禁关闭前，不得启用生产生成路径。
