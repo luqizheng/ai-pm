@@ -148,7 +148,7 @@ No migration or runtime source was changed. The DDL remains Draft; live PostgreS
 
 A follow-up review found that the earlier duplicate rule compared `execution_id`, `execution_event_sequence` and the JCS hash of `payload` only. That is insufficient: an event replay could retain the same payload while changing `event_type`, `schema_version` or `occurred_at`, and be incorrectly acknowledged as a duplicate.
 
-The candidate DDL now preserves the existing payload-level `payload_hash` and adds a SEM-only `event_envelope_hash`. The latter is SHA-256 over RFC 8785 JCS UTF-8 bytes of the complete authenticated event envelope: `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence` and `payload`. It excludes HTTP signature headers and transport metadata. Duplicate detection compares the envelope hash plus the stored event type and execution/sequence tuple.
+The candidate DDL now preserves the existing payload-level `payload_hash` and adds a SEM-only `event_envelope_hash`. The latter is SHA-256 over RFC 8785 JCS UTF-8 bytes of the complete authenticated event envelope: every schema-defined envelope field that is present: `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. Unknown fields reject; absent optional fields are omitted. It excludes HTTP signature headers and transport metadata. Duplicate detection compares the envelope hash plus the stored event type and execution/sequence tuple.
 
 The SEM-specific CHECK requires a lowercase 64-character hex hash for `source='sem'` and NULL for non-SEM events. INBOX-29..31 cover changed event_type, changed schema_version/occurred_at, and equivalent JCS envelopes with different whitespace/member ordering.
 
@@ -174,7 +174,7 @@ The same DDL update also fixes the SEM mapping for the existing Inbox idempotenc
 
 ## 10. Shared callback-envelope vector pinned
 
-SEM now provides a shared callback fixture at `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`, pinned to `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`. It contains one valid `execution.infrastructure_uncertain` event, the payload and full-envelope RFC 8785 canonical UTF-8 bytes, and both SHA-256 hashes.
+SEM now provides a shared callback fixture at `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`, pinned to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. It contains one valid `execution.infrastructure_uncertain` event, the payload and full-envelope RFC 8785 canonical UTF-8 bytes, and both SHA-256 hashes.
 
 The SEM Python and Node validators independently verify exact bytes and hashes. Added INBOX-35: AI-PM's eventual Rust implementation must pass the exact same pinned vector, not a locally recreated approximation. This vector uses ASCII strings and integer values by design; the wider RFC 8785 Unicode/numeric boundary requirements in INBOX-33 remain separate.
 
@@ -188,3 +188,12 @@ The latest review identified two defects in the illustrative SEM Inbox CHECK: re
 The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
 
 The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 38 cases.
+
+
+## 12. Optional correlation_id is part of authenticated envelope identity
+
+A schema re-read found that Platform–SEM `EventBase` permits optional top-level `correlation_id`. The earlier full-envelope hash field list omitted it. That would have allowed a callback to be replayed with a changed correlation_id while retaining the same envelope hash.
+
+The contract is corrected: JCS covers every schema-defined envelope field that is present, including `correlation_id` when present. Absent optional fields are omitted; unknown fields are rejected by schema validation before hashing. The shared vector now includes `correlation_id` and pins to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. Python and Node assert that changing correlation_id changes the full-envelope hash.
+
+The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
