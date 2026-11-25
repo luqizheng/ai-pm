@@ -166,7 +166,16 @@ The DDL design now explicitly requires:
 - Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
 - Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
 
-Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 34 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 35 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
 
 
 The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
+
+
+## 10. Shared callback-envelope vector pinned
+
+SEM now provides a shared callback fixture at `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`, pinned to `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`. It contains one valid `execution.infrastructure_uncertain` event, the payload and full-envelope RFC 8785 canonical UTF-8 bytes, and both SHA-256 hashes.
+
+The SEM Python and Node validators independently verify exact bytes and hashes. Added INBOX-35: AI-PM's eventual Rust implementation must pass the exact same pinned vector, not a locally recreated approximation. This vector uses ASCII strings and integer values by design; the wider RFC 8785 Unicode/numeric boundary requirements in INBOX-33 remain separate.
+
+The shared vector closes one deterministic cross-language fixture gap, but not the production Rust implementation, dependency selection, raw HTTP duplicate-member rejection, PostgreSQL DDL/concurrency tests or bilateral live callback integration. No runtime code or migration was changed.
