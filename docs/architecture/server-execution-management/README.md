@@ -130,3 +130,8 @@ SEM-02J §19 confirms the current Project lock inventory and narrows the §18 cy
 ### SEM-02J thirteenth audit pass — Project↔Run implicit Interaction-FK cycle
 
 SEM-02J §20 identifies a further Project lock inversion: Run Claim holds Project `FOR UPDATE` before Run, while `report_interaction` holds Run before inserting a Project-scoped Interaction whose FK requires Project KEY SHARE. This produces a Project→Run / Run→Project deadlock candidate independently of the audit-log insert. The `FOR NO KEY UPDATE` claim-side candidate could address this and §18's audit-FK cycle, but remains unapproved until deterministic PostgreSQL tests also prove Project archive/interaction linearization. Other Run-first writers remain under review. No PostgreSQL concurrency tests have been run; P0 / Changes Required / Audit In Progress remain open.
+
+
+### SEM-02J fourteenth audit pass — expanded Project↔Run writer inventory
+
+SEM-02J §21 extends the Project→Run / Run→Project lock-cycle inventory to Run lease reacquisition, continue Command ACK and persisted Interaction response. Each path acquires/updates Run before its Project-scoped audit FK; continue ACK additionally holds the Command row, and response persistence holds Interaction first. The Project `FOR NO KEY UPDATE` option remains a candidate only. Add one independent two-connection test per writer and preserve archive/claim serialization. No PostgreSQL concurrency tests were run; P0 / Changes Required / Audit In Progress remain open.
