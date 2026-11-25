@@ -243,7 +243,7 @@ Rollback is not a second writer mode:
 
 ## 10. Open decisions / implementation gates
 
-1. **Artifact lookup by artifact_key** — add an API lookup/filter before the AI-PM slot-binding saga is implementable.\n2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the `smark.seecode.input` envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
+1. **Artifact lookup by artifact_key** — ART-04A proposes an exact-match filter and same-key create convergence; implementation and SDK support must be reviewed before the AI-PM slot-binding saga is implementable.\n2. **VizSpec compiler boundary** — keep business-aware VizSpec validation/compilation in AI-PM and freeze the exact versioned SeeCode input envelope consumed by Artifact Service; the existing compiler currently returns a bare SeeCode spec, so the integration must add the `smark.seecode.input` envelope wrapper and contract tests. No VizSpec or business relation semantics may leak into the generic service.
 2. **Reference relation value** — select an ART-01-approved relation_type for a Visualization business record; do not invent a new enum-like value in the consumer.
 3. **Output compatibility** — define how legacy HTML/PNG rows, if any, are copied and surfaced when the new SeeCode path is SVG-only.
 4. **Business version numbering** — preserve legacy `version_no` in AI-PM; do not assume Artifact Service `version_number` will equal it.
