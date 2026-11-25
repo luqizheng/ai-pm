@@ -1482,7 +1482,7 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
    RETURNING execution_event_sequence;
 
    Because all events for one execution lock the same Run row first, same-execution sequence writes serialize; the unique index remains a database backstop.
-8. Commit. Only after commit return the success ACK. For an exact duplicate event_id, do not insert another observation or move the cursor; verify the existing task_run_event row by run_id + sem event type + dedupe_tag and require detail.event_id and detail.event_envelope_hash to match the Inbox row. Missing/mismatched observation is a generic integrity failure and MUST NOT be ACKed.
+8. Commit. Only after commit return the success ACK. For an exact duplicate event_id, do not insert another observation or move the cursor; verify the existing task_run_event row by run_id + sem event type + dedupe_tag and require detail.event_id and detail.event_envelope_hash to match the Inbox row. Missing/mismatched observation or a cursor lower than an already committed event sequence is a generic integrity failure and MUST NOT be ACKed.
 
 All callback writers use one lock order: Run row → Inbox event → Run observation. No callback path may lock Inbox first and then Run. A cross-Run global event_id collision is resolved by the conflict-safe insert and the follow-up lookup; it must not attempt to lock the foreign Run or disclose its project/tenant. Same sequence/different event ID is EVENT_SEQUENCE_CONFLICT; same event ID/different body is IDEMPOTENCY_CONFLICT.
 
