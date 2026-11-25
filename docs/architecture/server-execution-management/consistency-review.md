@@ -145,3 +145,15 @@ The final global lock order remains unselected. The current migration-chain reco
 - `delivery.task_waiting`, Interaction scheduling shield and Task Execution Barrier are distinct gates; one Platform transaction predicate must evaluate all applicable gates.
 
 The global lock order remains unfrozen. Remaining work includes migration-chain reconciliation, exhaustive route/reader/writer inventory, exact API security contracts and deterministic two-connection concurrency tests. No implementation or Phase 0 is authorized.
+
+
+## 11. SEM-02J fourth source-audit pass
+
+- Interaction report/retry/response/consume, Continue/Terminate ACK, Continuation lifecycle hooks and progress/renewal paths were traced.
+- Confirmed the connected lock graph includes Project, Run, Task, Interaction, Command and Continuation. Task cancellation locks Task before Interaction/Run; normal execution and ACK paths include Run/Command before Task.
+- Continue ACK and mark_consumed both mutate delivery/continuation/interaction/task effects; idempotent predicates alone do not prove deadlock freedom.
+- Continuation generation allocation relies on the caller holding the Run lock; future callers must preserve this or use a DB-enforced allocator.
+- Cleanup ledger locks are separate from Run authority and must not be treated as E3 process-exit evidence.
+- Added deterministic concurrency cases J11–J18. No global lock order selected.
+
+The full lock graph, migration-chain reconciliation, API/background route inventory and pair tests remain open. No implementation or Phase 0 is authorized.
