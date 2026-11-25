@@ -162,3 +162,12 @@ The new design must not equate Task completion with process exit or SEM release.
 Harness MCP may perform guarded business transitions such as starting (Task=running) and submitting a validated delivery (Task=submitted). It cannot set completed. Review/acceptance decides completion. Runner process start/exit is an infrastructure observation; AI-PM correlates it with its Run and decides the Run outcome. A zero exit code is not business success.
 
 SEM release should occur when AI-PM decides the specific Run/attempt no longer needs a runtime. This may be after accepted delivery while Task is still submitted/reviewing, after cancellation, or while awaiting human input. Do not trigger release only from Task=completed. Persist the release intent in the same Platform transaction as the relevant Run/Task decision through Outbox.
+
+
+## 9. Companion SEM contract draft
+
+The downstream SEM repository now contains a detailed, review-pending proposal for the four connected contracts: [Execution Identity, Lifecycle, Fencing and Delivery Contract](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/protocol/EXECUTION-IDENTITY-LIFECYCLE-FENCING-DELIVERY-CONTRACT-DRAFT.md).
+
+Its proposed two-stage Runner-bound bootstrap is a candidate design, not an approved credential architecture. AI-PM must retain authority over delegated grant issuance, exact Task/Run/attempt scope, operation allow-list, authorization_generation and per-call MCP enforcement. SEM transports the opaque bootstrap ticket and prompt; it must not be able to redeem the ticket or inspect the resulting MCP credential.
+
+The SEM contract also standardizes binding_epoch as the SEM-side Runner-binding fence, separate from AI-PM authorization_generation. Runner disconnect without positive process-exit or independently verified isolation evidence remains infrastructure_uncertain and prohibits competing reassignment. The detailed contract is cross-repository design input only; it does not change the verified current AI-PM source behavior or authorize implementation.
