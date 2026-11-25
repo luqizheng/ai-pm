@@ -178,8 +178,9 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
 
 1. Resolve the candidate Run by tenant_id + project_id + execution_id. Unknown, wrong-tenant, wrong-project, and review-run IDs return non-enumerating 404.
 2. Lock the exact Run row with SELECT FOR UPDATE. Validate delivery run kind and the current infrastructure binding tuple: runner_id, runner_key_version, boot_id, supervisor_instance_id, binding_epoch, plus event-specific process/evidence identity.
-3. Check the global event_id before sequence ownership. If an event_id row already exists, compare event_type, execution_id, execution_event_sequence, payload_hash and event_envelope_hash:
-   - Any changed value is 409 IDEMPOTENCY_CONFLICT. This classification has precedence even if the incoming execution/sequence pair is currently owned by another event. Do not disclose the existing row's tenant/project.
+3. Check the global event_id before sequence ownership. If an event_id row already exists, compare source, tenant_id, project_id, event_type, idempotency_key, execution_id, execution_event_sequence, payload_hash and event_envelope_hash against the authenticated request and the locked Run-derived tenant/project:
+   - source other than sem, a different idempotency_key, or any changed event/envelope identity value is 409 IDEMPOTENCY_CONFLICT. This classification has precedence even if the incoming execution/sequence pair is currently owned by another event. Do not disclose the existing row's tenant/project.
+   - A stored tenant_id/project_id that disagrees with the locked Run-derived scope is an integrity invariant failure: rollback and return a generic server error, never ACK.
    - If all values match, query the unique (execution_id, execution_event_sequence) key and require it to resolve to the exact same Inbox row. If it does not, rollback and return a generic integrity error; never ACK a partially inconsistent duplicate.
    - Only when the event_id row and the matching sequence row are the same row is the request an exact duplicate.
 4. If no event_id row exists, check the (execution_id, execution_event_sequence) key. If another event_id already owns the sequence, return 409 EVENT_SEQUENCE_CONFLICT. Then require incoming sequence = Run cursor + 1. A greater value is 409 EVENT_SEQUENCE_GAP with expected_sequence. A lower value without the matching committed event is conflict; never lower the cursor.
@@ -191,9 +192,9 @@ The SEM callback port MUST run this transaction at PostgreSQL READ COMMITTED iso
    RETURNING id;
 
    This catches the global event_id primary key and the SEM partial unique execution-sequence index without aborting the transaction. If no row is returned, issue new SELECT statements under READ COMMITTED (each obtains a fresh statement snapshot), first by global event_id and then, as applicable, by (execution_id, execution_event_sequence):
-   - If the event_id row exists and any event_type, execution_id, sequence, payload_hash or event_envelope_hash value differs, return 409 IDEMPOTENCY_CONFLICT. This takes precedence over any simultaneous sequence-owner conflict.
-   - If the event_id row exists and all values match, require the sequence lookup to identify that exact same row; otherwise rollback and return a generic integrity error, never ACK.
-   - If no event_id row exists but the sequence key is owned by another event_id, return 409 EVENT_SEQUENCE_CONFLICT.
+   - If the event_id row exists and source, tenant_id, project_id, event_type, idempotency_key, execution_id, sequence, payload_hash or event_envelope_hash differs, return 409 IDEMPOTENCY_CONFLICT (except a tenant/project mismatch against the locked Run, which is a generic integrity failure). This takes precedence over any simultaneous sequence-owner conflict.
+   - If the event_id row exists and all values match, require the sequence lookup (filtered to source='sem') to identify that exact same row; otherwise rollback and return a generic integrity error, never ACK.
+   - If no event_id row exists but the SEM sequence key is owned by another event_id, return 409 EVENT_SEQUENCE_CONFLICT.
    - If neither row exists after ON CONFLICT DO NOTHING, rollback and return a generic integrity error, never ACK.
    The two lookups may return different rows only when the event_id already conflicts with a changed tuple; in that case IDEMPOTENCY_CONFLICT takes precedence and no winner details are disclosed. A matching event_id row and a different sequence row is an invariant violation.
    This post-conflict read uses new SQL statements; it never queries inside an aborted transaction.
@@ -251,6 +252,8 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 | INBOX-40 | Existing global event_id belongs to a different execution/body while the incoming execution/sequence is also owned by another event | Deterministic precedence: 409 IDEMPOTENCY_CONFLICT; no winner tenant/project disclosure and no writes |
 | INBOX-41 | Existing event_id and all envelope hashes/tuple match, but the sequence lookup does not resolve to the same Inbox row | Generic integrity failure; rollback and never ACK an inconsistent duplicate |
 | INBOX-42 | No event_id row exists but the incoming execution/sequence is already owned by another event_id after a concurrent conflict | 409 EVENT_SEQUENCE_CONFLICT; no cursor movement or observation insert |
+| INBOX-43 | Global event_id already exists under a non-SEM source | 409 IDEMPOTENCY_CONFLICT; never classify the generic Inbox row as a SEM duplicate |
+| INBOX-44 | Existing event_id row's tenant_id/project_id conflicts with the locked Run-derived scope | Generic integrity failure; rollback and never disclose the stored scope or ACK |
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
@@ -592,4 +595,4 @@ The algorithm now has explicit precedence:
 3. If no global event_id exists but the execution/sequence key is owned, return 409 EVENT_SEQUENCE_CONFLICT.
 4. If ON CONFLICT reports no insert but neither key can be found, rollback and return generic integrity failure.
 
-Added INBOX-40..42 for cross-key conflict precedence, exact-duplicate row consistency and sequence-only conflict. This is a design correction; no migration or runtime code changed.
+Added INBOX-40..44 for cross-key conflict precedence, exact-duplicate row consistency, sequence-only conflict, non-SEM global event_id collisions and Run-derived tenant/project integrity. This is a design correction; no migration or runtime code changed.
