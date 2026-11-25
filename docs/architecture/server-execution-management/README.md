@@ -33,9 +33,10 @@
 ## Cross-repository constraints
 
 - AI-PM and SEM have independent databases. SEM has no AI-PM database credentials and no direct DB access.
-- AI-PM → SEM uses a versioned HTTP or HTTPS contract over the company private network, with transactional Outbox / durable Inbox and idempotent reconciliation. HTTPS is optional and supports enterprise CA or explicitly trusted self-signed certificates; certificate validation cannot be disabled. HTTP is restricted to the internal network and does not provide wire confidentiality.
+- AI-PM → SEM uses the Rust SDK provided and versioned by smark-sem, over its versioned HTTP or HTTPS contract on the company private network. AI-PM's Outbox worker calls the SDK; AI-PM owns Outbox persistence, retry scheduling and reconciliation. The SDK must not access AI-PM's database or make business retry/Task-state decisions. See the [SEM SDK provider/consumer contract draft](https://github.com/luqizheng/smark-sem/blob/docs/sem-sdk-consumer-contract/docs/architecture/sem-sdk-and-consumer-integration-contract-draft.md) and its [source compatibility audit](https://github.com/luqizheng/smark-sem/blob/docs/sem-sdk-consumer-contract/docs/architecture/sem-sdk-source-compatibility-audit.md). HTTPS is optional and supports enterprise CA or explicitly trusted self-signed certificates; certificate validation cannot be disabled. HTTP is restricted to the internal network and does not provide wire confidentiality.
 - Runner ↔ SEM uses authenticated WSS with enterprise CA or explicitly pinned self-signed server certificates; certificate validation remains mandatory.
 - SEM reports infrastructure facts only; it does not call Task/Run business Claim, Lease, HIR, Barrier, review or completion APIs.
+- SEM → AI-PM remains a callback to an AI-PM-owned endpoint. AI-PM owns callback authentication, Inbox transaction, Run observation and ACK-after-commit; the SDK does not embed or own this receiver.
 - Runner supervision defaults to unattended; supervised mode is explicit.
 - Resource telemetry from Runner informs SEM admission/concurrency.
 - Workspace/worktree backup is not required. One authoritative Git origin per repository.
