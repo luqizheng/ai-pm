@@ -205,3 +205,8 @@ SEM-02J §18 identifies a second implicit-FK lock-order blocker. Run claim locks
 ### Project lock-mode mitigation candidates
 
 SEM-02J §18.4 records two candidates for the Project↔Task audit-FK cycle: (1) use FOR NO KEY UPDATE for claim's Project status guard, which should still serialize with Project lifecycle updates while remaining compatible with FK KEY SHARE; or (2) acquire Project KEY SHARE before Task locks in affected writers. Neither is approved; verify PostgreSQL row-lock compatibility, all lifecycle writers, and two-connection schedules before selecting.
+
+
+## 10. SEM-02J Project/Product lock-mode cross-check
+
+SEM-02J §19 expands the Project lock inventory and distinguishes Project-first writers (archive, formal knowledge/review/Run-start guards, member changes, import lifecycle) from Task PATCH's Task→audit-FK→Project KEY SHARE edge. The claim-side Project `FOR NO KEY UPDATE` candidate remains plausible against archive's explicit `FOR UPDATE` and the audit FK's KEY SHARE, but is not approved pending PostgreSQL two-connection verification. Product lifecycle itself locks Product and does not subsequently lock Task; the remaining Product→Task inversion is specifically `add_task_product` (Product lock followed by Task FK KEY SHARE). TaskProduct withdrawal does not modify FK columns or lock parent rows, but its race with claim requires semantic testing. No PostgreSQL concurrency schedule was executed; P0 findings remain open and Phase 0 remains Not Started.
