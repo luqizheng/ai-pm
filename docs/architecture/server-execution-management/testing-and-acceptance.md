@@ -6,7 +6,7 @@
 1. Active process + expired Lease never creates a second process.
 2. Platform DB-only orphan scanner detects candidates without Worker restart.
 3. Runner project candidates are scanned; no candidate exclusion bypass.
-4. Barrier created atomically with HIR/audit/notification Outbox; no intermediate queued state.
+4. Barrier created atomically with HIR/audit/project Feed notification/recipient Inbox rows; no intermediate queued state.
 5. New Run row cannot bypass Task Barrier.
 6. Concurrent Claim, requeue, scanner and Run creation serialize correctly.
 7. Interaction terminate/continue works for Runner and SEM-local CodexExecutor.
@@ -32,3 +32,13 @@
 
 ## Chaos acceptance
 Platform/SEM/Runner restart, network partition, clock skew, duplicate events, process PID reuse, missing volume, resource pressure, key revocation and RabbitMQ outage. Assert no dual execution and complete audit trail.
+
+
+## SEM-02F additional mandatory tests
+- `human_intervention` action records continue to satisfy old action constraints; HIR records satisfy the HIR-only discriminator and seven-state transition rules.
+- Parent `integration.notification.read_at` and all existing project-feed producers/readers remain unchanged; recipient Inbox read state is per principal.
+- Task assignee → owner fallback → unassigned recipient resolution is deterministic and auditable.
+- E6 consultation has one Barrier and one unique successor; the successor is non-dispatchable before commit and only exact successor is allowed after commit.
+- `task_run_process` rejects duplicate sequence with a conflicting process identity; renewal from a stale sequence fails after continuation.
+- Natural process exit without command_id is accepted for a fully registered process identity; late exit cannot close a newer sequence.
+- Platform DB scanner runs periodically while worker remains alive and does not call SEM, Runner, CodexExecutor or RabbitMQ.
