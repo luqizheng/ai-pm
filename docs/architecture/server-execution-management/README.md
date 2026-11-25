@@ -1,5 +1,7 @@
 # Server Execution Management Architecture V1
 
+> **Harness identity and fencing review:** See [harness-identity-and-business-fencing-review.md](./harness-identity-and-business-fencing-review.md) for the P0 delegated-identity, dual-fencing, uncertain-Runner reassignment and Task-completion findings.
+
 > **Current architecture boundary:** See [execution-path-ownership-mapping.md](./execution-path-ownership-mapping.md) for the read-only mapping of existing Runner MCP, Worker, Run executor and process-adapter code to the new ownership model.
 
 > **Authority-boundary revision (2026-11-25):** The user-confirmed direction is now that SEM transports opaque execution messages and coordinates Runner/Harness runtime infrastructure only; Runner Supervisor owns local OS process lifecycle. AI-PM MCP is the sole Harness business-context and Task mutation channel. The older SEM-02E–02J control-plane assumptions and Protocol V1 Claim/Lease/business-command proxy model are superseded; see [authority-boundary decision](./authority-boundary-decision.md) and the [replacement execution-message protocol draft](https://github.com/luqizheng/smark-sem/blob/docs/sem-authority-boundary-convergence/docs/protocol/PLATFORM-SEM-EXECUTION-MESSAGE-PROTOCOL-DRAFT.md). Do not implement the superseded control path.
