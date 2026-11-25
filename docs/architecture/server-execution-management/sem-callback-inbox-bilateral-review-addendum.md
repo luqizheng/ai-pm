@@ -153,3 +153,17 @@ The candidate DDL now preserves the existing payload-level `payload_hash` and ad
 The SEM-specific CHECK requires a lowercase 64-character hex hash for `source='sem'` and NULL for non-SEM events. INBOX-29..31 cover changed event_type, changed schema_version/occurred_at, and equivalent JCS envelopes with different whitespace/member ordering.
 
 This closes the identified design-level equality ambiguity only. It does not prove the Rust JCS implementation, cross-language hash interoperability, database migration correctness or PostgreSQL concurrency behavior. DDL remains Draft / Changes Required; no migration or runtime code was changed.
+
+
+## 9. Callback JCS implementation and cross-language vector requirements
+
+The callback hash contract is not closed merely by selecting RFC 8785. The Rust producer/consumer implementation must be pinned and proven against an independent implementation using the same complete callback envelope.
+
+The DDL design now explicitly requires:
+- A pinned Rust JCS implementation/version; generic `serde_json::Value::to_string()` is not an acceptable canonicalizer.
+- RFC 8785 ECMAScript-compatible IEEE-754 number serialization and UTF-16 code-unit object-property ordering.
+- Duplicate JSON object member rejection before `serde_json::Value` materialization, including escaped-equivalent names and nested objects.
+- Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
+- Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
+
+Added INBOX-32..34. The expanded PostgreSQL acceptance matrix now has 34 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
