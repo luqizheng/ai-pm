@@ -24,6 +24,12 @@ This draft uses these existing keys rather than inventing composite keys that ar
 ## 2. Candidate migration DDL — Task Execution Barrier
 
 ```sql
+-- Additional candidate keys make cross-Task relationships enforceable by FKs.
+ALTER TABLE delivery.task_run
+    ADD CONSTRAINT uq_task_run_task_id UNIQUE (task_id, id),
+    ADD CONSTRAINT uq_task_run_tenant_task_id UNIQUE (tenant_id, task_id, id),
+    ADD CONSTRAINT uq_task_run_project_task_id UNIQUE (project_id, task_id, id);
+
 CREATE TABLE delivery.task_execution_barrier (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL,
@@ -52,12 +58,13 @@ CREATE TABLE delivery.task_execution_barrier (
     CONSTRAINT fk_task_execution_barrier_task
         FOREIGN KEY (project_id, task_id)
         REFERENCES delivery.task(project_id, id),
+    CONSTRAINT uq_task_execution_barrier_task_id UNIQUE (task_id, id),
     CONSTRAINT fk_task_execution_barrier_origin_run
-        FOREIGN KEY (tenant_id, origin_run_id)
-        REFERENCES delivery.task_run(tenant_id, id),
+        FOREIGN KEY (project_id, task_id, origin_run_id)
+        REFERENCES delivery.task_run(project_id, task_id, id),
     CONSTRAINT fk_task_execution_barrier_successor_run
-        FOREIGN KEY (tenant_id, authorized_successor_run_id)
-        REFERENCES delivery.task_run(tenant_id, id),
+        FOREIGN KEY (tenant_id, task_id, authorized_successor_run_id)
+        REFERENCES delivery.task_run(tenant_id, task_id, id),
     CONSTRAINT fk_task_execution_barrier_created_by
         FOREIGN KEY (created_by) REFERENCES core.principal(id),
     CONSTRAINT fk_task_execution_barrier_released_by
@@ -231,12 +238,20 @@ ALTER TABLE governance.human_consultation
 
 ALTER TABLE governance.human_consultation
     ADD CONSTRAINT fk_hc_e6_barrier
-    FOREIGN KEY (barrier_id) REFERENCES delivery.task_execution_barrier(id)
+    FOREIGN KEY (task_id, barrier_id)
+    REFERENCES delivery.task_execution_barrier(task_id, id)
     ON DELETE RESTRICT;
 
 ALTER TABLE governance.human_consultation
-    ADD CONSTRAINT fk_hc_e6_successor
-    FOREIGN KEY (successor_run_id) REFERENCES delivery.task_run(id)
+    ADD CONSTRAINT fk_hc_e6_hir_same_barrier
+    FOREIGN KEY (task_id, barrier_id, hir_id)
+    REFERENCES governance.human_intervention(task_id, barrier_id, id)
+    ON DELETE RESTRICT;
+
+ALTER TABLE governance.human_consultation
+    ADD CONSTRAINT fk_hc_e6_successor_same_task
+    FOREIGN KEY (tenant_id, task_id, successor_run_id)
+    REFERENCES delivery.task_run(tenant_id, task_id, id)
     ON DELETE RESTRICT;
 
 ALTER TABLE governance.human_consultation
@@ -321,8 +336,6 @@ ALTER TABLE delivery.task_run
 CREATE TABLE delivery.task_run_process (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    task_id uuid NOT NULL,
     run_id uuid NOT NULL,
     lease_generation integer NOT NULL CHECK (lease_generation >= 0),
     process_sequence integer NOT NULL CHECK (process_sequence >= 1),
@@ -353,9 +366,6 @@ CREATE TABLE delivery.task_run_process (
         FOREIGN KEY (tenant_id, run_id)
         REFERENCES delivery.task_run(tenant_id, id)
         ON DELETE RESTRICT,
-    CONSTRAINT fk_task_run_process_task
-        FOREIGN KEY (project_id, task_id)
-        REFERENCES delivery.task(project_id, id),
     CONSTRAINT fk_task_run_process_device
         FOREIGN KEY (tenant_id, device_id)
         REFERENCES devenv.device(tenant_id, id),
@@ -566,11 +576,12 @@ SEM must persist each incoming process evidence event before acknowledging it. R
 
 1. Confirm the HIR discriminator DDL does not conflict with any unseen reader that assumes `intervention_type NOT NULL`.
 2. Confirm the deferred composite FK for `task_run.active_process_sequence` is valid under the actual migration order and does not create an update deadlock.
-3. Confirm `worker_command` process-sequence reservation semantics for terminate and continue, including the terminate-before-continue race.
-4. Decide whether Platform process-exit evidence needs a separate append-only evidence table instead of write-once exit columns on `task_run_process`.
-5. Finalize lease proof transport format and exact service API authentication middleware.
-6. Confirm Task status projection when Barrier is created (Blocked vs keeping the last Task status) without using `task_waiting` as a substitute for HIR.
-7. Complete full repository search for every notification reader/writer, every human_intervention writer/reader and every direct Run INSERT.
-8. Re-run all schema/code checks against the latest master immediately before executable Migration authoring.
+3. Confirm the new `task_run` composite unique keys are acceptable and do not duplicate an existing key under another name.
+4. Confirm `worker_command` process-sequence reservation semantics for terminate and continue, including the terminate-before-continue race.
+5. Decide whether Platform process-exit evidence needs a separate append-only evidence table instead of write-once exit columns on `task_run_process`.
+6. Finalize lease proof transport format and exact service API authentication middleware.
+7. Confirm Task status projection when Barrier is created (Blocked vs keeping the last Task status) without using `task_waiting` as a substitute for HIR.
+8. Complete full repository search for every notification reader/writer, every human_intervention writer/reader and every direct Run INSERT.
+9. Re-run all schema/code checks against the latest master immediately before executable Migration authoring.
 
 No SQL in this document is executable as-is. No Migration/API/WSS implementation or Phase 0 work is authorized.
