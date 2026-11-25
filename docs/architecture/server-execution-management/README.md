@@ -53,3 +53,8 @@ Phase 0–5 的唯一编号和依赖以 [SEM-02E §14](./sem-02e-architecture-co
 ## SEM-02F 可实施契约
 
 [SEM-02F — Executable Physical and Protocol Contracts](./sem-02f-executable-physical-and-protocol-contracts.md) 将 Task Barrier、HIR discriminator、E6 anchors、Notification Recipient、Platform Process Sequence、Lease Renewal fencing、周期 orphan scanner 和 Phase 0 验收细化为候选物理/协议契约。它不是已批准 ADR，也不授权实施。
+
+
+## SEM-02G 数据库与 API 契约草案
+
+[SEM-02G — Database DDL and Service API Contract Draft](./sem-02g-database-and-api-contract-draft.md) 包含 Task Barrier、HIR、E6、Notification Recipient、Process Registry 的 SQL-shaped 草案，以及 Platform–SEM HTTPS / Runner–SEM WSS 消息样例。仅供评审，不是可执行 Migration。
