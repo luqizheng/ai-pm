@@ -1,5 +1,8 @@
 # SEM-02I — Corrected Platform Schema and Process API Candidate
 
+> **Authority-boundary revision (2026-11-25):** **Supersession notice (2026-11-25):** This candidate's SEM process API and cross-service control assumptions predate the user-confirmed [authority-boundary decision](./authority-boundary-decision.md). It is not implementation-authorizing. Re-map Platform business authority and SEM infrastructure observations before deriving any new schema/API.
+
+
 - Status: **Review Pending / Not migration-ready**.
 - Supersedes the affected SQL-shaped fragments in SEM-02G; read with [SEM-02H](./sem-02h-ddl-integrity-and-transaction-review.md).
 - Schema evidence baseline: GitHub `master@d0e72fa6805aebeadf1b282e430deba493072fd6`.
