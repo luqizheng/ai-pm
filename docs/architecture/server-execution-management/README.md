@@ -125,3 +125,8 @@ SEM-02J §18.4 records two unselected ways to close the Project→Task / Task→
 ### SEM-02J twelfth audit pass — Project/Product lock-mode cross-check
 
 SEM-02J §19 confirms the current Project lock inventory and narrows the §18 cycle to Task-first audited writers, especially Task PATCH. Project-first archive, formal knowledge/review/Run-start, member and import paths were inspected. The claim-side `FOR NO KEY UPDATE` option remains a candidate—not an approved fix—because it should retain exclusion against explicit Project `FOR UPDATE` lifecycle guards while allowing audit-FK KEY SHARE. Product lifecycle's Product-row lock has no observed reverse Task edge; `add_task_product` remains the Product→Task FK inversion. TaskProduct withdrawal needs a claim-order semantic test. All conclusions are source-derived; PostgreSQL concurrency tests were not run, and P0 findings / Changes Required / Audit In Progress remain open.
+
+
+### SEM-02J thirteenth audit pass — Project↔Run implicit Interaction-FK cycle
+
+SEM-02J §20 identifies a further Project lock inversion: Run Claim holds Project `FOR UPDATE` before Run, while `report_interaction` holds Run before inserting a Project-scoped Interaction whose FK requires Project KEY SHARE. This produces a Project→Run / Run→Project deadlock candidate independently of the audit-log insert. The `FOR NO KEY UPDATE` claim-side candidate could address this and §18's audit-FK cycle, but remains unapproved until deterministic PostgreSQL tests also prove Project archive/interaction linearization. Other Run-first writers remain under review. No PostgreSQL concurrency tests have been run; P0 / Changes Required / Audit In Progress remain open.
