@@ -20,9 +20,9 @@
 | ADR-SEM-11 | Greenfield 政策适用：可直接重构 Schema/接口，不为未发布行为保留兼容层；执行安全不降低 | `engineering-lifecycle-policy.md` | 项目进入有客户/生产数据阶段时复审 |
 | ADR-SEM-12（修订提案，SEM-02E） | HIR 复用并扩展现有 `governance.human_intervention`，不另建平行 HIR 主表；需先核验完整 schema、约束、迁移与调用方 | 基线已存在 `governance.human_intervention`；复用可避免重复治理实体 | 若完整 schema 审计证明无法安全扩展，提交独立 ADR 说明原因 |
 | ADR-SEM-13 | Harness Resume 能力默认关闭；能力声明与真实恢复成功分离，未完成版本化实测不得启用 | 当前没有充分实测证据；失败必须降级为 Fresh Attempt | 对具体 Harness 版本完成可重复恢复验收 |
-| ADR-SEM-14 | Runner 命令与 ACK 通过 Runner 主动建立的认证 WSS 长连接传输；ACK 必须绑定 run/attempt/generation，并由 Runner 在 OS 进程句柄确认退出后发送 | WSS 是 SEM↔Runner 的唯一实时控制通道；普通消息 ACK/命令送达不构成终止证据 | 若 WSS 在特定环境不可用，需另立 ADR 定义安全降级通道 |
+| ADR-SEM-14（修订提案，SEM-02E） | WSS 命令回执与进程终止证据分离：receipt ACK 仅证明命令已持久接收；command result 证明执行结果；E3 仅由 OS 进程句柄/wait 或等价强身份观察证明退出。自然退出的 process-exit evidence 不要求 command_id；由命令触发的退出必须关联对应 command_id。所有证据绑定 Run+Generation+process_sequence+boot_id+OS process identity | 防止把送达 ACK 当终止事实；支持自然退出 spool、Interaction continue 多进程序列和迟到证据归属 | 仅经正式架构评审批准；需通过自然退出、命令退出、重复/乱序/迟到退出证据验收 |
 | ADR-SEM-15 | Runner 默认 `unattended`；仅显式配置为 `supervised` 才要求领取前用户确认 | 用户明确决策；监督模式与在线/忙碌状态正交 | 用户明确改变产品默认值 |
-| ADR-SEM-16 | E4 Run 进入持久化 scheduling shield：不进入普通 claim 候选集、不因租约过期自动重派；由 HIR 处置；只允许受控人工/证据驱动解除 | 避免 E4 被其他回收路径重新领取；必须有可审计解除条件 | 状态模型重构时，以等价或更强的持久化隔离替代 |
+| ADR-SEM-16（修订提案，SEM-02E） | Interaction 的 `scheduling_shield` 仅承载 Interaction 等待/继续保护；执行不确定性由独立 Task 级 Execution Barrier 承载。E4/E5 必须创建/关联 Task Barrier，不能只靠 Run 级 shield；所有 Claim/Run 创建/requeue/recovery 路径检查 Barrier 与 Interaction shield 两者 | 两种保护的作用域和生命周期不同；Detached/Reconciling 不扩展 shield CHECK | 仅经正式架构评审批准；需验证所有入口在同一事务谓词下拒绝绕过 |
 | ADR-SEM-17 | Workspace/Worktree/Git Mirror 不做备份；运行期间仍使用持久卷，丢失后按 E4/E5 安全隔离，不得推断进程死亡 | 用户明确决策；这些内容可由唯一 origin 重建，运行现场不作为备份目标 | 产品未来明确要求灾难恢复现场 |
 | ADR-SEM-18 | 每个 Repository 仅配置一个权威 Git `origin`；SEM 不管理 Git 远端同步或双远端合并 | 用户明确决策；Git Mirror 是可重建缓存 | 仓库管理策略另行改变 |
 | ADR-SEM-19 | **Platform 与独立服务 SEM 通过版本化 HTTPS API 通信，各自管理数据库；禁止 SEM 直连/共享 Platform PostgreSQL。** Platform Outbox → HTTPS → SEM Inbox，Runner ↔ SEM 使用 WSS。RabbitMQ 已作为独立单实例服务存在，但不属于本 ADR 的权威通信路径，也不是 SEM 安全关键依赖；可选非权威唤醒用途须另行批准。 | 服务独立部署、单一业务权威、幂等与对账；现有 RabbitMQ 无集群，不应成为执行安全单点 | 若未来改变权威通信路径，另立 ADR；不得恢复共享数据库耦合 |
@@ -135,3 +135,11 @@ ADR-SEM-14 中“ACK 必须由 Runner 在 OS 进程句柄确认退出后发送�
 ### E6 对 ADR-SEM-04/10 的正式变更门槛
 
 在用户明确批准前，上述均标记为 Proposed Amendment；ADR-SEM-04/10 的当前 Ratified 版本不被静默覆盖。批准后需更新 ADR 版本、决策日期、理由、推翻条件及所有引用文档。
+
+
+## K. SEM-02E technical consistency amendments (Review Pending)
+
+1. ADR-SEM-14 must distinguish command receipt ACK, command execution result, process-exit evidence and continuation-consumed receipt. Natural process exit has no command_id; command-triggered exit correlates to its command. E3 requires OS-level exit observation and exact Run+Generation+process_sequence+boot_id+process identity.
+2. ADR-SEM-16 must be amended because Interaction scheduling_shield and Task Execution Barrier are separate protections. Barrier is authoritative for E4/E5 execution uncertainty; shield remains for Interaction lifecycle. Every dispatchability path checks both in one Platform transaction.
+3. The Platform-side active process-sequence fence is still an unresolved protocol requirement. SEM owns OS observations, but Platform must be able to validate the currently accepted sequence for Lease Renewal and reject stale/late sequence reports. Define the atomic continuation-consumed/sequence-advance API before implementation.
+4. HIR reuse of governance.human_intervention is a user-approved direction, not yet a proven drop-in fit: current repository evidence describes it as intervention-action history (veto/rollback/freeze). The domain model must preserve action history versus HIR work-item lifecycle.
