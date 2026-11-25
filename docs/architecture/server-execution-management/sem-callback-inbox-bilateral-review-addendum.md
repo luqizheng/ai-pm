@@ -225,3 +225,10 @@ This closes the independent Python/Node test-helper gap for the committed corpus
 
 
 Pre-authentication or malformed callback requests must not cause AI-PM to echo an unverified attacker-supplied `event_id` as an authenticated `X-SEM-Event-Id` correlation value. The generic error response/signature policy for requests without a trustworthy canonical event context remains an explicit bilateral open decision.
+
+
+## 16. Rust JCS dependency candidate and MSRV gate
+
+The dependency evaluation document now compares strict raw-byte JCS candidates. `canonprims-json 0.1.4` is the leading technical candidate because it rejects duplicate members, invalid UTF-8, lone surrogates, non-finite numbers and inexact integer tokens before canonical output, and carries explicit limits plus a shared cross-language conformance corpus. It requires Rust 1.88.0 and is still a very new 0.x project with limited external adoption; it is therefore a spike candidate, not an approved dependency.
+
+AI-PM's Dockerfile currently uses floating `rust:1-slim` and its workspace has no declared MSRV. If the isolated spike passes, AI-PM must pin its builder/toolchain to at least 1.88.0 and declare that floor. SEM's separate candidate workspace currently declares Rust 1.85; it need not change if the canonicalizer remains an AI-PM-only callback Inbox dependency. No Cargo manifest, lockfile, Dockerfile or runtime code was changed. The Rust 1.88 AI-PM build floor is an explicit decision gate.
