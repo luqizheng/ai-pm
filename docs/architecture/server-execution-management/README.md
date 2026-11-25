@@ -77,3 +77,8 @@ The second source pass expanded the Run INSERT/UPDATE inventory and inspected Ta
 ### SEM-02J third audit pass
 
 The third pass traced normal lease/business writes, existing Runner/Worker control entrypoints and governance carriers. It found additional Run→Task lock edges in `report_progress`, `submit_result`, Worker start confirmation and Review completion. It also confirmed that the current repository still exposes Runner-facing MCP Claim/reacquire/command poll/ACK and a Platform Worker dispatch loop; these must be removed or fail-closed at SEM control-plane cutover while retaining Harness business MCP. Current `governance.human_intervention` is an action-history carrier with seven intervention types, not an HIR lifecycle; `human_consultation` is a generic formal decision workflow; `integration.notification` is a project Feed without recipient ownership. See [SEM-02J §10](./sem-02j-transaction-and-execution-path-closure-review.md#10-third-audit-pass--lease-business-writes-legacy-control-entrypoints-and-governance-carriers). No global lock order or implementation is approved.
+
+
+### SEM-02J fourth audit pass
+
+The fourth pass traced Interaction report/retry/response/consume, Continue and Terminate Command ACK, Continuation lifecycle hooks, lease renewal/progress and cleanup. It confirms the lock graph is connected across Project, Run, Task, Interaction, Command and Continuation; Task cancellation holds Task before Interaction/Run, while several execution/ACK paths hold Run or Command before Task. It adds J11–J18 deterministic concurrency cases. No global lock order is selected. See [SEM-02J §11](./sem-02j-transaction-and-execution-path-closure-review.md#11-fourth-audit-pass--interactioncontinuationcommand-transaction-paths).
