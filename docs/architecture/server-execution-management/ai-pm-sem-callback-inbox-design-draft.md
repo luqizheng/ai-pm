@@ -203,3 +203,8 @@ The callback transaction is extended to lock the delivery Run first, then the bi
 The first execution.binding_established event creates the projection. Exact duplicates are resolved by Inbox identity and do not rewrite it. Same-epoch identity changes and lower epochs reject. A higher epoch is accepted only after a positive prior release/no-start proof or an explicit SEM-authorized host-isolation disposition. An uncertain prior binding blocks rebind.
 
 **Important unresolved bilateral dependency:** the current five-event Platform callback contract does not carry an authenticated reference to the dedicated runner.quarantine.resolve host-isolation disposition. execution.infrastructure_uncertain is not such proof. Therefore, do not enable host-isolation rebind until SEM adds an explicit event/reference and the schema/fixtures/acceptance matrix cover it. BIND-01..BIND-12 are added to the PostgreSQL acceptance plan. P0-06 remains open pending bilateral event semantics and executable PostgreSQL tests.
+
+
+### OI-07 — Unbound release and dispatch fence (P0, OPEN)
+
+The SEM protocol's proposed §7.1 adds a tagged expected_binding request (unbound or bound(epoch)), one per-execution dispatch/release sequencer, a permanent SEM dispatch-fence tombstone, and a distinct execution.unbound_release_applied callback event. AI-PM records that event in a per-attempt SEM execution projection; it must reject any later binding event for the same execution_id. See the exact DDL/concurrency design §12. The current five-event schema does not support this yet; do not accept a fabricated epoch 0 or a release_status event without Runner identity. No implementation is authorized.
