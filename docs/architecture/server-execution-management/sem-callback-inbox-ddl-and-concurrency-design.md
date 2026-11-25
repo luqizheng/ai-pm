@@ -61,10 +61,14 @@ CREATE UNIQUE INDEX uq_inbound_event_sem_execution_sequence
     ON integration.inbound_event (execution_id, execution_event_sequence)
     WHERE source = 'sem';
 
+ALTER TABLE delivery.task_run
+    ADD CONSTRAINT uq_task_run_tenant_project_execution
+    UNIQUE (tenant_id, project_id, id);
+
 ALTER TABLE integration.inbound_event
     ADD CONSTRAINT fk_inbound_event_sem_execution
-    FOREIGN KEY (tenant_id, execution_id)
-    REFERENCES delivery.task_run (tenant_id, id);
+    FOREIGN KEY (tenant_id, project_id, execution_id)
+    REFERENCES delivery.task_run (tenant_id, project_id, id);
 
 ALTER TABLE delivery.task_run_event
     ADD CONSTRAINT task_run_event_sem_sequence_check
