@@ -162,7 +162,7 @@ Freeze the same rule in both repositories:
 
 1. Reject duplicate JSON object member names before application processing.
 2. Canonicalize the payload object using RFC 8785 JSON Canonicalization Scheme (JCS); compute lowercase-hex SHA-256 over its exact UTF-8 JCS bytes and store it in the existing payload_hash column.
-3. Canonicalize the complete authenticated event envelope using JCS; the hash input includes exactly event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence and payload. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
+3. Canonicalize the complete authenticated event envelope using JCS; include every schema-defined envelope field that is present: event_id, event_type, schema_version, occurred_at, execution_id, execution_event_sequence, optional correlation_id when present, and payload. An absent optional field is omitted; a present correlation_id is included. Reject unknown fields before hashing. Compute lowercase-hex SHA-256 over those UTF-8 JCS bytes and store it in the new SEM-only event_envelope_hash column. Do not include HTTP headers, Signature-Input, Signature or transport metadata.
 4. Store the payload semantic value in JSONB. The event_envelope_hash is an immutable replay identity, not a replacement for payload_hash.
 5. Same event_id is a duplicate only when event_type, execution_id, sequence, payload_hash and event_envelope_hash all match. Because event_envelope_hash covers schema_version, occurred_at and every other envelope field, any changed authenticated envelope field is IDEMPOTENCY_CONFLICT.
 6. Whitespace and object-member order do not change either JCS digest. Numeric and Unicode behavior follows RFC 8785, not language-specific serializer behavior.
@@ -887,7 +887,7 @@ This is a design correction only. The candidate DDL, migration replay, two-conne
 The SEM protocol repository now carries a deterministic cross-language callback vector:
 
 - File: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`
-- Pinned fixture commit: `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`
+- Pinned fixture commit: `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`
 - Event type: `execution.infrastructure_uncertain`
 - The fixture includes the complete authenticated envelope (including the optional `correlation_id`), payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256. The hash includes every schema-defined envelope field that is present; an absent optional field is omitted from the JCS object, while a present `correlation_id` is covered.
 
