@@ -45,7 +45,7 @@
 
 | OQ | 正式裁决 | 实施约束 / 验收门槛 |
 |---|---|---|
-| OQ-1 HIR 载体 | **候选修正：采用独立表** `governance.human_intervention_request` | Phase 0 建立最小可操作 HIR、收件人、通知与受控处置；Phase 4 只扩展高级 handoff；HIR 不替代 `task_interaction` |
+| OQ-1 HIR 载体 | **SEM-02E 修订提案：复用并扩展** `governance.human_intervention`；不新建 `governance.human_intervention_request` | Phase 0 建立最小可操作 HIR、收件人、通知与受控处置；实施前完整核验现有 schema/routes/consumers；HIR 不替代 `task_interaction` |
 | OQ-2 Codex Resume | **设计关闭，能力验证门槛保留**：默认 `supports_resume=false` | 每个 Harness/版本需在真实环境通过采集、重启、恢复、上下文连续性测试后，才可单独启用；未通过一律 Fresh Attempt |
 | OQ-3 E3 进程证据 | **候选修正：通过认证 WSS 承载 Runner 进程退出事实** | 自然退出、主动终止、lease-loss cleanup、startup cleanup、boot transition 均上报；命令 receipt ACK、command result、E3、continuation consumed 四者分离 |
 | OQ-4 监督模式 | **关闭：默认 `unattended`** | 注册持久化字段；首次注册未提供值时取 unattended；supervised 必须在领取前取得用户确认；在线状态不推导监督模式 |
