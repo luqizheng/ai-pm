@@ -118,5 +118,11 @@ Native Resume 默认 false；不得把 Fresh Session continuation 伪装成原�
 
 ## 9. Notification delivery
 
-Notification 记录 recipient、delivery state、attempt count、next_attempt_at、read_at。通知投递状态独立于 HIR/Interaction 业务状态。无 recipient → 项目未分派队列 + 告警。通知失败不得回滚 HIR/Interaction。
+- `integration.notification` remains the project-level Feed; its existing row-level `read_at` meaning is unchanged.
+- `integration.notification_recipient` is the per-principal Inbox membership and delivery-state ledger. One parent notification may have multiple recipient rows.
+- A NULL recipient is allowed only for an explicit `unassigned` queue row; it is visible only to authorized project operators and must raise an alert.
+- V1 in-app availability is committed with the parent notification in the same Platform transaction as HIR/Interaction. No RabbitMQ delivery is required for visibility.
+- Per-recipient `read_at` is separate from the parent Feed `read_at`. Delivery state is not HIR or Interaction state.
+- Recipient resolution: active Task assignee first; otherwise active project owner members; if none, create the unassigned row.
+- Notification failure cannot silently discard the human work item. External channel retries, if added later, remain non-authoritative and separately tracked.
 
