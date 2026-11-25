@@ -1,5 +1,8 @@
 # SEM-02G — Database DDL and Service API Contract Draft
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** This document evaluates or proposes database/API contracts based on the former SEM-owned Claim/Lease/business-command control model. That model is superseded by [authority-boundary-decision.md](./authority-boundary-decision.md). Preserve useful AI-PM source/DDL findings, but do not implement SEM-side business state, Task/HIR/Barrier ownership, or the old API contracts without a new reviewed mapping.
 
 - Status: **Draft / Review Pending / Not an approved ADR**.
