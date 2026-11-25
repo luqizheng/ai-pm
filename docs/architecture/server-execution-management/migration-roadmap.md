@@ -1,5 +1,8 @@
 # SEM V1 Migration Roadmap — SEM-02E
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 - 状态：**Design In Progress — Review Pending**。
 - 唯一 Phase 定义：[SEM-02E §14](./sem-02e-architecture-convergence.md#14-phase-0–5-统一路线)。
 - 本文为候选实施路线，不授权启动实施。
