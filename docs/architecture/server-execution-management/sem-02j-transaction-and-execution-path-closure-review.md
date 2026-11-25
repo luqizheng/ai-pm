@@ -447,3 +447,51 @@ The current `master` migration directory contains migrations through **0059** (l
 - Add DDL tests for the composite tenant/project/task identity guarantees required by HIR, Barrier, E6 and process evidence.
 
 Status remains **Changes Required / Audit In Progress**. The latest migration head is identified as 0059, but the full 0001–0059 schema/trigger reconciliation is not yet complete. No global lock order is selected; no code, migration, API/WSS implementation or runtime configuration changed; Phase 0 remains Not Started.
+
+
+## 13. Sixth audit pass — migration baseline provenance and exact late DDL verification
+
+This pass re-opened the authoritative migration ledger and the exact checked-in DDL files on the current master baseline. It corrects an important interpretation of the migration chain:
+
+- `migrations/0001_baseline.sql` is **not** the original historical 0001 migration. It is a 2026-11-09 squash artifact produced from the old 0001–0065 chain (64 files; historical 0029 was empty), using the terminal database state via `pg_dump --schema-only + --data-only --inserts`.
+- The migration ledger records a zero-diff equivalence check between a database built from the old chain and one built from the squashed baseline. New incremental migrations restart at 0002.
+- Therefore, the current replay target is the squashed `0001_baseline.sql` followed by the post-baseline migrations through 0059. A replay of the old 0001–0065 history is not the current sqlx chain and must not be described as such.
+- The baseline contains both schema DDL and seed/data INSERT statements. A fresh-database replay must account for that data as part of the migration contract, not treat 0001 as schema-only.
+
+### 13.1 Exact late DDL rechecked
+
+The following files were fetched from current master and their DDL inspected directly:
+
+| Migration | Verified exact effect | Lock / ownership implication |
+|---|---|---|
+| 0053 `device_single_active_run` | Partial unique index on `delivery.task_run(lease_client_id)` where status is claimed/running and lease_client_id is not null | This is a device-identity uniqueness backstop, not a SEM Runner process/connection-epoch or resource-reservation model |
+| 0054 `task_run_cleanup_claim_fencing` | Adds nullable `claim_token uuid` to `delivery.task_run_cleanup`; adds due index over `(next_retry_at, run_id)` for pending/cleaning | DDL alone does not implement atomic claim semantics; the application CTE must set lease expiry and token in one statement, and all completion/failure writes must fence on that token |
+| 0055 `workspace_reclamation_ledger` | Creates `delivery.workspace_reclamation`; includes Project/Repository/RunRepository foreign keys, resource-shape/status/path/attempt checks, partial unique indexes for Run worktree and Repository mirror, and due index | Derived filesystem-resource lifecycle only. Its foreign keys can participate in key-share/conflict locking; exact transaction paths must be included in the lock/implicit-lock inventory |
+| 0056 `workspace_reclamation_bytes` | Adds non-negative `reclaimed_bytes bigint NOT NULL DEFAULT 0` to the reclamation ledger | Logical byte accounting only; not process-exit evidence |
+| 0057 `workspace_reclamation_totals` | Adds a per-resource-kind monotonic aggregate table with non-negative total | Metrics/accounting only; no Run/Lease authority |
+| 0058 `external_commit_adoption` | Creates external Commit and clarification tables; adds repository scan-anchor columns | No direct Run lifecycle DDL identified; retain as an adjacent domain migration, not an execution-control entity |
+| 0059 `discovery_round_error` | Adds `last_round_error` and `last_round_error_at` to Discovery session | No direct Run lifecycle DDL identified |
+
+The 0054 application behavior was cross-checked against the PA08-04 implementation inventory: claim selection and `cleaning` update are performed in one CTE under `FOR UPDATE SKIP LOCKED`; the claim lease is represented by `next_retry_at`; each claim gets a fresh token; stale claimants must be rejected. This implementation behavior is not inferred from the migration DDL alone.
+
+### 13.2 Migration audit scope correction
+
+The previous phrase “replay 0001–0059” is shorthand for the **current numbered sqlx chain**, not a claim that all historical migrations are still present. The exact target is:
+
+1. Fresh PostgreSQL database.
+2. Apply current `0001_baseline.sql` (squashed schema plus seed/data statements).
+3. Apply each checked-in post-baseline migration in numeric order, 0002 through 0059, verifying there are no missing/duplicate versions in the actual `migrations/` directory.
+4. Capture catalog state after the final migration: constraints, indexes, triggers, trigger functions, and relevant table definitions.
+5. Compare the catalog capture with a migration-derived expected inventory and then trace every application SQL writer/transaction that can touch the audited aggregates.
+
+The GitHub file-fetch audit in this pass verified the baseline provenance and selected late DDL, but **did not** enumerate every file in `migrations/`, replay PostgreSQL, or capture a live catalog. Those remain open and are not marked complete.
+
+### 13.3 Updated blockers
+
+- P0: obtain a reproducible full migration-directory manifest for the current master SHA; verify exactly one file per version and no gaps in the current post-baseline range.
+- P0: run the current sqlx migration chain against an empty PostgreSQL database and retain the actual command output and database identity.
+- P0: capture `pg_constraint`, `pg_index`, `pg_trigger`, and `pg_proc` from that resulting database; include FK-induced key locks and trigger side effects in the global lock graph.
+- P1: compare baseline definitions for Run/Interaction/Command/Continuation/Human Intervention/Notification/Cleanup with every post-baseline alteration, then reconcile the current schema against the application SQL.
+- P1: add DDL-level tests for tenant/project/task composite identity and for the future Barrier/HIR/E6/process-evidence anchors.
+
+Status remains **Changes Required / Audit In Progress**. This pass improves migration provenance and verifies exact late DDL, but does not close the full migration audit, select a global lock order, authorize schema implementation, or start Phase 0. No business code, migration, API/WSS implementation or runtime configuration was changed.
