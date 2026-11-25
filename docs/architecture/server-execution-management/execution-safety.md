@@ -1,5 +1,8 @@
 # 执行安全：Lease、进程身份、Task Barrier 与安全重派
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** The Task Barrier/HIR/Run safety model described here is AI-PM business authority, not SEM-owned state. SEM may report process/runtime evidence, but AI-PM decides business disposition, retry, barrier and task state. Reconcile the SEM-facing responsibilities against [authority-boundary-decision.md](./authority-boundary-decision.md); this document is not an SEM implementation contract.
 
 
