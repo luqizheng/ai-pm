@@ -195,3 +195,8 @@ SEM-02J §16 adds a source-confirmed Task→Product versus Product→Task deadlo
 ## 8. SEM-02J remaining gate-writer pass
 
 SEM-02J §17 confirms the Task Revision helper relies on callers holding Task FOR UPDATE (or creating the Task and Revision in one transaction); current Task PATCH, TaskReady, Review retry and lease-recovery paths meet that precondition. Task-bound Human Consultation writes TaskWaiting in the same transaction, whose composite FKs enforce the Task's project/tenant identity and whose FK key-share edge serializes against claim's Task FOR UPDATE. Dependency-edge writers acquire the project graph advisory lock then the downstream Task; Run claim serializes on the same Task. The dependency snapshot reader does not lock predecessor Tasks, so its concurrent revision semantics need a two-connection test. The §16 Task↔Product P0 remains open; Phase 0 remains Not Started.
+
+
+## 9. SEM-02J Project–Task implicit FK lock cycle
+
+SEM-02J §18 identifies a second implicit-FK lock-order blocker. Run claim locks Project FOR UPDATE before Task; Task PATCH locks Task then inserts governance.audit_log, whose (tenant_id, project_id) FK requires Project KEY SHARE. This creates a Project→Task versus Task→Project deadlock schedule. It is source/DDL-derived and still needs deterministic two-connection PostgreSQL reproduction; it is not claimed as runtime-reproduced. Global lock order remains unfrozen; Phase 0 remains Not Started.
