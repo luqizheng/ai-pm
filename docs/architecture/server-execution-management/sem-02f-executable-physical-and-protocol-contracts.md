@@ -1,5 +1,8 @@
 # SEM-02F — Executable Physical and Protocol Contracts
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** **Supersession notice (2026-11-25):** This candidate contains Platform schema/API and SEM control-plane assumptions that predate the user-confirmed [authority-boundary decision](./authority-boundary-decision.md). It is historical review material, not an implementation contract. Re-evaluate every SEM Claim/Lease/Command/Task/HIR/Barrier entity and API before implementation; retain source-derived findings only where still applicable to AI-PM.
 
 
