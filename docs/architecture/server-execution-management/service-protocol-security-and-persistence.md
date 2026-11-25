@@ -1,5 +1,8 @@
 # Service Protocol, Security and Persistence — SEM-02E
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** This document's former SEM→Platform Claim/Lease/business-state API path is **SUPERSEDED** by [authority-boundary-decision.md](./authority-boundary-decision.md). Independent service authentication, TLS, idempotency, durable message delivery and no-shared-database principles remain applicable; endpoint scopes and persistence entities must be redesigned around opaque execution messages and infrastructure observations.
 
 
