@@ -207,3 +207,8 @@ INBOX-39 now explicitly covers optional-field omission: when correlation_id is p
 The DDL design now lists the required PostgreSQL execution cases for the SEM source CHECK: valid SEM hashes accept; NULL execution ID/sequence, NULL or malformed payload hash, NULL or malformed envelope hash reject; valid non-SEM rows retain NULL execution tuple/envelope hash; non-SEM rows with SEM-only fields reject; NULL source is rejected by the existing column NOT NULL constraint before this CHECK. The test must execute these rows in PostgreSQL and assert the named constraint, not merely duplicate the Boolean expression in application code.
 
 This makes INBOX-36..38 executable acceptance requirements. The candidate expression has been textually repaired but still has no PostgreSQL replay/catalog proof.
+
+
+## 14. Signed callback ACK correlation identity
+
+The callback ACK response must carry exactly one signed `X-SEM-Event-Id` header equal to the authenticated callback `event_id`. This is distinct from the Platform→SEM response direction, where `X-SEM-Request-Id` echoes `request_id` (the operation/idempotency identity), not `message_id`. The SEM response fixture and D-04 addendum now explicitly test the distinction; AI-PM's callback response contract has been aligned.
