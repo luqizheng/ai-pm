@@ -863,3 +863,50 @@ Add a two-connection case with explicit pause points:
 5. In the same test suite, race Project archive against Interaction creation to prove the weaker lock or explicit Project-first ordering preserves the archive gate.
 
 This is a source/DDL-derived finding only. No PostgreSQL concurrency test was executed in this environment. §§15, 16, 18 and 20 remain open P0 lock-order blockers; no global lock order, production fix, PR merge or Phase 0 authorization is implied. Status remains **Changes Required / Audit In Progress**.
+
+
+## 21. Fourteenth audit pass — additional Run-first writers reaching Project FK/audit
+
+The §20 Project↔Run inversion is a shared transaction-order defect pattern, not an isolated Interaction endpoint. This pass confirms three additional production paths that hold or acquire a Run lock before requesting the Project KEY SHARE edge through the audit FK.
+
+### 21.1 Confirmed writer paths
+
+| Writer | Locks before Project edge | Project edge | Classification |
+|---|---|---|---|
+| `recovery::reacquire_lease` | Run `FOR UPDATE`; then updates Run lease fields and WorkerCommand routing | `append_audit_with_after("run.lease_reacquired")` inserts `governance.audit_log` | Confirmed Run→Project |
+| `worker_command::ack_command` (continue ACK) | WorkerCommand `FOR UPDATE`; then updates Run scheduling shield; downstream Delivery/Continuation/Task recovery writes | Final `append_audit_with_after("command.acked")` | Confirmed Run→Project; Command is an additional held row |
+| `interaction::record_response_persisted_tx` | Updates Interaction, then updates Run scheduling shield | `append_audit_with_payload` delegates to `append_audit_with_after` | Confirmed Run→Project |
+| `interaction::report_interaction` | Run `FOR UPDATE OF r` | Earlier `task_interaction` INSERT has Project FK KEY SHARE; final audit is a second Project edge | Confirmed Run→Project |
+
+The audit helper implementation inserts `governance.audit_log` with `project_id` and the composite Project FK. This confirms the Project KEY SHARE edge is not merely inferred from helper names.
+
+### 21.2 Shared wait-cycle shape
+
+For each writer above, the critical two-transaction shape is:
+
+- Claim transaction: Project `FOR UPDATE` → waits for the same Run row.
+- Run-first writer: holds that Run row (or acquires it before completion) → reaches an Interaction/Project-scoped insert or audit FK requiring Project KEY SHARE.
+- The two transactions wait on one another.
+
+The exact pause point differs by writer. For continue ACK, the command row is also held; for recovery, the Run row is explicitly selected `FOR UPDATE`; for response persistence, the Run lock is obtained by UPDATE. These are separate entrypoint schedules sharing one Project→Run / Run→Project cycle.
+
+### 21.3 Scope and limits
+
+- This pass does not claim that every WorkerCommand ACK branch locks Run: the confirmed ACK case is the continue branch that updates `task_run.scheduling_shield`; terminate ACK branches must be analyzed separately.
+- It does not claim all Interaction lifecycle methods are Run-first. Timeout sweep and other bulk writers have different acquisition patterns and remain in the inventory.
+- The Project `FOR NO KEY UPDATE` candidate would allow these Project FK KEY SHARE edges while still conflicting with Project lifecycle paths using explicit `FOR UPDATE`; this remains a candidate only, not an approved fix.
+- A full global order still must account for Command, Interaction, Delivery, Continuation, Task, Product, audit, FK checks, unique-index waits, triggers and advisory locks.
+
+### 21.4 Test-matrix expansion
+
+Add deterministic two-connection cases for:
+
+1. Claim Project→Run versus `reacquire_lease` Run→audit Project.
+2. Claim Project→Run versus continue `ack_command` Command→Run→audit Project.
+3. Claim Project→Run versus `record_response_persisted_tx` Interaction→Run→audit Project.
+4. Claim Project→Run versus `report_interaction` Run→Interaction Project FK.
+5. Repeat each schedule under the selected Project lock correction and prove Project archive still serializes with the claim/interaction lifecycle.
+
+Each test must use independent PostgreSQL connections, explicit barriers/pause points, bounded lock waits, and assert both transaction outcomes plus persisted state. Do not treat a unit test that only inspects SQL strings as concurrency evidence.
+
+This remains source-derived. No PostgreSQL server or two-connection test was available in this environment. The Project↔Run P0 family in §§20–21 and the separate Run↔Interaction / Task↔Product / Project↔Task findings remain open. Status remains **Changes Required / Audit In Progress**; no code fix, PR merge or Phase 0 authorization.
