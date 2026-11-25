@@ -265,3 +265,8 @@ The follow-up review §6.1 records that current D4 remote verification is select
 ### MCP capability/scope enforcement detail
 
 The exact source audit further confirms that PM_MCP_TASK_UPDATE is not assigned in the current MCP permission map, while pm_report_progress and pm_submit_result mutate business state without being mapped to that dedicated permission; pm_get_task_context checks project membership but not a per-execution Task grant. The delegated grant must therefore be checked in application services for every operation and exact Task/Run/attempt tuple. Formal review/approval remains behind require_human_principal. See §13 review artifact §1.1.
+
+
+## 15. Task / Run / SEM Execution lifecycle separation
+
+The protocol refinement distinguishes three independent lifecycles: AI-PM Task business state, AI-PM Run/attempt state, and SEM infrastructure Execution state. Harness MCP can perform guarded start/progress/submission operations but cannot self-complete an execution Task. Runner process exit is reported as infrastructure evidence; AI-PM decides the associated Run outcome. SEM release occurs when AI-PM determines that the Run/attempt no longer needs a runtime, which may be after Task submission while the Task remains in review. Release must not be triggered only by Task=completed. See the AI-PM review artifact §8 and smark-sem protocol §9.5.
