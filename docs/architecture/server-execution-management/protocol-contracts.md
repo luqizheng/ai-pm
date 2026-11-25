@@ -168,12 +168,14 @@ Both adapters implement terminate, continue-with-response, process-exit reportin
 
 Platform `worker_command` remains business command state; SEM `command_delivery` is remote transport state. For local execution, the same command result/evidence semantics apply without pretending a WSS delivery occurred. Command receipt, command result, E3 and continuation consumption are independent acknowledgements.
 
-## 15. Notification and dispatchability requirements (SEM-02E normative proposal)
+## 15. Notification and dispatchability requirements (SEM-02F candidate contract)
 
-- `interaction.created` and HIR creation append notification Outbox events in the same transaction as their business records.
-- Notification recipient resolution and per-recipient delivery status are explicit; project-level unassigned inbox is the fail-visible fallback.
-- 120-second Interaction deadline is not notification delay.
-- All Platform Claim/recovery/requeue paths use the same dispatchability predicate and check both Interaction shield and Execution Barrier, including queued Runs and B06-D3.
+- `integration.notification` remains the project Feed; do not repurpose its `read_at` as per-user state.
+- `integration.notification_recipient` provides per-principal Inbox membership, per-recipient read state, delivery state and an explicit unassigned queue.
+- HIR/Interaction creation writes the Feed row and recipient rows in the same Platform transaction as the business record. V1 in-app delivery is DB availability, not a separate asynchronous broker delivery.
+- Recipient resolution uses active Task assignee, then active project owner members, otherwise an unassigned queue row + alert.
+- 120-second Interaction deadline is only the user response deadline, never a notification delay.
+- All Platform Claim/recovery/requeue paths use the same dispatchability predicate under the Task lock and check both Interaction shield and Task Execution Barrier, including queued Runs and B06-D3 removal.
 
 See [corrective design](./sem-02d-review-findings-corrective-design.md).
 
@@ -194,7 +196,7 @@ E6 is a Platform-authorized human risk decision, not a Runner process observatio
 - RabbitMQ ACK is never Platform business commit, SEM Inbox commit, Lease renewal, process exit or E3 evidence.
 
 
-## 13. Active process-sequence fencing — implementation blocker
+## 13. Active process-sequence fencing — candidate implementation contract
 
 SEM persists OS-level process observations, but Platform remains the Lease/Generation authority and cannot query SEM DB. Therefore the protocol must expose a Platform-authoritative active-process fence:
 
@@ -205,3 +207,17 @@ SEM persists OS-level process observations, but Platform remains the Lease/Gener
 5. Exit evidence for an older sequence remains appendable as historical evidence but cannot clear the current active-process fence or release a Barrier while a newer sequence remains active.
 
 The exact Platform persistence shape (columns on task_run versus a dedicated normalized process-identity table) is OPEN and must be selected after the schema/transaction/locking audit. The current seven-table SEM DB alone is insufficient for Platform-side fencing.
+
+
+## 18. Platform process registry and renewal identity (SEM-02F)
+
+Platform persists `delivery.task_run_process` and `delivery.task_run.active_process_sequence`. SEM DB observations alone are not sufficient for Platform Lease Renewal.
+
+- Initial start must register the first process identity through an authenticated Platform API before process-bound renewal.
+- Interaction continue reserves the next sequence in the Platform command/continuation transaction. The execution adapter sends `continuation.consumed` only after reply injection and successful spawn.
+- Platform atomically advances the active sequence after validating Run, Generation, Interaction/continuation, command and exact new process identity.
+- Every `lease.renew` carries `process_sequence` + `process_instance_id`; Platform rejects stale sequences and superseded identities.
+- `runner.process.exit` can close any previously registered sequence. Natural exit has no `command_id`; command-triggered exit carries the exact command ID. Late old-sequence evidence cannot clear a newer active sequence.
+- Platform Barrier release requires all registered process identities for the origin Run+Generation to have accepted E1/E2/E3 terminal evidence and no active process identity.
+
+The proposed fields, uniqueness constraints, idempotency and transaction ordering are specified in [SEM-02F §6](./sem-02f-executable-physical-and-protocol-contracts.md#6-platform-process-identity-sequence-and-lease-renewal-fence).
