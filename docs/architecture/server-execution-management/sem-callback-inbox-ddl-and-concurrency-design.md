@@ -254,6 +254,7 @@ AI-PM must match SEM D-04 exactly:
 
 - Success/duplicate: event_id, execution_id, execution_event_sequence, contiguous_through_sequence, disposition, acknowledged_at.
 - The signed callback ACK MUST include exactly one `X-SEM-Event-Id` correlation header equal to the authenticated callback `event_id`; it must not be derived from an untrusted body/header after verification. The Platform→SEM response direction uses `X-SEM-Request-Id = request_id` (the operation/idempotency identity), not `message_id`.
+- SEM's deterministic response fixture `tests/protocol/fixtures/crypto-vectors-v1.json` (pinned at `smark-sem@c8de85db4183ee2c4e0065dd211acd59d8fd3fad`) includes `http_callback_ack`; AI-PM's eventual response verifier must validate the exact signed 200 ACK and reject a mismatched `X-SEM-Event-Id`.
 - Same event ID with changed identity/body: HTTP 409 IDEMPOTENCY_CONFLICT.
 - Same sequence with another event ID: HTTP 409 EVENT_SEQUENCE_CONFLICT.
 - Sequence gap: HTTP 409 EVENT_SEQUENCE_GAP with expected_sequence.
