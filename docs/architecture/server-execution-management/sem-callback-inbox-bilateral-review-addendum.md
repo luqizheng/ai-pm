@@ -27,8 +27,8 @@ The ACK must also return `contiguous_through_sequence`, `disposition` and `ackno
 ### 2.2 Exact storage contract is not yet frozen
 
 Before approving shared Inbox reuse, provide exact DDL for:
-- a partial unique index guaranteeing global uniqueness of SEM `event_id` across projects while preserving non-SEM source semantics;
-- `task_run.sem_last_event_sequence` with nonnegative constraint;
+- confirm the existing `integration.inbound_event.id` global primary key is used directly as SEM `event_id` (no additional global unique index is needed);
+- `delivery.task_run.execution_event_sequence` cursor with nonnegative constraint;
 - any Run-event CHECK/constraint extension and event detail representation;
 - FK/tenant/project/service-principal integrity;
 - any uniqueness needed to prevent two event IDs occupying one `(execution_id, execution_event_sequence)`.
@@ -72,7 +72,7 @@ In addition to the 14 cases in the main draft, add explicit tests for:
 1. ACK echoes the exact incoming execution_event_sequence.
 2. Same event_id with changed sequence is a conflict.
 3. Same sequence with different event_id is a conflict.
-4. Global event_id uniqueness across two project IDs.
+4. Global `event_id` primary-key collision across two project IDs, with non-enumerating conflict handling.
 5. Concurrent same-event and same-sequence deliveries.
 6. Hash canonicalization agreement between SEM and AI-PM.
 7. Event binding_epoch / runner identity mismatch is rejected or quarantined without advancing cursor.
@@ -82,7 +82,7 @@ In addition to the 14 cases in the main draft, add explicit tests for:
 ## 4. Decision status
 
 - OI-01 execution_id mapping: **open**.
-- OI-02 shared Inbox reuse: **recommended, open pending DDL/source proof**.
+- OI-02 shared Inbox reuse: **recommended; source audit confirms global PK and identifies required sequence metadata/constraints; live catalog proof remains open**.
 - OI-03 cursor + Run event migration details: **open**.
 - OI-04 service principal and signature key registry: **open**.
 - OI-05 retention/compaction/operator replay: **open**.
@@ -113,3 +113,23 @@ AI-PM's response contract should echo the accepted event's exact `execution_even
 SEM has also strengthened the event JSON Schema to require runner key version, boot ID and Supervisor instance identity on delivery/process/release/uncertainty observations. The AI-PM receiver must still compare these against the currently bound attempt; JSON Schema validity does not replace semantic binding validation. A release observation of `process_exited` requires a process-exit evidence reference, and an exited process observation requires exact process identity and exactly one exit status discriminator (`exit_code` or `exit_signal`).
 
 These are changes to the SEM Draft contract, not ratified bilateral decisions. AI-PM PR #9 must independently adopt the same field names and semantics before interoperability can be claimed.
+
+
+## 6. AI-PM source/DDL audit — 2026-11-25
+
+A source-level audit was performed against PR #9 base commit `d0e72fa6805aebeadf1b282e430deba493072fd6`, including the squashed baseline DDL, `pm-application/src/ingestion.rs`, and `migrations/0013_task_run_event.sql`.
+
+Confirmed findings:
+
+1. `integration.inbound_event.id` is already a global UUID primary key. Map SEM `event_id` directly to it; a second global unique index is redundant.
+2. Existing `UNIQUE(project_id, source, idempotency_key)` does not enforce uniqueness of `(execution_id, execution_event_sequence)`.
+3. Existing generic `submit_event()` inserts Inbox + `integration.job(job_type='ai_analysis')` atomically and hashes a Rust JSON serialization. It must not be reused for SEM.
+4. The current Inbox requires `actor_id` and has a principal FK. SEM must use a service principal through a dedicated service-authenticated port; it must not synthesize HumanActor.
+5. `delivery.task_run` has `UNIQUE(tenant_id,id)`, `UNIQUE(project_id,id)`, and `run_kind` distinguishes delivery/review.
+6. `delivery.task_run_event` is append-only but its current event-type CHECK does not include `sem_infrastructure_observed`; its current unique index is not a direct execution-sequence uniqueness constraint.
+
+The detailed candidate DDL, JCS payload hash rule, transaction/lock order, and 24-case two-connection PostgreSQL acceptance matrix are recorded in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
+
+Important correction: global event-ID uniqueness is already provided by the Inbox primary key. The missing database invariant is sequence uniqueness per execution, plus the cursor and observation-ledger constraints. The proposed DDL still requires live PostgreSQL catalog capture, empty-database migration replay, and bilateral review before ratification.
+
+No implementation or migration is authorized. OI-01..OI-06 remain open.
