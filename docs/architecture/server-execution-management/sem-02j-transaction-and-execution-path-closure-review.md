@@ -593,3 +593,56 @@ The inventory is based on static SQL content and direct text inspection. It does
 - Existing P0 lock-order and Task Barrier bypass findings from §§9–11 remain open. No global lock order is selected by this pass.
 
 Status remains **Changes Required / Audit In Progress**. This pass verifies the Git migration manifest and static DDL relationships; it does not claim a successful PostgreSQL replay, live catalog capture, complete writer audit, or deadlock-free lock order. No business code, migration, API/WSS implementation or runtime configuration was changed. No PR merge or Phase 0 authorization.
+
+
+## 15. Eighth audit pass — application writers for composite-identity rows and exact lock-order evidence
+
+This pass followed the production SQL writers for Interaction, Response, ResponseDelivery, Continuation and WorkerCommand, rather than relying only on DDL shape.
+
+### 15.1 Normal writer identity validation
+
+The current primary application path does propagate a coherent identity tuple:
+
+- `report_interaction` starts one transaction, locks the target Run while joining its Task, and requires `run.id + run.task_id + run.project_id` to match the caller's Run/Task/Project inputs. It then creates the Interaction and its Terminate command from that validated tuple.
+- `submit_interaction_response` locks the Interaction by `interaction_id + project_id`, then derives `task_id` and `run_id` from that locked row. The Response, Continue command, ResponseDelivery and Continuation all reuse those derived IDs in the same transaction.
+- `retry_interaction` locks the previous Interaction, derives its Task/Run IDs, locks the referenced Run, and creates the retry Interaction/Terminate command from that lineage.
+- `open_continuation_tx` receives the Task/Run/Interaction tuple from the response transaction and inserts the Continuation plus ResponseDelivery back-reference in that same transaction.
+- The production insert search found the above modules as the application write owners for these relations; test fixtures and reset scripts also write rows directly, but are not production writers.
+
+This narrows the current risk: the independent-FK DDL gaps do **not** establish that the normal service path currently mixes unrelated IDs. However, the DDL cannot independently guarantee that invariant; all new writer entry points, maintenance jobs, direct SQL, and future HIR/Barrier/E6 writers must preserve the same validation.
+
+### 15.2 Exact lock-order cycle reproduced from source statements
+
+The Run↔Interaction inversion is now tied to the concrete statements:
+
+| Path | First relevant row lock | Later relevant row lock/update | Edge |
+|---|---|---|---|
+| `report_interaction` | SELECT Run JOIN Task with `FOR UPDATE OF r` | SELECT open Interaction with `FOR UPDATE` | Run → Interaction |
+| `submit_interaction_response` | SELECT Interaction with `FOR UPDATE` | `record_response_persisted_tx` updates Run scheduling shield | Interaction → Run |
+| `retry_interaction` | SELECT previous Interaction with `FOR UPDATE` | SELECT referenced Run with `FOR UPDATE` | Interaction → Run |
+
+Source locations at current master `d0e72fa`:
+
+- `crates/pm-application/src/interaction.rs:120–136`: report path begins transaction and locks Run after validating joined Task/Project.
+- `interaction.rs:193–200`: report path subsequently locks any open Interaction for the Task.
+- `interaction.rs:224–249`: inserts Interaction using the validated Task/Run tuple.
+- `interaction.rs:989–1005` (approximate function region): response path locks Interaction first; the exact SQL is in `submit_interaction_response`.
+- `interaction.rs:397–414`: response persistence updates Interaction then updates its Run scheduling shield.
+- `interaction.rs:778–790` and following Run lookup: retry locks Interaction, then locks Run.
+- `worker_command.rs:360–372`: ACK path locks WorkerCommand first; subsequent ACK effects mutate Run/Delivery/Interaction/Continuation/Task state.
+
+The cycle is not hypothetical: two concurrent transactions can hold opposite endpoints while waiting on the other. It remains P0. The fix must make every relevant path acquire the same canonical order before any writes; changing only one handler or relying on statement idempotency is insufficient. The complete order still cannot be frozen until Project, Task, Run, Interaction, Command, Delivery, Continuation, HIR/Barrier and governance paths are all included.
+
+### 15.3 Continuation generation allocation is not independently serialized by its allocator
+
+`open_continuation_tx` computes `MAX(generation)+1` for a Run and then inserts a row protected by `UNIQUE(run_id,generation)`. The code comment says callers must preserve serialization by holding the Run lock, but the response submission path shown in §15.2 reads the Run without `FOR UPDATE`; its later Run UPDATE does acquire a write lock, but only after the generation allocator has run (the allocator is called after response/command/delivery writes). Therefore the allocator's correctness currently depends on surrounding transaction lock behavior and the single-open-Interaction invariant, not on an explicit lock at the allocation point. The unique constraint prevents duplicate committed generations but a concurrent collision can abort one entire response transaction. Add an explicit two-connection test for same-Run generation allocation, and either acquire the Run lock before allocation in the canonical order or replace max+1 with a database-enforced allocator.
+
+### 15.4 Updated writer-audit status
+
+- Normal production writers for the five relations above were located and their identity tuple derivation was traced.
+- The schema still lacks composite FK guarantees for these tuples; the service validation is the current protection.
+- Run↔Interaction lock inversion is confirmed by source, not closed.
+- WorkerCommand ACK adds Command→Run and downstream mutation edges; it must be incorporated into the same global lock order.
+- J11–J18 remain required and must be supplemented with cross-identity negative tests and a same-Run continuation-generation concurrency test.
+
+Status remains **Changes Required / Audit In Progress**. No production code or migrations changed; this pass only strengthens source evidence and test requirements. PostgreSQL replay/catalog capture and global lock-order closure remain open. No PR merge or Phase 0 authorization.
