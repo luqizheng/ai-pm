@@ -1,5 +1,8 @@
 # SEM V1 State Machines — SEM-02E
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 > **Authority-boundary revision (2026-11-25):** This file's Run/Lease/Barrier/Task state machines describe AI-PM-owned business state, not SEM-local state. SEM must not implement or mirror these state machines. SEM has a separate infrastructure Execution lifecycle only. See [authority-boundary-decision.md](./authority-boundary-decision.md).
 
 
