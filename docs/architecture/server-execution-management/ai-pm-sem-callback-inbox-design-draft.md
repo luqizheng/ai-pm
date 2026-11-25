@@ -88,7 +88,7 @@ Candidate minimal storage:
 - Add `execution_event_sequence BIGINT NOT NULL DEFAULT 0 CHECK (execution_event_sequence >= 0)` to the AI-PM attempt row (`delivery.task_run`).
 - Serialize updates by locking the exact `task_run` row `FOR UPDATE`.
 - Record the SEM event in `integration.inbound_event` and append one `delivery.task_run_event(event_type='sem_infrastructure_observed')` observation in the same transaction. Extend the existing event-type CHECK by a new migration; keep the event table append-only.
-- Set `task_run_event.dedupe_tag = event_id`; store `event_type`, `execution_event_sequence`, `binding_epoch`, payload hash and evidence references in `detail`. Preserve the existing AI-PM `lease_generation` field unchanged; do not overload it with SEM `binding_epoch` because they are different fencing domains.
+- Set `task_run_event.dedupe_tag = execution_event_sequence` as canonical base-10 text; store `event_id`, `event_type`, `execution_event_sequence`, `binding_epoch`, payload hash and evidence references in `detail`. This matches the DDL CHECK (`detail.execution_event_sequence = dedupe_tag`) and partial unique index `(run_id, dedupe_tag)`, enforcing one Run observation per contiguous sequence. Event-ID idempotency remains enforced by `integration.inbound_event.id` and `idempotency_key`; do not overload `dedupe_tag` with event_id. Preserve the existing AI-PM `lease_generation` field unchanged; do not overload it with SEM `binding_epoch` because they are different fencing domains.
 
 Transaction algorithm:
 
