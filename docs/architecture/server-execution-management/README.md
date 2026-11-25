@@ -117,3 +117,6 @@ SEM-02J §17 traces Task Revision, TaskReady/Run creation, Human Consultation/Ta
 ## Project–Task implicit audit-FK lock cycle
 
 SEM-02J §18 records a second implicit-FK deadlock candidate: Run claim locks Project→Run→Task, while Task PATCH locks Task then inserts governance.audit_log, whose composite FK takes Project key-share. The resulting Project→Task / Task→Project wait cycle requires two-connection PostgreSQL reproduction and a canonical lock-order correction. No production fix has been applied.
+
+
+SEM-02J §18.4 records two unselected ways to close the Project→Task / Task→Project audit-FK cycle: evaluate a weaker claim-side Project FOR NO KEY UPDATE lock (still conflicting with Project lifecycle updates but compatible with FK KEY SHARE), or acquire Project KEY SHARE before Task locks in affected writers. Neither is approved pending PostgreSQL lock-mode/concurrency tests.
