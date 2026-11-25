@@ -597,8 +597,8 @@ ART-01 冻结了 V1 的目标服务边界、资源模型、API 目录、授权�
 **ART-01 完成不等于 Artifact Service 已实现。** 在 ART-02 取得真实 IAM、file-service、RustFS、CI 和 viz 数据证据之前，不得创建生产迁移或开放生产流量。后续实施必须逐项满足本文契约，并将实现证据以 ART-03 及后续记录归档。
 
 
-## 15. V1 API Errata
+## 15. Artifact Service API 契约维护
 
-本基线的 GenerationJob 响应字段、请求错误和取消语义补充见 [ART-01 V1 API Errata 001](ART-01-V1-API-ERRATA-001.md)。该 Errata 已由用户确认并纳入 V1 正式契约；与本文对应条款不一致时，以 Errata 对 GenerationJob 增量契约的明确规定为准。
+Artifact Service 的 API 契约由 `luqizheng/smark-artifact-service` 仓库维护。GenerationJob 的增量字段、请求错误和取消语义，以该仓库发布的 [ART-01 V1 API Errata 001](https://github.com/luqizheng/smark-artifact-service/blob/main/docs/architecture/ART-01-V1-API-ERRATA-001.md) 及其 OpenAPI 3.1 规范为准。本文件仅作为 AI-PM 消费方的集成架构参考，不复制或维护 Artifact Service 的 API Errata。
 
 **重要实施边界：** API 契约确认不代表生成能力启用。SeeCode Adapter 不可用时，创建 GenerationJob 仍须 fail-closed，返回 `503 GENERATOR_UNAVAILABLE`；LMMS delegation 与 File Service upload-finalize 两个 ART-02 P0 门禁关闭前，不得启用生产生成路径。
