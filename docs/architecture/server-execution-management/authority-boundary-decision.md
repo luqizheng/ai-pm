@@ -11,7 +11,7 @@ SEM is an independent execution-message transport and runtime-management service
 
 AI-PM Platform remains the sole business authority for Project, Task, business Run state, Task status, approvals, HIR, Barrier, business commands, business results, retry/successor decisions, and business audit.
 
-SEM receives AI-PM execution messages, routes opaque prompt bodies to Runners, supervises Harness processes and infrastructure resources, and reports infrastructure facts. It must not interpret prompt text, fetch Task context, mutate Task state, judge business success, or mirror business workflow state.
+SEM receives AI-PM execution messages, routes opaque prompt bodies to Runners, coordinates delivery/release messages, records Runner-reported process/resource facts, and reports infrastructure status. Runner Supervisor owns local OS process start/stop and exact process-exit observation. It must not interpret prompt text, fetch Task context, mutate Task state, judge business success, or mirror business workflow state.
 
 ## 2. Canonical responsibility flow
 
@@ -21,7 +21,7 @@ SEM receives AI-PM execution messages, routes opaque prompt bodies to Runners, s
 4. Harness uses its independently authenticated AI-PM MCP integration to fetch the Task, requirements, dependencies and other business context.
 5. Harness performs Task state transitions and submits progress/results directly through AI-PM MCP. AI-PM validates and commits all business changes.
 6. AI-PM decides when the Task is complete and sends SEM an explicit release instruction for the corresponding execution ID.
-7. SEM stops/cleans up the Harness process, releases infrastructure reservations when safe, and reports the cleanup/process outcome.
+7. SEM forwards the release instruction to Runner. Runner Supervisor stops/cleans up the local Harness process and reports process facts through SEM; SEM records the cleanup result and releases infrastructure reservations when safe.
 8. AI-PM records infrastructure outcome separately; it never treats process exit or successful cleanup as proof of business completion.
 
 ## 3. Two independent lifecycles
