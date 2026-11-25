@@ -60,27 +60,27 @@ Barrier 作用域 Task；唯一 active 约束；所有新 Run 行创建、claim�
 |---|---|---|
 | README | 独立 SEM、RabbitMQ 现状、Task Barrier、阶段入口 | Updated |
 | decision-record | ADR-04/10/12/19 修订提案与状态 | Updated |
-| deployment-topology | SEM 独立服务、RabbitMQ 非依赖、数据边界 | Pending |
-| worker-role-separation | Platform DB scanner、SEM local adapter、Outbox 单消费者 | Pending |
-| session-manager-design | SEM 私有 Detached 状态；process sequence；Native Resume 限制 | Pending |
-| execution-safety | Task Barrier、E5、E6、周期 scanner、Uncertain | Pending |
-| runner-supervision-and-handoff | process sequence、E6、HIR、handoff | Pending |
-| domain-model | HIR/consultation/notification 复用、Task Barrier、process identity | Pending |
+| deployment-topology | SEM 独立服务、RabbitMQ 非依赖、数据边界 | Updated (targeted rewrite; final cross-check pending) |
+| worker-role-separation | Platform DB scanner、SEM local adapter、Outbox 单消费者 | Updated (targeted rewrite; final cross-check pending) |
+| session-manager-design | SEM 私有 Detached 状态；process sequence；Native Resume 限制 | Updated (targeted rewrite; final cross-check pending) |
+| execution-safety | Task Barrier、E5、E6、周期 scanner、Uncertain | Updated (targeted rewrite; final cross-check pending) |
+| runner-supervision-and-handoff | process sequence、E6、HIR、handoff | Updated (targeted rewrite; final cross-check pending) |
+| domain-model | HIR/consultation/notification 复用、Task Barrier、process identity | Updated (targeted rewrite; final cross-check pending) |
 | protocol-contracts | API/WSS 名称、ACK、spool、sequence、RabbitMQ | Updated |
-| state-machines | 唯一 HIR/Barrier/Detached/Process state machines | Pending |
-| failure-recovery | 周期 orphan scanner、Detached、迟到证据、卷丢失 | Pending |
-| security-model | E6 权限、服务身份、证据完整性、RabbitMQ边界 | Pending |
-| operational-runbook | scanner、spool、RabbitMQ 单实例降级、HIR | Pending |
-| testing-and-acceptance | A/B/C/D 回归与混沌验收 | Pending |
-| migration-roadmap | 唯一 Phase 0–5 编号及 schema 前置依赖 | Pending |
-| consistency-review | 23 份正文逐项审查，未完成不得 Complete | Pending |
-| code-contract-mapping | 代码路径、事务边界、adapter、scanner | Pending |
-| sem-02d-closure-design-proposal | 删除旧独立 HIR 表提案、更新 Barrier/E6/Phase | Pending |
-| sem-02d-review-package | 历史评审状态指向 SEM-02E | Pending |
-| sem-02d-final-architecture-review | 撤回旧 Design Complete 与阶段冲突 | Pending |
-| resource-aware-runner-scheduling | 不把资源/ broker 状态当终止证据 | Pending |
-| service-protocol-security-and-persistence | API prefix、process evidence、独立 DB、RabbitMQ | Pending |
-| sem-02d-review-findings-corrective-design | 修订为历史记录并链接本规范 | Pending |
+| state-machines | 唯一 HIR/Barrier/Detached/Process state machines | Updated (targeted rewrite; final cross-check pending) |
+| failure-recovery | 周期 orphan scanner、Detached、迟到证据、卷丢失 | Updated (targeted rewrite; final cross-check pending) |
+| security-model | E6 权限、服务身份、证据完整性、RabbitMQ边界 | Updated (targeted rewrite; final cross-check pending) |
+| operational-runbook | scanner、spool、RabbitMQ 单实例降级、HIR | Updated (targeted rewrite; final cross-check pending) |
+| testing-and-acceptance | A/B/C/D 回归与混沌验收 | Updated (targeted rewrite; final cross-check pending) |
+| migration-roadmap | 唯一 Phase 0–5 编号及 schema 前置依赖 | Updated (targeted rewrite; final cross-check pending) |
+| consistency-review | 23 份正文逐项审查，未完成不得 Complete | Updated (targeted rewrite; final cross-check pending) |
+| code-contract-mapping | 代码路径、事务边界、adapter、scanner | Updated (targeted rewrite; final cross-check pending) |
+| sem-02d-closure-design-proposal | 删除旧独立 HIR 表提案、更新 Barrier/E6/Phase | Updated (targeted rewrite; final cross-check pending) |
+| sem-02d-review-package | 历史评审状态指向 SEM-02E | Updated (targeted rewrite; final cross-check pending) |
+| sem-02d-final-architecture-review | 撤回旧 Design Complete 与阶段冲突 | Updated (targeted rewrite; final cross-check pending) |
+| resource-aware-runner-scheduling | 不把资源/ broker 状态当终止证据 | Updated (targeted rewrite; final cross-check pending) |
+| service-protocol-security-and-persistence | API prefix、process evidence、独立 DB、RabbitMQ | Updated (targeted rewrite; final cross-check pending) |
+| sem-02d-review-findings-corrective-design | 修订为历史记录并链接本规范 | Updated (targeted rewrite; final cross-check pending) |
 
 > Updated 仅表示已对该文件进行本轮定向修改，不代表全量正文审计已通过。Pending 文档仍是冻结阻断项。
 
