@@ -1693,9 +1693,9 @@ This is a design correction only. The candidate DDL, migration replay, two-conne
 The SEM protocol repository now carries a deterministic cross-language callback vector:
 
 - File: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`
-- Pinned fixture commit: `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`
+- Pinned fixture commit: `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`
 - Event type: `execution.infrastructure_uncertain`
-- The fixture includes the complete authenticated envelope, payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256.
+- The fixture includes the complete authenticated envelope, including optional `correlation_id`, payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256.
 
 SEM's Python and Node validators independently canonicalize the same fixture and compare exact UTF-8 bytes and both hashes. AI-PM's Rust implementation must consume this exact fixture (pinned to the commit above until a ratified SEM protocol tag exists) and match all expected bytes/hashes. The vector is intentionally ASCII-only with integer values; it proves cross-language agreement for the complete-envelope shape, not the full Unicode/numeric edge matrix. INBOX-33 continues to require the broader RFC 8785 cases.
 
@@ -2498,7 +2498,7 @@ This is a design correction only. The candidate DDL, migration replay, two-conne
 The SEM protocol repository now carries a deterministic cross-language callback vector:
 
 - File: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`
-- Pinned fixture commit: `smark-sem@f9edbe42c596b29eb10eea2b0801049659d77cb8`
+- Pinned fixture commit: `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`
 - Event type: `execution.infrastructure_uncertain`
 - The fixture includes the complete authenticated envelope, payload canonical bytes, full-envelope canonical bytes, payload SHA-256 and event-envelope SHA-256.
 
