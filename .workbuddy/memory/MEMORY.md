@@ -133,3 +133,10 @@
   **不提供**后端端点（前端逐条提交）· Q6 Cognition 启动**不走 MCP**（仅 REST）。
 - **前端刻意不做的**：初始化工作空间页、项目 profile 页、基线历史页、知识变更提案页（API 层已封装，
   契约已定，后端就绪后补视图即可）。
+
+## Git 远端约定（2026-11-24 用户裁定）
+
+- **以 GitHub 为主**：`github`（`git@github.com:luqizheng/ai-pm.git`）是权威远端；
+  `origin`（`192.168.2.16:tooling/ai-pm`，内网 GitLab）为同步副本。
+- 推送顺序：先 `git push github master`，再同步 `origin`（或按用户指示）。
+- 当前三端一致：本地 = origin = github = `69af65b4`（SEM-02A 架构 V1）。
