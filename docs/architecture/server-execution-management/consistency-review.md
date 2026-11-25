@@ -100,3 +100,19 @@ Status remains **Changes Required**. No ADR freeze or Phase 0 authorization.
 - This was a terminology/heading scan, not a claim that every business reader/writer or transaction path has completed a semantic audit.
 
 Overall status remains **Changes Required / Review Pending**. PR #9 must remain Draft and must not be merged until the remaining P0/P1 items are resolved.
+
+
+## 8. SEM-02J Platform transaction and execution-path audit
+
+Read-only source audit against `master@d0e72fa6805aebeadf1b282e430deba493072fd6` is recorded in [SEM-02J](./sem-02j-transaction-and-execution-path-closure-review.md).
+
+Confirmed P0 findings:
+- Run ↔ Interaction lock-order inversion: report is Run→Interaction; retry/cancel are Interaction→Run.
+- Run ↔ Command lock-order inversion: reacquire is Run→Command; continue ACK is Command→Run.
+- Run ↔ Task lock-order inversion: Claim is Project→Run→Task; Task cancellation holds Task before its Interaction/Run linkage.
+- Task Barrier bypasses remain in TaskReady, review enqueue/claim/retry, same-Run reacquire and existing orphan recovery paths. Review Runs share `delivery.task_run` and cannot silently bypass a Task-scoped safety fence.
+- Review Claim/retry do not consistently participate in the Project activity gate, leaving a Project archive race.
+
+SEM-02J also records current concurrency-test coverage and the deterministic two-connection acceptance matrix. No application code or migration was changed. The final global lock order is deliberately not selected yet; remaining Run INSERT/UPDATE paths, SQL FK/trigger lock side effects, and all background/API entrypoints must be inventoried first.
+
+Overall status remains **Changes Required / Review Pending**. PR #9 remains Draft; no migration authoring, code changes, merge or Phase 0 start is authorized.
