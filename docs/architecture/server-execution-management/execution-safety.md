@@ -1,5 +1,8 @@
 # 执行安全：Lease、进程身份、Task Barrier 与安全重派
 
+> **Authority-boundary revision (2026-11-25):** The Task Barrier/HIR/Run safety model described here is AI-PM business authority, not SEM-owned state. SEM may report process/runtime evidence, but AI-PM decides business disposition, retry, barrier and task state. Reconcile the SEM-facing responsibilities against [authority-boundary-decision.md](./authority-boundary-decision.md); this document is not an SEM implementation contract.
+
+
 - 状态：SEM-02E 候选规范；Review Pending。
 - 权威基线：[SEM-02E](./sem-02e-architecture-convergence.md)。
 - 核心公理：**Lease expiry ≠ process death。Task Barrier 是新 Run/Generation 无法绕过的执行安全约束。**
