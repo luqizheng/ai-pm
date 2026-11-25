@@ -133,3 +133,15 @@ SEM-02J follow-up detail:
 - The failure-judge standalone Run update commits/releases before its later Task transaction; it is not labeled a proven simultaneous Run→Task lock inversion.
 
 The final global lock order remains unselected. The current migration-chain reconciliation, exhaustive write-path inventory, API/background route audit and deterministic pair tests remain open. No implementation or Phase 0 is authorized.
+
+
+## 10. SEM-02J third source-audit pass
+
+- Normal Run business writes add Run→Task edges: progress first-start, delivery submit, Worker spawn confirmation and Review completion. These must be included in the same lock graph as Claim and Task cancellation.
+- The current code still has Runner-facing MCP Claim/reacquire/command poll/ACK and a Platform Worker dispatch loop. These are legacy control paths to remove/fail-closed during SEM cutover; Harness business MCP operations remain distinct and must be retained.
+- `governance.human_intervention` currently stores seven intervention-action types and has no HIR lifecycle. Extending it requires a record discriminator and preservation of existing action readers.
+- `governance.human_consultation` is a generic formal decision workflow; its current create/transition paths lock Consultation and update Task waiting without Project activity or Task row locks. E6 requires typed anchors and cannot be inferred from generic consultation status.
+- `integration.notification` remains a project Feed without per-principal recipient ownership; proposed Inbox rows must remain non-authoritative.
+- `delivery.task_waiting`, Interaction scheduling shield and Task Execution Barrier are distinct gates; one Platform transaction predicate must evaluate all applicable gates.
+
+The global lock order remains unfrozen. Remaining work includes migration-chain reconciliation, exhaustive route/reader/writer inventory, exact API security contracts and deterministic two-connection concurrency tests. No implementation or Phase 0 is authorized.
