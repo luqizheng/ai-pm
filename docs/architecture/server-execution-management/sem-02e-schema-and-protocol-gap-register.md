@@ -1,5 +1,8 @@
 # SEM-02E — Schema and Protocol Gap Register
 
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
+
+
 - Status: **Changes Required / Review Pending**.
 - Evidence baseline: GitHub `master@6f317176c627886a0a616458aabced6f4da33f0b` (migration baseline and current application sources fetched read-only).
 - This is a design-gap register, not a migration script and not implementation authorization.
