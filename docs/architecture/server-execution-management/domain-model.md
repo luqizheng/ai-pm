@@ -1,94 +1,58 @@
-# SEM V1 Domain Model
+# SEM V1 Domain Model — SEM-02E
 
-Status: normative architecture target, not a claim about current implementation.
+> **HISTORICAL — SUPERSEDED, NOT AN IMPLEMENTATION CONTRACT (2026-11-25):** This AI-PM-side SEM design copy records the former Platform Claim/Lease/Run/Task/HIR/Barrier control-plane proposal. It is retained for source-audit and migration traceability only. Do not implement its SEM business orchestration, database ownership, state machines or API flows. The current bilateral boundary and active SEM protocol drafts are indexed in [the AI-PM SEM integration review](./README.md) and maintained canonically in [luqizheng/smark-sem](https://github.com/luqizheng/smark-sem).
 
-## 1. Core concepts
 
-| Concept | Meaning | V1 identity / authority |
+- Status: Review Pending.
+- Normative baseline: [SEM-02E](./sem-02e-architecture-convergence.md).
+- This document defines target ownership and relationships; it does not claim that the target schema already exists.
+
+## 1. Platform-owned business entities
+
+| Entity | Existing carrier / target | Authority and semantics |
 |---|---|---|
-| Logical execution | One task's execution lineage across retries | A lineage of delivery.task_run rows |
-| Run / Attempt | One concrete execution attempt and lease generation | One task_run row; attempt_no and supersedes_run_id preserve lineage |
-| Executor Session | Platform-created executor process identity | task_run.executor_session; never a Harness session ID |
-| Harness Native Session | Session identity owned by a Harness | task_run.harness_session_id + harness_kind |
-| Runner | Registered client-side process supervisor | Persisted Runner registration |
-| Lease | Time-bounded execution ownership | Run owner, token verifier, expiry and generation |
-| HIR | Human workflow for abnormal execution intervention | New governance.human_intervention_request entity |
-| Scheduling Shield | Durable exclusion from automatic claim/requeue | PostgreSQL state associated with the Run |
+| Task / Run / Lease / Generation | Existing Platform delivery model | Platform is the sole business execution-right authority |
+| Interaction | `delivery.task_interaction` | Agent input/decision/permission lifecycle; not HIR and not process-termination evidence |
+| HIR | Extend `governance.human_intervention` with `record_kind=action|hir` | Preserve existing intervention action rows; add the seven-state HIR work-item lifecycle with HIR-only fields and one HIR per Barrier |
+| Human Consultation | `governance.human_consultation` | Formal human decision with existing four-state CHECK, decision-completeness CHECK and append-only supersede relation |
+| Notification | `integration.notification` + new `integration.notification_recipient` | Preserve project Feed/read_at; child rows provide per-principal Inbox, per-recipient read state and explicit unassigned queue |
+| Execution Barrier | New Platform-owned entity/table or equivalent normalized structure | Task-scoped execution uncertainty; blocks all new Run/Generation dispatch for the Task until safely released or explicitly risk-accepted |
 
-## 2. Run lineage
+Repository evidence describes the existing `governance.human_intervention` as an execution-intervention/action record (for example veto/rollback/freeze), while `governance.human_consultation` is a separate formal-decision record. Reusing the former as the HIR work-item carrier therefore requires a deliberate schema/domain refactor; it must not silently conflate an action log with an open work queue. Preserve the distinction between HIR lifecycle and individual intervention actions, either through clearly separated fields/child records or a justified redesign documented before migration.
 
-- One logical execution may contain multiple Run rows.
-- One Run row is one Attempt and has at most one active execution owner.
-- supersedes_run_id points to the prior Run in the same task lineage.
-- attempt_no increases monotonically within that lineage.
-- A replacement Attempt receives a new Run ID, generation, executor process identity and workspace.
-- A Harness Resume does not transfer the old lease or process identity.
-- A copied Harness session ID alone never proves cross-device or cross-host resumability.
+## 2. SEM-owned execution entities
 
-## 3. HIR entity target
+SEM owns RunnerConnection, TicketUse, DispatchOperation, CommandDelivery, PlatformDelivery, InboxEvent, ProcessObservation, resource snapshots/reservations, and persistent Detached/Reconciliation state. These are execution/transport facts and must not become a second Platform Run/Lease/Generation/HIR authority.
 
-Target table: governance.human_intervention_request.
+The minimum SEM persistence baseline remains the seven tables in ADR-SEM-24. Process identity sequence details may be normalized within `process_observation` unless implementation proves a separate SEM-private table necessary; no eighth table is approved by this document.
 
-Minimum conceptual attributes:
-- ID and tenant/project/task/Run references.
-- Optional superseding Run reference.
-- Reason code and evidence class (E3/E4/E5 or non-liveness intervention).
-- Status, requested action and resolution code.
-- Created/updated/resolved/closed timestamps.
-- Actor identity for system and human transitions.
-- Optional Runner selection and Harness session reference.
-- Optimistic concurrency/version field.
+## 3. Task Execution Barrier
 
-Required constraints:
-- HIR and Run must share tenant/project/task lineage.
-- Multiple historical HIRs may exist; unresolved duplicates for one active intervention episode are prevented.
-- Every transition is transactional and audited.
-- HIR does not replace task_interaction. Interaction requests normal user input/decision/permission; HIR coordinates abnormal execution, process uncertainty and takeover.
+Barrier is Platform-owned and Task-scoped. It records at least `task_id`, `origin_run_id`, `origin_generation`, state (`active`, `risk_accepted_unconfirmed`, `released`), evidence references, HIR link, actor and timestamps, and optional E6 Human Consultation/successor references.
 
-## 4. Runner supervision
+At most one unreleased Barrier may exist per Task. The database must enforce this under concurrent create/claim/requeue paths. A new Run row or Generation cannot bypass an existing Task Barrier.
 
-- Missing supervision mode at first registration defaults to unattended.
-- unattended may claim automatically within platform authorization.
-- supervised requires explicit user confirmation before each claim.
-- Supervision mode is independent of online/offline/busy/unavailable.
-- Mode changes are authorized and audited; active leases are not silently reinterpreted.
+E6 does not release the Barrier. It changes the Barrier to `risk_accepted_unconfirmed` and authorizes exactly one pre-bound successor.
 
-## 5. Session and workspace rules
+## 4. Process Identity sequence
 
-- executor_session is not a Harness Native Session ID.
-- Harness capabilities are code-level adapter metadata; Resume is disabled by default and gated by exact Harness/version acceptance.
-- Workspace loss does not imply process death.
-- Workspace, Worktree and Git Mirror are not backup targets. The runtime volume may persist while SEM operates; loss invokes E4/E5 isolation.
-- Each Repository has one authoritative Git origin. SEM does not orchestrate multi-origin synchronization.
+A Run+Generation may contain multiple sequential process identities, especially when Interaction continuation terminates one Harness process and starts another without changing the Run Generation.
 
-## 6. Scheduling Shield
+Each identity includes a monotonically increasing `process_sequence`, Runner/device identity and `boot_id`, OS PID plus process creation identity, Harness kind and launch reason, start/exit observations, and optional originating `command_id`.
 
-The shield is a durable scheduling invariant, not an audit-only event or lease extension:
-- Every claim and automatic requeue/recovery path excludes shielded Runs.
-- Lease may expire naturally while shield remains active.
-- Late heartbeat does not clear the shield or revive an old generation.
-- Only E1/E2/E3 evidence-backed termination may release it. E6 may authorize one risk-accepted successor but leaves the original Barrier unresolved.
-- A shielded Run must have an actionable HIR or explicit operational escalation record.
+Late evidence for sequence N may close only sequence N; it cannot close or overwrite sequence N+1.
+
+**Open contract requirement:** SEM records OS process observations, but Platform is the Lease/Generation authority. Before implementation, the protocol must define how Platform learns and fences the accepted active `process_sequence` (for example, an authenticated continuation-consumed API that atomically advances a Platform-side active-process fence). Platform cannot validate Lease Renewal using a process sequence that exists only in SEM DB.
+
+## 5. E6 Human Consultation
+
+E6 is a formal risk-acceptance decision recorded through `governance.human_consultation`, not a process-exit event. It binds one HIR, one Task Barrier and one unique successor Run, with operator, decision time, reason, residual-risk summary, mitigations and explicit confirmation. The successor is preallocated/reserved atomically with authorization. Existing Human Consultation constraints (status CHECK, decision tuple and supersede chain) must be preserved or deliberately amended.
+
+## 6. RabbitMQ
+
+RabbitMQ is an existing independent single-instance service without clustering. It is not a business entity or authority. Broker messages never grant execution rights, commit business state, release a Barrier or prove process termination.
 
 
-## 7. Runner resource capacity (ADR-SEM-26 — approved)
+## 7. Platform process identity persistence
 
-Runner reports CPU, memory, and the actual Workspace volume's free space to SEM. SEM owns the latest resource snapshot and per-Run+Generation admission reservations; Platform remains authoritative for Claim, Lease, Generation, and business Run state. Candidate tasks carry a conservative resource profile (CPU units, peak memory budget, Workspace growth budget, profile class). SEM atomically reserves capacity before requesting Platform Claim, retains reservations through ambiguous Claim outcomes and active execution, and releases only after safe terminal/termination handling. Unknown or stale metrics block new work but never imply that active processes have exited. Resource pressure does not automatically kill or migrate running tasks in V1.
-
-
-## 8. Interaction / HIR / Continuation / Cleanup 分域（Review Pending）
-
-- Interaction 表达 Agent 向人提问及响应链；其 scheduling_shield 四值保持原样。
-- Continuation 表达 checkpoint + response 投递、执行端注入和新 Session 启动；consumed 不证明旧进程退出。
-- HIR 表达执行异常、失联、风险处置和 handoff；Phase 0 最小可操作，Phase 4 扩展高级流程。
-- Cleanup Need 表达 Workspace/进程清理失败；仅在伴随执行不确定性时关联 HIR/Barrier。
-- Execution Barrier 表达 Run+Generation 的物理执行不确定性；Detached 是生命周期投影，不是 shield 枚举值。
-- Notification 必须有明确 recipient 与 delivery 状态；Interaction/HIR 事务各自 Outbox 触发通知。
-
-## 9. E6 Human Risk Acceptance
-
-E6 是授权事实，不是进程终止事实。它允许一个被精确绑定的 successor Attempt 在明确披露旧进程仍可能运行的残余风险后启动；旧 Barrier 保持 `risk_accepted_unconfirmed`，不能标记 released。只有 E1/E2/E3 才能证明进程终止并释放 Barrier。自动重派仍严格要求 E1/E2/E3。
-
-## 10. Dispatchability
-
-Platform 统一 dispatchability predicate 必须检查 Interaction shield 与 Execution Barrier，并覆盖 queued claim、B3-1/B3-2、B06-D3、retry/requeue、orphan reconciliation、handoff 和 E6 successor。候选 SQL 过滤不能代替事务锁内重验。
+Platform owns the active process sequence used by Lease Renewal. Candidate physical model: `delivery.task_run_process` plus `delivery.task_run.active_process_sequence`. SEM's `process_observation` remains an execution-side observation ledger, not a substitute for Platform's accepted identity fence. See [SEM-02F §6](./sem-02f-executable-physical-and-protocol-contracts.md#6-platform-process-identity-sequence-and-lease-renewal-fence).

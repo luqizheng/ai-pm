@@ -1,3 +1,11 @@
+> **历史接入手册 — 不适用于新的 SEM 架构（2026-11-25）**
+>
+> 本文描述旧 Model A：执行端使用真人 API Key，通过 AI-PM MCP 自行发现/Claim Task，并持有 Platform Run Lease。该控制路径正在被新的 AI-PM → SEM opaque execution message → Runner Supervisor → Harness → AI-PM MCP 架构替代。新架构不得照本文配置 Runner Claim/Lease/command polling。
+>
+> 本文关于 pm_submit_result 返回 Unsupported 的描述也已过时：当前 master 源码已有 D4 真实提交实现。请以源码和新的 [Harness identity / business fencing review](../architecture/server-execution-management/harness-identity-and-business-fencing-review.md) 为准。替代接入手册尚未批准；本文仅作为旧实现历史记录，不构成新架构部署指南。
+
+---
+
 # AI 研发管理平台：执行端接入 Runbook（V1 · 草稿）
 
 > **标注图例**：〔已核实〕= 2026-11-01 对照 `crates/pm-mcp`（`server.rs` / `tools.rs`）与 `docs/runbooks/runbook-login-chain.md` 源码逐条核实；〔设计〕= 既有设计文档的既定约束；〔待确认〕= 本稿新增推断或待拍板项。

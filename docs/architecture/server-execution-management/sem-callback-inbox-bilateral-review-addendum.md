@@ -1,0 +1,319 @@
+# SEM Callback Inbox — Bilateral Review Addendum
+
+- Status: **DRAFT / REVIEW REQUIRED**
+- Related AI-PM PR: #9, branch `docs/sem-02e-architecture-convergence`
+- Related SEM PR: #3, branch `docs/sem-d05-lifecycle-crash-consistency`
+- Review date: 2026-11-25
+- No implementation or migration is authorized.
+
+## 1. Review result
+
+The proposed direction is accepted for continued design: a dedicated service-authenticated callback route, a SEM-specific application port, reuse of `integration.inbound_event` only if its constraints are extended safely, a per-attempt contiguous event cursor, and one transaction for Inbox deduplication + Run observation + cursor advance.
+
+The callback must not use the existing human-authenticated `POST /api/v1/events`, must not invoke generic `submit_event()` unchanged, must not enqueue `ai_analysis`, and must not synthesize a HumanActor.
+
+The proposal remains Draft. OI-01..OI-06 are not ratified.
+
+## 2. Cross-repository contract alignment items
+
+### 2.1 ACK sequence name
+
+The SEM incoming event field is `execution_event_sequence`; the AI-PM cursor is also named `execution_event_sequence`. The current SEM ACK schema instead calls the echoed event value `event_sequence`.
+
+Preferred correction: use `execution_event_sequence` in the ACK as well. If the shorter field is retained, define it normatively as the exact echo of the incoming `execution_event_sequence`, and explicitly distinguish it from Runner journal `event_sequence` and WSS `message_sequence`.
+
+The ACK must also return `contiguous_through_sequence`, `disposition` and `acknowledged_at`, and must only be sent after the transaction commits.
+
+### 2.2 Exact storage contract is not yet frozen
+
+Before approving shared Inbox reuse, provide exact DDL for:
+- confirm the existing `integration.inbound_event.id` global primary key is used directly as SEM `event_id` (no additional global unique index is needed);
+- `delivery.task_run.execution_event_sequence` cursor with nonnegative constraint;
+- any Run-event CHECK/constraint extension and event detail representation;
+- FK/tenant/project/service-principal integrity;
+- any uniqueness needed to prevent two event IDs occupying one `(execution_id, execution_event_sequence)`.
+
+Specify whether payload hash is over exact received bytes or canonicalized JSON. Both sides must use one exact rule.
+
+### 2.3 Transaction and replay proof
+
+Add deterministic PostgreSQL two-connection tests for concurrent duplicates and sequence collisions. The transaction must atomically:
+1. insert/deduplicate the SEM Inbox event;
+2. append one `sem_infrastructure_observed` Run event;
+3. advance the attempt cursor.
+
+Crash before commit must leave no partial writes and no success ACK. Crash after commit before ACK must be recoverable by replaying the exact event_id/body and returning a duplicate ACK.
+
+### 2.4 Semantic evidence validation
+
+JSON Schema shape validation is not enough to validate D-05 identity. Before accepting a callback, the application service must validate the event against the current attempt and known infrastructure binding, including runner_id, runner key version, boot_id, supervisor instance, binding_epoch, launch/containment identity and evidence references as applicable.
+
+In particular:
+- process exit evidence must be tied to the exact process/containment identity;
+- release state `process_exited` must carry verifiable process-exit evidence;
+- stale binding epochs must not overwrite newer observations;
+- exit_code 0 is infrastructure evidence only and never means business success.
+
+### 2.5 Error/ACK alignment
+
+Freeze exact response bodies and retry classes for:
+- `IDEMPOTENCY_CONFLICT`;
+- `EVENT_SEQUENCE_GAP` (including `expected_sequence`);
+- `EVENT_SEQUENCE_CONFLICT`;
+- malformed/signature/freshness failures;
+- unknown execution / wrong tenant / wrong run kind;
+- transient 429/5xx.
+
+The OpenAPI, SEM JSON Schema, AI-PM application port and SEM retry logic must use the same field names and status-code semantics.
+
+## 3. Required acceptance cases
+
+In addition to the 14 cases in the main draft, add explicit tests for:
+1. ACK echoes the exact incoming execution_event_sequence.
+2. Same event_id with changed sequence is a conflict.
+3. Same sequence with different event_id is a conflict.
+4. Global `event_id` primary-key collision across two project IDs, with non-enumerating conflict handling.
+5. Concurrent same-event and same-sequence deliveries.
+6. Hash canonicalization agreement between SEM and AI-PM.
+7. Event binding_epoch / runner identity mismatch is rejected or quarantined without advancing cursor.
+8. Event replay after commit-before-ACK returns the same durable disposition.
+9. Callback response signature is verified by SEM before marking event acknowledged.
+
+## 4. Decision status
+
+- OI-01 execution_id mapping: **open**.
+- OI-02 shared Inbox reuse: **recommended; source audit confirms global PK and identifies required sequence metadata/constraints; live catalog proof remains open**.
+- OI-03 cursor + Run event migration details: **open**.
+- OI-04 service principal and signature key registry: **open**.
+- OI-05 retention/compaction/operator replay: **open**.
+- OI-06 exact callback response/error contract: **open**.
+
+No AI-PM source code, route, migration, database schema, runtime configuration or deployment was changed by this addendum.
+
+
+## 5. SEM-side contract update — proposed bilateral alignment
+
+The current SEM contract draft has been updated to use `execution_event_sequence` in the callback success acknowledgement, matching the incoming event envelope and the AI-PM per-attempt cursor. The legacy ambiguous ACK field `event_sequence` is rejected by the SEM positive/negative fixture validator.
+
+The expected ACK shape is:
+
+```json
+{
+  "event_id": "uuid",
+  "execution_id": "uuid",
+  "execution_event_sequence": 12,
+  "contiguous_through_sequence": 12,
+  "disposition": "accepted",
+  "acknowledged_at": "RFC3339 UTC"
+}
+```
+
+AI-PM's response contract should echo the accepted event's exact `execution_event_sequence`; this field is not the Runner journal sequence or WSS connection-scoped message sequence. A duplicate ACK echoes the same sequence and uses `disposition=duplicate`. The response remains forbidden until the Inbox + Run observation + cursor transaction commits.
+
+SEM has also strengthened the event JSON Schema to require runner key version, boot ID and Supervisor instance identity on delivery/process/release/uncertainty observations. The AI-PM receiver must still compare these against the currently bound attempt; JSON Schema validity does not replace semantic binding validation. A release observation of `process_exited` requires a process-exit evidence reference, and an exited process observation requires exact process identity and exactly one exit status discriminator (`exit_code` or `exit_signal`).
+
+These are changes to the SEM Draft contract, not ratified bilateral decisions. AI-PM PR #9 must independently adopt the same field names and semantics before interoperability can be claimed.
+
+
+## 6. AI-PM source/DDL audit — 2026-11-25
+
+A source-level audit was performed against PR #9 base commit `d0e72fa6805aebeadf1b282e430deba493072fd6`, including the squashed baseline DDL, `pm-application/src/ingestion.rs`, and `migrations/0013_task_run_event.sql`.
+
+Confirmed findings:
+
+1. `integration.inbound_event.id` is already a global UUID primary key. Map SEM `event_id` directly to it; a second global unique index is redundant.
+2. Existing `UNIQUE(project_id, source, idempotency_key)` does not enforce uniqueness of `(execution_id, execution_event_sequence)`.
+3. Existing generic `submit_event()` inserts Inbox + `integration.job(job_type='ai_analysis')` atomically and hashes a Rust JSON serialization. It must not be reused for SEM.
+4. The current Inbox requires `actor_id` and has a principal FK. SEM must use a service principal through a dedicated service-authenticated port; it must not synthesize HumanActor.
+5. `delivery.task_run` has `UNIQUE(tenant_id,id)`, `UNIQUE(project_id,id)`, and `run_kind` distinguishes delivery/review.
+6. `delivery.task_run_event` is append-only but its current event-type CHECK does not include `sem_infrastructure_observed`; its current unique index is not a direct execution-sequence uniqueness constraint.
+
+The detailed candidate DDL, JCS payload hash rule, transaction/lock order, and 31-case two-connection PostgreSQL acceptance matrix are recorded in [sem-callback-inbox-ddl-and-concurrency-design.md](sem-callback-inbox-ddl-and-concurrency-design.md).
+
+Important correction: global event-ID uniqueness is already provided by the Inbox primary key. The missing database invariant is sequence uniqueness per execution, plus the cursor and observation-ledger constraints. The proposed DDL still requires live PostgreSQL catalog capture, empty-database migration replay, and bilateral review before ratification.
+
+No implementation or migration is authorized. OI-01..OI-06 remain open.
+
+## 7. DDL re-review — existing Run-event CHECK must be replaced (2026-11-25)
+
+Rechecking the exact current `migrations/0013_task_run_event.sql` reveals a required DDL operation missing from the candidate block: the existing named constraint `task_run_event_type_check` allows exactly eight event types and excludes `sem_infrastructure_observed`.
+
+Adding `task_run_event_sem_sequence_check` does not extend that allow-list. PostgreSQL will still reject the new observation event under the original CHECK. The migration must explicitly drop and recreate `task_run_event_type_check` with the original eight values plus `sem_infrastructure_observed`; the exact forward-only SQL is now included in the DDL design document.
+
+Acceptance must prove all original eight event types remain accepted, the new SEM event type is accepted, and an unknown type remains rejected. This is a source-verified migration correctness blocker, not optional hardening.
+
+No migration or runtime source was changed. The DDL remains Draft; live PostgreSQL replay and two-connection tests are still required.
+
+## 8. Replay identity must cover the complete event envelope (2026-11-25)
+
+A follow-up review found that the earlier duplicate rule compared `execution_id`, `execution_event_sequence` and the JCS hash of `payload` only. That is insufficient: an event replay could retain the same payload while changing `event_type`, `schema_version` or `occurred_at`, and be incorrectly acknowledged as a duplicate.
+
+The candidate DDL now preserves the existing payload-level `payload_hash` and adds a SEM-only `event_envelope_hash`. The latter is SHA-256 over RFC 8785 JCS UTF-8 bytes of the complete authenticated event envelope: every schema-defined envelope field that is present: `event_id`, `event_type`, `schema_version`, `occurred_at`, `execution_id`, `execution_event_sequence`, optional `correlation_id` when present, and `payload`. Unknown fields reject; absent optional fields are omitted. It excludes HTTP signature headers and transport metadata. Duplicate detection compares the envelope hash plus the stored event type and execution/sequence tuple.
+
+The SEM-specific CHECK requires a lowercase 64-character hex hash for `source='sem'` and NULL for non-SEM events. INBOX-29..31 cover changed event_type, changed schema_version/occurred_at, and equivalent JCS envelopes with different whitespace/member ordering.
+
+This closes the identified design-level equality ambiguity only. It does not prove the Rust JCS implementation, cross-language hash interoperability, database migration correctness or PostgreSQL concurrency behavior. DDL remains Draft / Changes Required; no migration or runtime code was changed.
+
+
+## 9. Callback JCS implementation and cross-language vector requirements
+
+The callback hash contract is not closed merely by selecting RFC 8785. The Rust producer/consumer implementation must be pinned and proven against an independent implementation using the same complete callback envelope.
+
+The DDL design now explicitly requires:
+- A pinned Rust JCS implementation/version; generic `serde_json::Value::to_string()` is not an acceptable canonicalizer.
+- RFC 8785 ECMAScript-compatible IEEE-754 number serialization and UTF-16 code-unit object-property ordering.
+- Duplicate JSON object member rejection before `serde_json::Value` materialization, including escaped-equivalent names and nested objects.
+- Shared callback envelope vectors proving exact JCS UTF-8 bytes, payload_hash and event_envelope_hash agreement between Rust and an independent Node/Python implementation.
+- Numeric boundary, negative-zero, Unicode/UTF-16 ordering, unpaired-surrogate and malformed-input negative vectors.
+
+Added INBOX-32..34. At that point the PostgreSQL acceptance matrix contained 34 cases; subsequent INBOX-35..42 additions bring the current matrix to 49 cases. These are requirements only: no canonicalizer dependency, production parser, migration or runtime implementation was added. OI-03 and the hash interoperability gate remain open.
+
+
+The same DDL update also fixes the SEM mapping for the existing Inbox idempotency key: `idempotency_key` is the canonical lowercase hyphenated UUID string of `event_id`. The global Inbox primary key remains the cross-project event identity constraint; the partial execution/sequence index remains the sequence constraint. The SEM CHECK now requires both payload_hash and event_envelope_hash to be lowercase 64-character SHA-256 hex strings.
+
+
+## 10. Shared callback-envelope vector pinned
+
+SEM now provides a shared callback fixture at `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json`, pinned to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. It contains one valid `execution.infrastructure_uncertain` event, the payload and full-envelope RFC 8785 canonical UTF-8 bytes, and both SHA-256 hashes.
+
+The SEM Python and Node validators independently verify exact bytes and hashes. Added INBOX-35: AI-PM's eventual Rust implementation must pass the exact same pinned vector, not a locally recreated approximation. This vector uses ASCII strings and integer values by design; the wider RFC 8785 Unicode/numeric boundary requirements in INBOX-33 remain separate.
+
+The shared vector closes one deterministic cross-language fixture gap, but not the production Rust implementation, dependency selection, raw HTTP duplicate-member rejection, PostgreSQL DDL/concurrency tests or bilateral live callback integration. No runtime code or migration was changed.
+
+
+## 11. PostgreSQL CHECK NULL semantics and SQL grouping correction
+
+The latest review identified two defects in the illustrative SEM Inbox CHECK: regex predicates without explicit `IS NOT NULL` guards can evaluate to UNKNOWN (which PostgreSQL CHECK accepts), and the SEM/non-SEM branches were not correctly grouped in the draft expression.
+
+The DDL design now explicitly requires non-NULL `payload_hash` and `event_envelope_hash` before validating their lowercase 64-character SHA-256 format, closes the SEM branch before the non-SEM OR branch, and retains the source NULL guard. Added INBOX-36..38 for each missing hash and the complete truth-table/parse behavior.
+
+The corrected text is still not a validated migration. PostgreSQL must execute the expression in an empty-database replay and test TRUE/FALSE/UNKNOWN cases before this contract can be accepted. The acceptance matrix now contains 49 cases.
+
+
+## 12. Optional correlation_id is part of authenticated envelope identity
+
+A schema re-read found that Platform–SEM `EventBase` permits optional top-level `correlation_id`. The earlier full-envelope hash field list omitted it. That would have allowed a callback to be replayed with a changed correlation_id while retaining the same envelope hash.
+
+The contract is corrected: JCS covers every schema-defined envelope field that is present, including `correlation_id` when present. Absent optional fields are omitted; unknown fields are rejected by schema validation before hashing. The shared vector now includes `correlation_id` and pins to `smark-sem@ad09195d44d557b5a5d174d6bdfdef687dcef4b5`. Python and Node assert that changing correlation_id or omitting a previously present optional field changes the full-envelope hash while leaving the payload hash unchanged.
+
+The latest design correction is documented in AI-PM PR #9. This is a deterministic fixture improvement; Rust implementation and live callback integration remain open.
+
+
+INBOX-39 now explicitly covers optional-field omission: when correlation_id is present in one envelope and absent in another, the payload hash remains equal but the complete-envelope hash differs. The acceptance matrix now contains 49 cases.
+
+
+## 13. Explicit PostgreSQL CHECK truth table
+
+The DDL design now lists the required PostgreSQL execution cases for the SEM source CHECK: valid SEM hashes accept; NULL execution ID/sequence, NULL or malformed payload hash, NULL or malformed envelope hash reject; valid non-SEM rows retain NULL execution tuple/envelope hash; non-SEM rows with SEM-only fields reject; NULL source is rejected by the existing column NOT NULL constraint before this CHECK. The test must execute these rows in PostgreSQL and assert the named constraint, not merely duplicate the Boolean expression in application code.
+
+This makes INBOX-36..38 executable acceptance requirements. The candidate expression has been textually repaired but still has no PostgreSQL replay/catalog proof.
+
+
+## 14. Signed callback ACK correlation identity
+
+The callback ACK response must carry exactly one signed `X-SEM-Event-Id` header equal to the authenticated callback `event_id`. This is distinct from the Platform→SEM response direction, where `X-SEM-Request-Id` echoes `request_id` (the operation/idempotency identity), not `message_id`. The SEM deterministic response fixture `tests/protocol/fixtures/crypto-vectors-v1.json` at `smark-sem@3df2d35cd6e8066e2aff831506ab1e0b1ddc6395` includes both `http_callback_ack` and `http_error_409`; it binds the exact shared callback envelope bytes to a signed 200 ACK, includes a signed Platform→SEM 409 structured conflict, and Python/Node reject mismatched event/request correlation. AI-PM's callback response contract has been aligned.
+
+
+The signed ACK verifier must also bind the response to the exact originating request context (method, authority, path and request Content-Digest), not merely validate the response signature and event correlation header. SEM's Python/Node fixtures mutate each request-derived component and prove signature verification fails; AI-PM's future Rust/client verifier must preserve the same request context through response verification.
+
+
+## 15. SEM-side independent Python/Node JCS edge corpus
+
+SEM's test suite now has independent Python and Node JCS canonicalizers for the same committed edge corpus: UTF-16 property ordering (including supplementary-plane keys), representative RFC 8785 Appendix B IEEE-754 bit patterns, negative zero, subnormals, exponent thresholds, recursive object sorting/array preservation, control escaping, malformed JSON, duplicate decoded members, unpaired surrogates and non-finite values. The Python implementation is test-only and does not use `json.dumps(sort_keys=True)` as a JCS substitute. Its implementation was included in `smark-sem@6ac2add731054b1f67e39c46d148476a1cdfa2be`; CI run #316 passed all validation steps, including quote/reverse-solidus, nested duplicate-member and unpaired-surrogate-property-name cases.
+
+This closes the independent Python/Node test-helper gap for the committed corpus, not the production consumer requirement. AI-PM must still pin a Rust JCS implementation and pass the same vectors plus the shared callback envelope hashes before enabling the callback path.
+
+
+Pre-authentication or malformed callback requests must not cause AI-PM to echo an unverified attacker-supplied `event_id` as an authenticated `X-SEM-Event-Id` correlation value. The bilateral Draft now defines the generic error response/signature boundary in §17 below; it remains subject to deterministic vectors and live middleware verification.
+
+
+## 16. Rust JCS dependency candidate and MSRV gate
+
+The dependency evaluation document now compares strict raw-byte JCS candidates. `canonprims-json 0.1.4` is the leading technical candidate because it rejects duplicate members, invalid UTF-8, lone surrogates, non-finite numbers and inexact integer tokens before canonical output, and carries explicit limits plus a shared cross-language conformance corpus. It requires Rust 1.88.0 and is still a very new 0.x project with limited external adoption; it is therefore a spike candidate, not an approved dependency.
+
+AI-PM's Dockerfile currently uses floating `rust:1-slim` and its workspace has no declared MSRV. If the isolated spike passes, AI-PM must pin its builder/toolchain to at least 1.88.0 and declare that floor. SEM's separate candidate workspace currently declares Rust 1.85; it need not change if the canonicalizer remains an AI-PM-only callback Inbox dependency. No Cargo manifest, lockfile, Dockerfile or runtime code was changed. The Rust 1.88 AI-PM build floor is an explicit decision gate.
+
+
+## 17. Authenticated callback errors versus pre-authentication failures
+
+AI-PM's callback ingress must follow the shared D-04 response-class policy:
+
+1. Enforce HTTP framing and the maximum body-byte limit. If the body is rejected before the full raw bytes can be digested and the request signature verified, return only a generic unsigned pre-authentication error. It must contain no Content-Digest/Signature-Input/Signature response headers, no X-SEM-Event-Id, and no message_id/in_reply_to/request_id/event_id in its body.
+2. For an in-limit request, compute Content-Digest over the exact raw bytes and verify the RFC 9421 request signature, key state, timestamp/expiry and nonce freshness/replay before JSON parsing.
+3. After successful authentication, parse strict JSON, reject duplicate decoded member names, validate the callback schema and require the authenticated Idempotency-Key to equal envelope event_id before database processing.
+4. Every response generated after successful authentication—including 200, 400, 404, 409, 422, 429 and 500—must be signed, bind the exact originating request method/authority/path/request Content-Digest, and include exactly one X-SEM-Event-Id equal to the authenticated Idempotency-Key header.
+5. If the body event_id is missing or differs from the signed Idempotency-Key, return signed 400 correlated only to the signed header value. Do not echo the body value and do not open the Inbox transaction.
+6. Application-level 429 is post-authentication, signed and includes mandatory Retry-After. Edge/WAF rate limiting before authentication is outside the API contract and must not reflect protocol IDs.
+7. Unknown/wrong tenant/project/execution and review Run IDs are authenticated non-enumerating 404 responses, signed with the same callback response profile. Same event_id conflicts, sequence conflicts and gaps are signed 409 responses.
+8. If the server cannot sign an authenticated error, it must terminate the response/connection; it must not downgrade to an unsigned response with an authenticated correlation value.
+
+This corrects the prior open-policy note. It is a Draft contract alignment only. SEM now provides deterministic signed 404 vectors for both Platform GET and SEM callback directions, plus unsigned pre-auth 401/early-413 shape fixtures; Python and Node verify them. AI-PM still needs to consume the exact callback 404 and pre-auth fixtures in its Rust response-verification tests and prove the live middleware ordering before the callback endpoint is implementation-ready.
+
+
+## 18. Inbox conflict classification precedence
+
+A re-review found an ambiguity in the post-`ON CONFLICT DO NOTHING` recovery algorithm. An event_id collision across executions can legitimately produce an event_id lookup hit but no matching sequence lookup. That must be classified as IDEMPOTENCY_CONFLICT, not as an integrity failure.
+
+The DDL design now freezes this precedence:
+1. An existing global event_id under a non-SEM source, or with an execution_id different from the authenticated incoming execution_id, is 409 IDEMPOTENCY_CONFLICT. This takes precedence even if its stored tenant/project differs or the incoming sequence is owned by another row; never disclose the existing row's scope.
+2. If execution_id is the same but stored tenant_id/project_id disagree with the locked Run-derived scope, return a generic integrity failure; rollback and never ACK or disclose the stored scope.
+3. Otherwise, a different idempotency_key or any changed event_type/sequence/payload_hash/event_envelope_hash is 409 IDEMPOTENCY_CONFLICT.
+4. Existing event_id with exact tuple/hash and matching Run scope → the sequence lookup must identify the same SEM Inbox row; otherwise generic integrity failure and no ACK.
+5. No event_id row but SEM sequence key owned by another event → 409 EVENT_SEQUENCE_CONFLICT.
+6. ON CONFLICT returns no row and neither key can be found → rollback and generic integrity failure.
+
+Added INBOX-40..44 for simultaneous cross-key conflict precedence, inconsistent exact-duplicate row identity, sequence-only ownership, non-SEM global event_id collisions and Run-derived tenant/project integrity. The PostgreSQL acceptance matrix now has 49 cases. This is a design correction only; no migration or runtime code changed.
+
+
+## 19. Run observation row mapping and transaction-local Inbox linkage
+
+A source-level recheck of `migrations/0013_task_run_event.sql` found that `delivery.task_run_event` has required denormalized columns `tenant_id`, `project_id`, `task_id`, `run_id`, `client_id`, `event_type`, `lease_generation` and `dedupe_tag`; `detail` is nullable JSONB. The earlier abbreviated insert description was insufficient to implement safely.
+
+The DDL design now freezes the complete SEM observation row:
+- tenant/project/task/run copied from the locked delivery Run;
+- client_id copied from Run.lease_client_id (nullable; no synthetic SEM client);
+- lease_generation copied from the AI-PM Run at observation time;
+- event_type fixed to sem_infrastructure_observed;
+- dedupe_tag is the decimal sequence;
+- occurred_at comes from the authenticated envelope; received_at/created_at use DB defaults;
+- detail is a required JSON object containing event_id, sequence, SEM event type, schema version, occurred_at, event_envelope_hash, binding_epoch, Runner/Supervisor identity and applicable process/evidence references.
+
+SEM binding_epoch and AI-PM task_run_event.lease_generation are different dimensions and must never be conflated. The exact INSERT ... SELECT and cursor compare-and-set SQL are in the DDL design. The generic record_run_event() helper is not used because its occurred_at and dedupe behavior do not implement the SEM callback contract.
+
+Draft decision: keep the existing append-only task_run_event schema without a new source_event_id column/FK. The Inbox insert, observation insert and cursor update are atomic in one transaction; the SEM detail CHECK and partial unique index provide database backstops; duplicate replay verifies the existing observation's scope, event_id and event_envelope_hash before ACK. This avoids adding a new retention FK coupling but requires real PostgreSQL two-connection/crash tests.
+
+Added INBOX-45..48 for missing/non-object detail, required detail fields/sequence consistency, denormalized Run provenance and broken duplicate Inbox↔observation linkage. The matrix now contains 49 cases. This remains a Draft design choice, not a migration or implementation authorization.
+
+
+A further duplicate-path invariant was added: an exact Inbox/observation duplicate is ACKable only if the locked Run cursor is at least the committed event sequence. A lower cursor is impossible under the atomic insert/observation/cursor transaction and is treated as generic integrity failure. Added INBOX-49.
+
+
+## 20. WP-SEM-P0-CLOSURE-R1 alignment round (2026-11-28)
+
+This round synchronizes both repositories on the P0-06/P0-07 closure contracts and records the first executable real-PostgreSQL acceptance evidence. All artifacts remain Draft; no migration, route, runtime code or merge is authorized.
+
+### 20.1 SEM-side contract baseline (authoritative shapes)
+
+SEM branch `docs/d05-linux-proof-contract` (PR #5, which contains PR #3 `docs/sem-d05-lifecycle-crash-consistency`) now carries:
+
+1. **Six-event callback union** in `docs/protocol/json-schema/platform-sem-v1.schema.yaml`: the new `execution.unbound_release_applied` branch with a strict tombstone payload (`release_id`, `dispatch_fence_id`, `disposition` const `released_unbound`, `applied_at`); the payload schema rejects every Runner/binding/stop-fence/process-exit field.
+2. **Tagged release request**: `expected_binding` strict oneOf — `unbound` forbids `binding_epoch`, `bound` requires integer ≥ 1; the legacy `expected_binding_epoch` alias is rejected by the envelope schema. Release acceptance responses carry required `release_disposition` (`bound_release_accepted` | `unbound_release_fenced`); `409 BINDING_ALREADY_ESTABLISHED` errors carry the actual `binding_epoch`.
+3. **OpenAPI + fixtures + validator + matrix**: tagged request/acceptance/error shapes mirrored in `platform-sem-v1-draft.yaml`; `released_unbound` snapshot state; D04-F01..F10 validator cases; D04-H48..H51 direction/three-sequence/duplicate-id/duplicate-sequence cases; D04-H107 illegal cross-event transitions; D04-H89..H100 unbound-release cases. CI (`validate-contracts`) is green on both PR #3 and PR #5 heads.
+4. **Protocol §7.2 (P0-06)**: the ten-case binding-projection consumer contract, mirroring §14.2 below, including the first-bind algorithm (epoch = 1) and the rule that SEM self-asserted host state is never AI-PM rebind authorization.
+
+### 20.2 AI-PM-side convergence
+
+1. **Single-table projection is canonical**: `delivery.task_run_sem_execution` (exact DDL/concurrency design §14.1) with exhaustive per-state CHECK constraints. `delivery.task_run_sem_binding` and the §11/§12 sketches are superseded and MUST NOT be created; no dual-write projection.
+2. **Tombstone protection**: a committed `released_unbound` projection rejects every later `binding_established` for the same execution_id regardless of epoch; the sixth event after any binding rejects; new attempts use new execution_ids (INBOX-52..54, UNBOUND-03/04).
+3. **Ten-case event handling table** (§14.2) mirrors SEM protocol §7.2 case for case; the concurrency coverage map (§14.3) covers first-bind races, two epochs in flight, concurrent duplicates, old-after-new, release-vs-binding, host-isolation-vs-rebind and mid-transaction failure replay.
+4. **Observation detail CHECK correction (harness finding)**: the sixth event carries no `binding_epoch`; the former blanket positive-epoch requirement rejected every valid tombstone observation. The CHECK now scopes the epoch requirement to the five binding-scoped event types and requires absence/null for the tombstone event. Fabricating epoch 0 remains forbidden on both sides.
+5. **Run observation remains infrastructure-fact-only**: `sem_infrastructure_observed` rows never mutate Task/Run business state; SEM cannot modify business results; the ACK is returned only after Inbox + observation + projection + cursor CAS commit atomically.
+
+### 20.3 Executable acceptance evidence (new)
+
+`docs/architecture/server-execution-management/sem-inbox-acceptance-harness/` runs the candidate DDL and §13 transaction algorithm on a disposable PostgreSQL 16 instance in an ephemeral database: **30/30 scenarios green** (2026-11-28), covering the baseline Inbox/idempotency matrix, two-connection races, crash-rollbacks, sixth-event tombstone semantics, binding projection rules (BIND-03..09/12/13/14) and the source CHECK truth table. Scope limits are recorded in its RESULTS.md: this is database-contract acceptance only — the production migration, callback route, Rust port, pinned JCS canonicalizer and live HTTP interop remain unimplemented.
+
+### 20.4 Remaining open items (unchanged in kind)
+
+- OI-01..OI-06 ratification; live PostgreSQL catalog proof against the real ai-pm migrations when the migration is actually written; Rust JCS pin (§16 gate); SEM `runner.quarantine.resolve` disposition reference carrier event (D-03 dependency, not yet in the six-event schema); SEM dispatch/release sequencer runtime and failure-injection tests; bilateral signed-response verification in Rust.
+- PR #3, #5, #9 remain Draft. No PR is merged. No main-branch change.
