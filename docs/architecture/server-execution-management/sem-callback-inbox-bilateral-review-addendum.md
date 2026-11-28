@@ -286,3 +286,34 @@ Added INBOX-45..48 for missing/non-object detail, required detail fields/sequenc
 
 
 A further duplicate-path invariant was added: an exact Inbox/observation duplicate is ACKable only if the locked Run cursor is at least the committed event sequence. A lower cursor is impossible under the atomic insert/observation/cursor transaction and is treated as generic integrity failure. Added INBOX-49.
+
+
+## 20. WP-SEM-P0-CLOSURE-R1 alignment round (2026-11-28)
+
+This round synchronizes both repositories on the P0-06/P0-07 closure contracts and records the first executable real-PostgreSQL acceptance evidence. All artifacts remain Draft; no migration, route, runtime code or merge is authorized.
+
+### 20.1 SEM-side contract baseline (authoritative shapes)
+
+SEM branch `docs/d05-linux-proof-contract` (PR #5, which contains PR #3 `docs/sem-d05-lifecycle-crash-consistency`) now carries:
+
+1. **Six-event callback union** in `docs/protocol/json-schema/platform-sem-v1.schema.yaml`: the new `execution.unbound_release_applied` branch with a strict tombstone payload (`release_id`, `dispatch_fence_id`, `disposition` const `released_unbound`, `applied_at`); the payload schema rejects every Runner/binding/stop-fence/process-exit field.
+2. **Tagged release request**: `expected_binding` strict oneOf — `unbound` forbids `binding_epoch`, `bound` requires integer ≥ 1; the legacy `expected_binding_epoch` alias is rejected by the envelope schema. Release acceptance responses carry required `release_disposition` (`bound_release_accepted` | `unbound_release_fenced`); `409 BINDING_ALREADY_ESTABLISHED` errors carry the actual `binding_epoch`.
+3. **OpenAPI + fixtures + validator + matrix**: tagged request/acceptance/error shapes mirrored in `platform-sem-v1-draft.yaml`; `released_unbound` snapshot state; D04-F01..F10 validator cases; D04-H48..H51 direction/three-sequence/duplicate-id/duplicate-sequence cases; D04-H107 illegal cross-event transitions; D04-H89..H100 unbound-release cases. CI (`validate-contracts`) is green on both PR #3 and PR #5 heads.
+4. **Protocol §7.2 (P0-06)**: the ten-case binding-projection consumer contract, mirroring §14.2 below, including the first-bind algorithm (epoch = 1) and the rule that SEM self-asserted host state is never AI-PM rebind authorization.
+
+### 20.2 AI-PM-side convergence
+
+1. **Single-table projection is canonical**: `delivery.task_run_sem_execution` (exact DDL/concurrency design §14.1) with exhaustive per-state CHECK constraints. `delivery.task_run_sem_binding` and the §11/§12 sketches are superseded and MUST NOT be created; no dual-write projection.
+2. **Tombstone protection**: a committed `released_unbound` projection rejects every later `binding_established` for the same execution_id regardless of epoch; the sixth event after any binding rejects; new attempts use new execution_ids (INBOX-52..54, UNBOUND-03/04).
+3. **Ten-case event handling table** (§14.2) mirrors SEM protocol §7.2 case for case; the concurrency coverage map (§14.3) covers first-bind races, two epochs in flight, concurrent duplicates, old-after-new, release-vs-binding, host-isolation-vs-rebind and mid-transaction failure replay.
+4. **Observation detail CHECK correction (harness finding)**: the sixth event carries no `binding_epoch`; the former blanket positive-epoch requirement rejected every valid tombstone observation. The CHECK now scopes the epoch requirement to the five binding-scoped event types and requires absence/null for the tombstone event. Fabricating epoch 0 remains forbidden on both sides.
+5. **Run observation remains infrastructure-fact-only**: `sem_infrastructure_observed` rows never mutate Task/Run business state; SEM cannot modify business results; the ACK is returned only after Inbox + observation + projection + cursor CAS commit atomically.
+
+### 20.3 Executable acceptance evidence (new)
+
+`docs/architecture/server-execution-management/sem-inbox-acceptance-harness/` runs the candidate DDL and §13 transaction algorithm on a disposable PostgreSQL 16 instance in an ephemeral database: **30/30 scenarios green** (2026-11-28), covering the baseline Inbox/idempotency matrix, two-connection races, crash-rollbacks, sixth-event tombstone semantics, binding projection rules (BIND-03..09/12/13/14) and the source CHECK truth table. Scope limits are recorded in its RESULTS.md: this is database-contract acceptance only — the production migration, callback route, Rust port, pinned JCS canonicalizer and live HTTP interop remain unimplemented.
+
+### 20.4 Remaining open items (unchanged in kind)
+
+- OI-01..OI-06 ratification; live PostgreSQL catalog proof against the real ai-pm migrations when the migration is actually written; Rust JCS pin (§16 gate); SEM `runner.quarantine.resolve` disposition reference carrier event (D-03 dependency, not yet in the six-event schema); SEM dispatch/release sequencer runtime and failure-injection tests; bilateral signed-response verification in Rust.
+- PR #3, #5, #9 remain Draft. No PR is merged. No main-branch change.

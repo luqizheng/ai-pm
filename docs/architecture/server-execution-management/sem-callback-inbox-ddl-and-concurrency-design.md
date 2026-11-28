@@ -120,7 +120,6 @@ ALTER TABLE delivery.task_run_event
             AND detail ? 'execution_event_sequence'
             AND detail ? 'sem_event_type'
             AND detail ? 'event_envelope_hash'
-            AND detail ? 'binding_epoch'
             AND detail ? 'schema_version'
             AND COALESCE(detail->>'schema_version', '') ~ '^[1-9][0-9]*$'
             AND detail ? 'occurred_at'
@@ -130,7 +129,13 @@ ALTER TABLE delivery.task_run_event
             AND detail->>'execution_event_sequence' = dedupe_tag
             AND COALESCE(detail->>'occurred_at', '') <> ''
             AND COALESCE(detail->>'event_envelope_hash', '') ~ '^[0-9a-f]{64}$'
-            AND COALESCE(detail->>'binding_epoch', '') ~ '^[1-9][0-9]*$'
+            AND (
+                (
+                    COALESCE(detail->>'sem_event_type', '') = 'execution.unbound_release_applied'
+                    AND COALESCE(detail->>'binding_epoch', '') = ''
+                )
+                OR COALESCE(detail->>'binding_epoch', '') ~ '^[1-9][0-9]*$'
+            )
         )
         OR event_type <> 'sem_infrastructure_observed'
     );
@@ -310,6 +315,21 @@ Run with two independent PostgreSQL connections and explicit synchronization bar
 
 Every test asserts exact row counts and values in all three storage locations, not only HTTP status.
 
+### 6.1 Sixth-event and projection extension cases (INBOX-50..INBOX-57)
+
+Added 2026-11-28 for `execution.unbound_release_applied` and the canonical execution projection (§14). Numbering continues the 49-case matrix.
+
+| ID | Scenario | Required result |
+|---|---|---|
+| INBOX-50 | First `execution.unbound_release_applied` for an execution with no prior binding | One Inbox row, one Run observation, projection → `released_unbound` with non-null `dispatch_fence_id` and NULL binding tuple, cursor advances; ACK only after commit |
+| INBOX-51 | Same sixth event event_id/body replayed | Duplicate ACK; projection bytes and `updated_at` unchanged |
+| INBOX-52 | Sixth event arrives while any binding projection state exists (`eligible` never created a binding; test `bound`/`release_pending`/`released`) | Integrity/ordering rejection; no writes; cursor unchanged |
+| INBOX-53 | `execution.binding_established` (any epoch) after `released_unbound` is recorded | Rejected as contradiction; tombstone never overwritten; cursor unchanged; observation history append-only |
+| INBOX-54 | Sixth event and `binding_established` concurrently delivered on two connections | Run-row lock serializes: exactly one terminal outcome. If the sixth event commits first, the binding event rejects; if the binding commits first, the sixth event rejects (UNBOUND-03 path). No partial state |
+| INBOX-55 | Sixth event arrives with a sequence gap (N+1 before N) | 409 EVENT_SEQUENCE_GAP with expected_sequence; no writes |
+| INBOX-56 | Projection row attempted with `released_unbound` but NULL `dispatch_fence_id` or any non-null binding-tuple column | DDL state/tuple CHECK rejects the write; whole callback transaction rolls back; no ACK |
+| INBOX-57 | Sixth event payload carries a runner/binding field or `disposition <> 'released_unbound'` | Application semantic validation rejects before the transaction; cursor unchanged (mirrors SEM schema D04-F05) |
+
 ## 7. Response contract
 
 AI-PM must match SEM D-04 exactly:
@@ -326,13 +346,13 @@ AI-PM must match SEM D-04 exactly:
 
 - Live PostgreSQL catalog proof: verify source/idempotency uniqueness, CHECKs, FKs, partial indexes and task_run_event event-type constraint against the target database.
 - Empty-database forward migration replay and exact SQL acceptance for TRUE/FALSE/UNKNOWN CHECK behavior.
-- Two-connection PostgreSQL tests with barriers for all 49 cases, plus crash injection proving Inbox + observation + cursor atomicity.
+- Two-connection PostgreSQL tests with barriers: core semantics now have executable harness coverage (§15, 30/30 green, 2026-11-28); the remaining INBOX/BIND/UNBOUND cases beyond the harness set still require the production-adapter test suite once the migration and route exist. Crash injection proving Inbox + observation + cursor (+ projection) atomicity is harness-covered for the injected failure points.
 - Pin and implement an RFC 8785 Rust canonicalizer only after independent crate/source review; `serde_json::Value::to_string()` is not JCS. Cross-language shared vectors must match exact bytes and both hashes.
 - AI-PM Rust HTTP signature verifier must consume SEM's signed callback 404 and pre-auth 401/early-413 fixtures; prove middleware order and no-side-effect behavior.
 - Bilateral live HTTP callback interoperability, durable nonce replay storage, key rotation/revocation, response verification and reverse-proxy behavior.
 - Ratify the remaining OI decisions and this candidate DDL before any migration or callback route implementation.
 
-**Disposition: DRAFT / CHANGES REQUIRED.** This is design evidence only; no migration, callback route, Rust canonicalizer, runtime code, or implementation authorization is included.
+**Disposition: DRAFT / CHANGES REQUIRED** — with the 2026-11-28 amendment: candidate DDL and transaction algorithm now additionally carry real-PostgreSQL harness acceptance evidence (§15); this remains design/test evidence only, not runtime completion. No migration, callback route, Rust canonicalizer, production runtime code, or implementation authorization is included.
 
 ## 9. Review corrections consolidated
 
@@ -343,6 +363,7 @@ AI-PM must match SEM D-04 exactly:
 - The callback event's `task_run_event.lease_generation` is the AI-PM lease generation at observation time; SEM `binding_epoch` is stored separately in detail. The duplicate path does not compare the stored lease_generation with the Run's current generation.
 - Draft choice: no new source_event_id FK/column. Transaction atomicity, SEM detail CHECK, partial unique index and duplicate-path verification enforce Inbox↔observation linkage; retention-FK coupling is avoided.
 - Shared JCS vector: `tests/protocol/fixtures/platform-sem-callback-envelope-jcs-v1.json` in `smark-sem`; Python/Node test implementations verify exact bytes and hashes. Rust canonicalizer dependency remains unselected.
+- 2026-11-28 harness finding: the observation detail CHECK required a positive `binding_epoch` on every SEM observation, which rejected every valid `execution.unbound_release_applied` observation (the tombstone legitimately carries no epoch). The §3 CHECK now requires a positive epoch for the five binding-scoped event types and requires it to be absent/null for the sixth event. Fabricating epoch 0 remains forbidden on both sides. Found by the real-PostgreSQL harness, not by review.
 
 ## 10. Exact source provenance
 
@@ -369,7 +390,7 @@ Whichever representation is chosen must define: initial bind; exact duplicate; s
 Required PostgreSQL acceptance cases: first binding inserts exactly one current-binding projection; exact duplicate does not rewrite it; same-epoch conflicting tuple is rejected; lower epoch is rejected; authorized higher-epoch rebind atomically replaces the projection while retaining append-only history; higher epoch while prior state is uncertain is rejected; transaction crash rolls back Inbox, observation, cursor and projection together. Until these are specified and tested, callback Inbox design is Changes Required and no route/migration implementation is authorized.
 
 
-## 11. Proposed current-binding projection (P0-06 resolution candidate)
+## 11. Proposed current-binding projection (P0-06 resolution candidate; superseded by §14)
 
 **Recommendation: use a minimal AI-PM-owned projection, not event-history replay.** The projection is a consumer-side validation cache with transactional authority inside AI-PM only. SEM remains the sole authority for allocating binding_epoch, selecting Runner, and asserting infrastructure facts. This table MUST NOT be read by SEM, exposed as dispatch authorization, or used to mutate Task/Run business status.
 
@@ -452,6 +473,8 @@ The projection update, Inbox insert, append-only Run observation and task_run.ex
 - BIND-10 process identity cannot be rewritten within one binding epoch.
 - BIND-11 exact duplicate old event after a newer binding exists returns duplicate without regressing the current projection.
 - BIND-12 callback event from stale runner_key_version/boot_id/supervisor_instance_id rejects.
+- BIND-13 two different-epoch `binding_established` events (epoch 1 and epoch 2) concurrently in flight: Run-row lock serializes; exactly one terminal state — epoch 1 first commits, epoch 2 rejects without positive release/isolation proof; two commits are impossible.
+- BIND-14 host-isolation disposition commit races with a higher-epoch rebind attempt: with the frozen lock order the disposition commits first and the rebind then applies through the §14 case-9 branch; if the rebind transaction precedes it, the rebind rejects and must retry after the disposition is durable. No window admits an unauthorized rebind.
 
 The callback transaction must not rely on task_run_event replay as an unspecified current-state query. Append-only observations remain audit history; this projection is the explicit current consumer reference.
 
@@ -522,6 +545,8 @@ This is a design sketch, not executable migration SQL: the final CHECK must expl
 - UNBOUND-06 SEM release-wins tombstone prevents delayed dispatch/requeue; tested on SEM side under same sequencer.
 - UNBOUND-07 new execution_id is independent from old released_unbound projection.
 - UNBOUND-08 released_unbound never creates process-exit or Runner stop evidence.
+- UNBOUND-09 release-vs-binding concurrency on two connections where the unbound release linearizes first: tombstone commits, the racing binding event rejects (INBOX-54 winner branch).
+- UNBOUND-10 mid-transaction failure of the sixth-event callback (after any of Inbox insert / observation / projection update / before cursor CAS) rolls back all four writes; exact replay of the same event then succeeds exactly once and is idempotent thereafter.
 
 The current five-event schema cannot carry this event. AI-PM must not accept a lookalike execution.release_status payload with missing Runner identity. P0-07 remains open until SEM publishes the sixth-event schema and bilateral fixtures.
 
@@ -540,3 +565,202 @@ Use §12's execution-projection table name and unbound semantics, and §11's bin
 Freeze the callback lock order as: **delivery.task_run FOR UPDATE → delivery.task_run_sem_execution FOR UPDATE (or insert under the Run lock) → integration.inbound_event insert/lookup → delivery.task_run_event insert → task_run cursor CAS → COMMIT**. All callback writers use this order. The per-execution Run lock serializes first-row creation; a unique PK on task_run_id is the backstop. Exact duplicate handling may verify existing Inbox/observation before projection mutation, but must not acquire locks in a different order.
 
 Add this as a required migration review gate: the projection row, Inbox, Run observation and cursor either all commit or all roll back. The projection is an AI-PM consumer reference only, never SEM dispatch authority.
+
+## 14. Canonical single-table DDL and the ten binding/event handling rules (P0-06/P0-07 resolution)
+
+**Single table, no dual write.** §11's `delivery.task_run_sem_binding` and §12's sketch are superseded by this section. There is exactly one projection table: `delivery.task_run_sem_execution`, one row per execution attempt (`task_run_id` PK), holding dispatch_state, the current binding tuple, host identity, launch/containment identity, release state and uncertainty/quarantine state. The illustrative SQL in §11/§12 MUST NOT be created.
+
+### 14.1 Canonical DDL (candidate; forward-only; conventions re-checked against the repository before any migration)
+
+~~~sql
+CREATE TABLE delivery.task_run_sem_execution (
+    task_run_id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+
+    -- dispatch / release lifecycle (P0-07) and binding lifecycle (P0-06)
+    dispatch_state text NOT NULL,
+    binding_epoch bigint,
+    runner_id uuid,
+    runner_key_version bigint,
+    boot_id text,
+    supervisor_instance_id uuid,
+    delivery_id uuid,
+
+    -- exact process/containment identity (filled only by harness.process_observed)
+    launch_id uuid,
+    containment_id text,
+    process_start_identity text,
+    systemd_invocation_id text,
+
+    -- release evidence references
+    stop_fence_id uuid,
+    process_exit_evidence_id uuid,
+
+    -- host-isolation operator disposition reference (D-03), never process-exit evidence
+    host_isolation_disposition_id uuid,
+
+    -- P0-07 dispatch-fence tombstone identity
+    dispatch_fence_id uuid,
+
+    -- accepted binding event identity
+    binding_event_id uuid,
+    binding_event_sequence bigint,
+
+    -- last accepted SEM event (any of the six types)
+    last_event_id uuid NOT NULL,
+    last_event_sequence bigint NOT NULL,
+
+    first_bound_at timestamptz,
+    released_at timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_task_run_sem_execution_run
+      FOREIGN KEY (tenant_id, project_id, task_run_id)
+      REFERENCES delivery.task_run (tenant_id, project_id, id),
+
+    CONSTRAINT task_run_sem_execution_state_check CHECK (dispatch_state IN (
+        'eligible', 'bound', 'release_pending', 'released',
+        'released_unbound', 'uncertain', 'host_isolated'
+    )),
+
+    -- exhaustive per-state tuple constraints (no partial identity tuples)
+    CONSTRAINT task_run_sem_execution_tuple_check CHECK (
+        (
+          dispatch_state = 'eligible'
+          AND binding_epoch IS NULL AND runner_id IS NULL
+          AND runner_key_version IS NULL AND boot_id IS NULL
+          AND supervisor_instance_id IS NULL AND delivery_id IS NULL
+          AND launch_id IS NULL AND containment_id IS NULL
+          AND process_start_identity IS NULL AND systemd_invocation_id IS NULL
+          AND stop_fence_id IS NULL AND process_exit_evidence_id IS NULL
+          AND host_isolation_disposition_id IS NULL AND dispatch_fence_id IS NULL
+          AND binding_event_id IS NULL AND binding_event_sequence IS NULL
+          AND first_bound_at IS NULL AND released_at IS NULL
+        ) OR (
+          dispatch_state = 'released_unbound'
+          AND binding_epoch IS NULL AND runner_id IS NULL
+          AND runner_key_version IS NULL AND boot_id IS NULL
+          AND supervisor_instance_id IS NULL AND delivery_id IS NULL
+          AND launch_id IS NULL AND containment_id IS NULL
+          AND process_start_identity IS NULL AND systemd_invocation_id IS NULL
+          AND stop_fence_id IS NULL AND process_exit_evidence_id IS NULL
+          AND host_isolation_disposition_id IS NULL
+          AND dispatch_fence_id IS NOT NULL
+          AND binding_event_id IS NULL AND binding_event_sequence IS NULL
+          AND first_bound_at IS NULL AND released_at IS NOT NULL
+        ) OR (
+          dispatch_state IN ('bound', 'release_pending', 'released', 'uncertain', 'host_isolated')
+          AND binding_epoch >= 1 AND runner_id IS NOT NULL
+          AND runner_key_version >= 1 AND boot_id IS NOT NULL AND length(boot_id) > 0
+          AND supervisor_instance_id IS NOT NULL AND delivery_id IS NOT NULL
+          AND binding_event_id IS NOT NULL AND binding_event_sequence >= 1
+          AND dispatch_fence_id IS NULL
+        )
+    ),
+
+    -- process identity is all-or-nothing within one binding
+    CONSTRAINT task_run_sem_execution_process_identity_check CHECK (
+      (launch_id IS NULL AND containment_id IS NULL
+        AND process_start_identity IS NULL AND systemd_invocation_id IS NULL)
+      OR
+      (launch_id IS NOT NULL AND containment_id IS NOT NULL
+        AND length(containment_id) > 0
+        AND process_start_identity IS NOT NULL
+        AND systemd_invocation_id IS NOT NULL)
+    ),
+
+    -- released requires positive proof: exact process-exit evidence
+    -- OR the positive no-start stop-fence proof
+    CONSTRAINT task_run_sem_execution_release_evidence_check CHECK (
+      dispatch_state <> 'released'
+      OR process_exit_evidence_id IS NOT NULL
+      OR stop_fence_id IS NOT NULL
+    ),
+
+    -- host_isolated references an explicit operator disposition and must not
+    -- fabricate process-exit or stop-fence evidence
+    CONSTRAINT task_run_sem_execution_host_isolation_check CHECK (
+      dispatch_state <> 'host_isolated'
+      OR (host_isolation_disposition_id IS NOT NULL
+        AND process_exit_evidence_id IS NULL
+        AND stop_fence_id IS NULL)
+    ),
+
+    -- exit evidence exists only on release-pending/released bound states
+    CONSTRAINT task_run_sem_execution_exit_evidence_state_check CHECK (
+      process_exit_evidence_id IS NULL
+      OR dispatch_state IN ('release_pending', 'released')
+    ),
+
+    -- a stop fence exists only on bound lifecycle states
+    CONSTRAINT task_run_sem_execution_stop_fence_state_check CHECK (
+      stop_fence_id IS NULL
+      OR dispatch_state IN ('bound', 'release_pending', 'released')
+    ),
+
+    CONSTRAINT task_run_sem_execution_sequence_check CHECK (
+      last_event_sequence >= 0
+      AND (binding_event_sequence IS NULL OR last_event_sequence >= binding_event_sequence)
+    )
+);
+~~~
+
+### 14.2 The ten binding/event handling rules (normative consumer contract)
+
+Mirrors SEM protocol §7.2 (smark-sem `docs/sem-d05-lifecycle-crash-consistency`/`docs/d05-linux-proof-contract`, PR #3/#5). SEM guarantees the evidence; AI-PM implements exactly the handling column, inside the §13 transaction with the frozen lock order.
+
+| # | Case | Required AI-PM handling |
+|---|---|---|
+| 1 | First binding (`binding_established`, no prior binding) | First-bind algorithm: under the locked Run, require no projection row or a row in `eligible`; require `binding_epoch = 1` and a complete Runner tuple (runner_id, runner_key_version ≥ 1, boot_id, supervisor_instance_id, delivery_id); INSERT the projection `bound` with binding_event_id/sequence = this event, `first_bound_at = now()`; atomically with Inbox + observation + cursor CAS. No historical binding is compared |
+| 2 | Exact duplicate binding event | Resolve through Inbox event identity + envelope hash + sequence BEFORE projection mutation; return duplicate ACK; projection bytes and `updated_at` unchanged |
+| 3 | Same epoch, different tuple | Integrity conflict: reject, quarantine, never overwrite the projection, cursor does not advance |
+| 4 | Lower-epoch late event | Reject as stale; never regress the projection; observation history remains append-only |
+| 5 | Higher-epoch rebind | Accept only when prior projection state is `released` with exact `process_exit_evidence_id`/`stop_fence_id`, or `host_isolated` with exact `host_isolation_disposition_id`; new epoch strictly greater; UPDATE replaces the tuple in-transaction; old history stays in observations |
+| 6 | Rebind after normal release | Same as case 5 release branch; evidence references must resolve to the same execution/epoch/runner-key/boot/supervisor identity recorded in observations |
+| 7 | Uncertain prior binding | Reject any epoch change while prior state is `uncertain`; retain quarantine + reservation; heartbeat loss/WSS disconnect/host unreachable are never rebind permission |
+| 8 | Runner host permanent loss | `host_isolated` settable ONLY from the SEM-authenticated `runner.quarantine.resolve` operator disposition reference; never from an automatic event and never treated as process exit |
+| 9 | Host physically isolated | Same path as case 8 with the exact affected identities + operator attestation reference; rebind afterwards follows case 5's disposition branch; no fabricated exit evidence |
+| 10 | Inspection inconclusive | Prior state stays `uncertain`; reject rebind; resolution only through named-authority reconciliation evidence |
+
+Tombstone protection (P0-07, restated): once `dispatch_state = 'released_unbound'` is committed, every later `execution.binding_established` for the same execution_id is rejected regardless of epoch (INBOX-53); the tombstone is never overwritten and a new AI-PM attempt uses a new execution_id.
+
+SEM self-asserted host state (heartbeat, WSS session, telemetry) is never AI-PM dispatch or rebind authorization.
+
+### 14.3 Concurrency coverage map (required two-connection scenarios)
+
+| Required race | Covered by |
+|---|---|
+| 首次绑定的并发竞争 | BIND-08 |
+| 两个不同 epoch 同时到达 | BIND-13 |
+| 重复事件并发提交 | INBOX-06 / BIND-02 |
+| 旧事件晚于新事件到达 | BIND-04/BIND-11 / INBOX-49 |
+| Release 与 Binding 并发 | INBOX-54 / UNBOUND-09 |
+| Host isolation 与重新绑定并发 | BIND-14 |
+| 事务中途失败后重放 | BIND-09 / UNBOUND-10 / INBOX-09/22 |
+
+## 15. Executable acceptance harness results (2026-11-28)
+
+The candidate §3/§13/§14 contract now has a standalone real-PostgreSQL
+acceptance harness on this branch: [sem-inbox-acceptance-harness](./sem-inbox-acceptance-harness/README.md).
+
+- 30 scenarios executed on a disposable PostgreSQL 16.16 instance in an
+  ephemeral database created and dropped by the harness (no ai-pm migration
+  touched, no shared database touched).
+- Two independent connections with explicit barriers; injected failures after
+  the Inbox insert, after the Run observation and before commit all rolled
+  back every write (no partial state, no ACK).
+- Final result: **30 passed, 0 failed**. Full pass list and scope limits:
+  [RESULTS.md](./sem-inbox-acceptance-harness/RESULTS.md).
+- Coverage: baseline Inbox transaction and idempotency (INBOX-01..09/19/20/21),
+  global event-id and sequence-unique backstops (INBOX-05/25/26), CHECK truth
+  table (INBOX-36..38), duplicate-member rejection (INBOX-24/34), sixth event
+  and tombstone (INBOX-50..54/56/57, UNBOUND-03/04/08/09/10), binding
+  projection rules and races (BIND-03..09/12/13/14).
+- The harness found one real contract defect (§9, binding_epoch tombstone
+  CHECK) which is fixed in §3 and re-verified by the green run.
+
+What this does NOT prove: the production migration, callback route, Rust
+application port, pinned JCS canonicalizer, response signing middleware and
+bilateral live HTTP interop remain unimplemented and untested. This harness is
+database-contract acceptance evidence, not runtime completion.
